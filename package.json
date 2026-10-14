@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "dev:server": "node --watch server/index.mjs",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node --test ops/pwa.test.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test server/api.test.mjs server/game.test.mjs",
     "check": "pnpm test && pnpm build",

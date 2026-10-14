@@ -11,7 +11,8 @@ export default defineConfig({
     VitePWA({
       registerType: "prompt",
       injectRegister: false,
-      includeAssets: ["icon.svg", "assets/character/*"],
+      // The glob below already includes the icon and character files.
+      includeManifestIcons: false,
       manifest: {
         name: "奶娃爱洗澡",
         short_name: "nwaxz",
@@ -34,6 +35,9 @@ export default defineConfig({
       workbox: {
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         globPatterns: ["**/*.{js,css,html,svg,png,webp,json,woff2}"],
+        // Only Vite's content-hashed bundles can omit a cache revision.
+        dontCacheBustURLsMatching: /^assets\/[^/]+-[A-Za-z0-9_-]{8}\.(?:js|css)$/,
+        clientsClaim: true,
         navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,
       },

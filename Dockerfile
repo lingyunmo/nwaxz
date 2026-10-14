@@ -6,6 +6,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY tsconfig.json vite.config.ts index.html ./
 COPY src ./src
 COPY public ./public
+COPY ops/pwa.test.mjs ./ops/pwa.test.mjs
 RUN pnpm build && pnpm prune --prod --ignore-scripts
 
 FROM node:24.15.0-bookworm-slim

@@ -6,12 +6,14 @@
 
 - Canvas 2D 三关：`first-bath`（第一缸水）、`detour`（绕个小弯）、`last-drop`（曲曲折折）。
 - 208 粒子水流求解器，采用固定 120 Hz 步进和空间分桶；挖掘网格单元为 CELL8，石块不可挖。
-- 每关收集 3 枚金币并接到 100 滴水即可获胜。
+- 每关接到 100 滴水即可获胜，可额外收集 3 枚泡泡币。
 - 浏览器 IndexedDB 本地存档，支持导入/导出；通过 BroadcastChannel 合并存档。
 - PWA 静态资源缓存和提示式更新。
 - 透明角色图集 `public/assets/character/milk-frog-atlas.webp`，包含 idle、breath、blink、look、tap、laugh、celebrate 动作。
 
-目前没有音效。云端同步仍是后续计划，尚未实现。游戏及生产部署仍在持续开发；请以实际 CI 和部署结果判断发布状态。
+三关均已在公网 Chrome 实际通关，每关获得 3/3 泡泡币，刷新后存档仍保留 3/3。离线缓存清单冲突已修复，本地生产构建断网重载通过；更新部署后的公网离线复测待完成。当前没有音效；云端同步仍是后续计划，尚未实现。
+
+首个线上版本已发布：[立即游玩](https://nwaxz.bzlom.cn)。验证结果及尚未解决的问题见[发布验证记录](docs/VERIFICATION.md)。
 
 ## 技术栈
 
@@ -30,13 +32,13 @@ pnpm dev
 
 ```sh
 pnpm test       # Node 原生测试
-pnpm build      # TypeScript 检查及 Vite 构建
+pnpm build      # TypeScript 检查、Vite 构建及离线清单回归检查
 pnpm check      # test + build
 pnpm start      # 启动服务端
 pnpm smoke      # HTTP 冒烟检查
 ```
 
-原生测试覆盖三个关卡的路线与全金币、质量守恒、长帧处理、石块不可变和存档收敛。运行 `pnpm check` 可在本地复现测试及构建检查；这不代表远程 CI 或生产发布已通过。
+原生测试覆盖三个关卡的路线与全金币、质量守恒、长帧处理、石块不可变和存档收敛。运行 `pnpm check` 可在本地复现测试及构建检查；最近一次发布的具体结果见[验证记录](docs/VERIFICATION.md)。
 
 ## 文档
 
@@ -45,4 +47,4 @@ pnpm smoke      # HTTP 冒烟检查
 - [贡献指南](CONTRIBUTING.md)
 - [安全问题报告](SECURITY.md)
 
-仓库：`lingyunmo/nwaxz`（私有）。
+源码仓库：[lingyunmo/nwaxz](https://github.com/lingyunmo/nwaxz)（公开）。

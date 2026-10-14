@@ -1,0 +1,15 @@
+*
+!package.json
+!pnpm-lock.yaml
+!tsconfig.json
+!vite.config.ts
+!index.html
+!src
+!src/**
+!public
+!public/**
+!server
+!server/app.mjs
+!server/index.mjs
+!ops
+!ops/smoke.mjs

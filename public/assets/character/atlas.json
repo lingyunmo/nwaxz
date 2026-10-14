@@ -1,0 +1,200 @@
+{
+  "image": "/assets/character/milk-frog-atlas.webp",
+  "fallbackImage": "/assets/character/milk-frog-atlas.png",
+  "width": 2048,
+  "height": 1024,
+  "columns": 4,
+  "rows": 2,
+  "frameWidth": 512,
+  "frameHeight": 512,
+  "baseline": 476,
+  "anchorX": 256,
+  "frames": [
+    {
+      "index": 0,
+      "name": "neutral",
+      "sourceRect": [
+        0,
+        0,
+        512,
+        512
+      ],
+      "bounds": [
+        123,
+        47,
+        389,
+        475
+      ],
+      "originalRect": [
+        58,
+        39,
+        348,
+        504
+      ]
+    },
+    {
+      "index": 1,
+      "name": "blink",
+      "sourceRect": [
+        512,
+        0,
+        512,
+        512
+      ],
+      "bounds": [
+        114,
+        47,
+        388,
+        475
+      ],
+      "originalRect": [
+        437,
+        39,
+        735,
+        504
+      ]
+    },
+    {
+      "index": 2,
+      "name": "look",
+      "sourceRect": [
+        1024,
+        0,
+        512,
+        512
+      ],
+      "bounds": [
+        138,
+        47,
+        409,
+        475
+      ],
+      "originalRect": [
+        817,
+        37,
+        1113,
+        504
+      ]
+    },
+    {
+      "index": 3,
+      "name": "raise",
+      "sourceRect": [
+        1536,
+        0,
+        512,
+        512
+      ],
+      "bounds": [
+        128,
+        47,
+        420,
+        476
+      ],
+      "originalRect": [
+        1185,
+        41,
+        1500,
+        501
+      ]
+    },
+    {
+      "index": 4,
+      "name": "tap",
+      "sourceRect": [
+        0,
+        512,
+        512,
+        512
+      ],
+      "bounds": [
+        125,
+        47,
+        483,
+        476
+      ],
+      "originalRect": [
+        55,
+        533,
+        431,
+        983
+      ]
+    },
+    {
+      "index": 5,
+      "name": "wait",
+      "sourceRect": [
+        512,
+        512,
+        512,
+        512
+      ],
+      "bounds": [
+        138,
+        47,
+        386,
+        475
+      ],
+      "originalRect": [
+        455,
+        534,
+        721,
+        989
+      ]
+    },
+    {
+      "index": 6,
+      "name": "laugh",
+      "sourceRect": [
+        1024,
+        512,
+        512,
+        512
+      ],
+      "bounds": [
+        124,
+        47,
+        396,
+        475
+      ],
+      "originalRect": [
+        804,
+        529,
+        1097,
+        989
+      ]
+    },
+    {
+      "index": 7,
+      "name": "celebrate",
+      "sourceRect": [
+        1536,
+        512,
+        512,
+        512
+      ],
+      "bounds": [
+        110,
+        46,
+        429,
+        476
+      ],
+      "originalRect": [
+        1165,
+        530,
+        1508,
+        991
+      ]
+    }
+  ],
+  "poseAliases": {
+    "idle": 0,
+    "blink": 1,
+    "look": 2,
+    "reach": 3,
+    "tap": 4,
+    "bored": 5,
+    "laugh": 6,
+    "celebrate": 7
+  }
+}

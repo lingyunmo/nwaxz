@@ -1,0 +1,33 @@
+name: nwaxz
+services:
+  nwaxz-app:
+    image: ${APP_IMAGE:?APP_IMAGE must be an immutable image digest}
+    container_name: nwaxz-app
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "10001:10001"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      APP_REVISION: ${APP_REVISION:?APP_REVISION must be supplied}
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 192m
+    cpus: "0.50"
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "2" }
+    labels:
+      cn.bzlom.project: nwaxz
+    networks:
+      common-net:
+        aliases: [nwaxz-app]
+networks:
+  common-net:
+    external: true
+    name: common-net

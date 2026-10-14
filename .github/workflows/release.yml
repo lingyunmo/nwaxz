@@ -1,0 +1,93 @@
+name: Verify and release
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nwaxz-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: "24.15.0" }
+      - run: npm install --global pnpm@11.1.3
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm check
+      - name: Validate deployment scripts
+        run: bash -n ops/deploy.sh ops/ssh-command.sh ops/bootstrap.sh
+  package:
+    name: Build image
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Build, smoke and publish immutable image
+        id: image
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          image=ghcr.io/lingyunmo/nwaxz
+          docker build --build-arg APP_REVISION="$REVISION" -t "$image:$REVISION" .
+          trap 'docker rm -f nwaxz-ci-smoke >/dev/null 2>&1 || true' EXIT
+          docker run -d --name nwaxz-ci-smoke --network none --read-only --tmpfs /tmp "$image:$REVISION"
+          ready=false
+          for attempt in $(seq 1 20); do
+            if docker exec nwaxz-ci-smoke node ops/smoke.mjs "$REVISION"; then ready=true; break; fi
+            sleep 1
+          done
+          test "$ready" = true
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u lingyunmo --password-stdin
+          docker push "$image:$REVISION"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image:$REVISION")
+          echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
+  deploy:
+    name: Deploy nwaxz
+    needs: package
+    if: vars.DEPLOY_ENABLED == 'true'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Deploy through project-restricted SSH key
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          HOST_KEY: ${{ vars.DEPLOY_HOST_KEY }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REVISION: ${{ github.sha }}
+          DIGEST: ${{ needs.package.outputs.digest }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_HOST"
+          test -n "$HOST_KEY"
+          test -n "$SSH_KEY"
+          umask 077
+          mkdir -p "$RUNNER_TEMP/nwaxz-ssh"
+          printf '%s\n' "$SSH_KEY" > "$RUNNER_TEMP/nwaxz-ssh/key"
+          printf '%s %s\n' "$DEPLOY_HOST" "$HOST_KEY" > "$RUNNER_TEMP/nwaxz-ssh/known_hosts"
+          printf '%s' "$REGISTRY_TOKEN" | ssh -T -i "$RUNNER_TEMP/nwaxz-ssh/key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/nwaxz-ssh/known_hosts" -o ConnectTimeout=15 \
+            "nwaxz-deploy@$DEPLOY_HOST" "deploy $REVISION $DIGEST"

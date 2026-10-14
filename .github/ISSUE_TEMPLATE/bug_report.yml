@@ -1,0 +1,42 @@
+name: 问题报告
+description: 报告奶娃爱洗澡中的错误
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 感谢帮助改进项目。请勿在报告中包含密码、令牌或个人数据。
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+      description: 你希望发生什么？
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 实际发生了什么？
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: 1. 打开…… 2. 点击……
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 环境
+      description: 浏览器、设备及系统版本
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: 补充信息
+      description: 可附非敏感截图或错误信息。
+    validations:
+      required: false

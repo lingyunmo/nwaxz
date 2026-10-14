@@ -17,7 +17,7 @@ type Callbacks = {
   failed: () => void;
   tap: () => void;
   dig: () => void;
-  devices: () => void;
+  devices: (interacted?: boolean) => void;
 };
 export class BathGame {
   world: FluidWorld;
@@ -140,10 +140,11 @@ export class BathGame {
       "keydown",
       (event) => {
         if (this.paused || this.won || this.lost) return;
-        if (event.key.toLowerCase() === "f" || event.key.toLowerCase() === "v") {
+        if (["f", "v", "b", "e"].includes(event.key.toLowerCase())) {
           event.preventDefault();
-          const devices = event.key.toLowerCase() === "f" ? this.world.level.fans : this.world.level.valves;
-          if (!event.repeat && devices?.[0]) this.activateDevice(devices[0].position);
+          const key = event.key.toLowerCase(),
+            device = key === "f" ? this.world.level.fans?.[0] : key === "e" ? this.world.level.sponges?.[0] : this.world.level.valves?.find(valve => key === "b" ? valve.kind === "sewage" : valve.kind !== "sewage");
+          if (!event.repeat && device) this.activateDevice(device.position);
           return;
         }
         const directions: { [key: string]: Point } = {
@@ -206,11 +207,12 @@ export class BathGame {
     if (this.paused || this.won || this.lost) return false;
     const fan = this.world.level.fans?.findIndex(device => Math.hypot(device.position.x - point.x, device.position.y - point.y) <= 32) ?? -1;
     const valve = this.world.level.valves?.findIndex(device => Math.hypot(device.position.x - point.x, device.position.y - point.y) <= 32) ?? -1;
-    const changed = fan >= 0 ? this.world.toggleFan(fan) : valve >= 0 ? this.world.toggleValve(valve) : false;
+    const sponge = this.world.level.sponges?.findIndex(device => Math.hypot(device.position.x - point.x, device.position.y - point.y) <= 32) ?? -1;
+    const changed = fan >= 0 ? this.world.toggleFan(fan) : valve >= 0 ? this.world.toggleValve(valve) : sponge >= 0 ? this.world.squeezeSponge(sponge) : false;
     if (changed) {
       this.startedAt ??= this.clock;
       this.callbacks.tap();
-      this.callbacks.devices();
+      this.callbacks.devices(true);
     }
     return changed;
   }
@@ -374,6 +376,17 @@ export class BathGame {
   }
   private drawDevices() {
     const ctx = this.ctx, sheet = this.artwork.props;
+    this.world.level.sponges?.forEach((sponge, index) => {
+      const stored = this.world.spongeContents[index].length,
+        queued = this.world.spongeQueued[index].length, scale = .17;
+      ctx.save(); ctx.translate(sponge.position.x, sponge.position.y);
+      if (queued && !this.reducedMotion) ctx.scale(1.03, 1 - Math.abs(Math.sin(this.clock * 12)) * .08);
+      ctx.drawImage(this.artwork.garden, stored + queued ? 512 : 0, 512, 512, 512, -256 * scale, -256 * scale, 512 * scale, 512 * scale);
+      ctx.restore();
+      ctx.fillStyle = "#fff9e8"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(`${stored} / ${sponge.capacity}`, sponge.position.x, sponge.position.y + 53);
+      ctx.textAlign = "start";
+    });
     this.world.level.fans?.forEach((fan, index) => {
       const { x, y } = fan.position, scale = .2;
       ctx.save();
@@ -397,11 +410,21 @@ export class BathGame {
     this.world.level.valves?.forEach((valve, index) => {
       const on = this.world.valveOn[index], scale = .2;
       ctx.drawImage(sheet, on ? 512 : 0, 512, 512, 512, valve.nozzle.x - 435 * scale, valve.nozzle.y - 370 * scale, 512 * scale, 512 * scale);
-      ctx.fillStyle = "#fff9e8";
+      ctx.fillStyle = valve.kind === "sewage" ? "#e6b9f4" : "#fff9e8";
       ctx.font = "bold 11px sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(String(this.world.valveRemaining[index]), valve.position.x, valve.position.y + 42);
+      ctx.fillText(`${valve.kind === "sewage" ? "紫水 " : ""}${this.world.valveRemaining[index]}`, valve.position.x, valve.position.y + 42);
       ctx.textAlign = "start";
+    });
+    this.world.level.plants?.forEach((plant, index) => {
+      const alive = this.world.plantRemaining[index] > 0, scale = .18;
+      ctx.save(); ctx.translate(plant.position.x, plant.position.y);
+      if (!this.reducedMotion && alive) ctx.rotate(Math.sin(this.clock * 1.8 + index) * .025);
+      ctx.globalAlpha = alive ? 1 : .65;
+      ctx.drawImage(this.artwork.garden, alive ? 0 : 512, 0, 512, 512, -256 * scale, -436 * scale, 512 * scale, 512 * scale);
+      ctx.restore();
+      ctx.fillStyle = "#fff9e8"; ctx.font = "bold 11px sans-serif";
+      ctx.fillText(alive ? String(this.world.plantRemaining[index]) : "枯萎", plant.rect.x + plant.rect.w + 5, plant.rect.y + 20);
     });
   }
   private drawBathroom() {

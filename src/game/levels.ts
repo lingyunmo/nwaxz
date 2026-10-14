@@ -1,9 +1,11 @@
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Point = { x: number; y: number };
 export type Fan = { position: Point; zone: Rect; force: Point; on: boolean };
-export type Valve = { position: Point; nozzle: Point; drops: number; rate: number };
+export type Valve = { position: Point; nozzle: Point; drops: number; rate: number; kind?: WaterKind; spread?: number };
 export type WaterKind = "clean" | "sewage";
 export type WaterPool = { x: number; y: number; columns: number; rows: number; kind: WaterKind };
+export type Plant = { position: Point; rect: Rect; tolerance: number };
+export type Sponge = { position: Point; rect: Rect; release: Point; capacity: number };
 export type Level = {
   id: string;
   title: string;
@@ -16,6 +18,9 @@ export type Level = {
   fans?: Fan[];
   valves?: Valve[];
   extraPools?: WaterPool[];
+  plants?: Plant[];
+  sponges?: Sponge[];
+  extraSolutions?: Point[][];
 };
 export const levels: Level[] = [
   {
@@ -107,5 +112,30 @@ export const levels: Level[] = [
     rocks: [],
     coins: [{ x: 140, y: 280 }, { x: 220, y: 410 }, { x: 335, y: 540 }],
     solution: [{ x: 104, y: 198 }, { x: 140, y: 280 }, { x: 220, y: 410 }, { x: 335, y: 540 }, { x: 392, y: 592 }],
+  },
+  {
+    id: "garden-gate",
+    title: "水草的小秘密",
+    chapter: 3,
+    hint: "先让紫水被水草吸收。水草枯萎后，再开左边的清水阀门。",
+    initialWater: 0,
+    plants: [{ position: { x: 108, y: 400 }, rect: { x: 80, y: 336, w: 56, h: 64 }, tolerance: 12 }],
+    valves: [
+      { position: { x: 70, y: 150 }, nozzle: { x: 106, y: 178 }, drops: 208, rate: 48 },
+      { position: { x: 96, y: 340 }, nozzle: { x: 132, y: 368 }, drops: 12, rate: 12, kind: "sewage", spread: 0 },
+    ],
+    rocks: [{ x: 16, y: 352, w: 64, h: 32 }, { x: 136, y: 384, w: 328, h: 24 }],
+    coins: [{ x: 110, y: 280 }, { x: 174, y: 450 }, { x: 335, y: 550 }],
+    solution: [{ x: 104, y: 198 }, { x: 108, y: 310 }, { x: 108, y: 426 }, { x: 260, y: 500 }, { x: 392, y: 592 }],
+  },
+  {
+    id: "sponge-transfer",
+    title: "海绵搬水工",
+    chapter: 3,
+    hint: "先挖路，再轻点海绵挤水。没接满，就再挤一次。",
+    sponges: [{ position: { x: 180, y: 400 }, rect: { x: 148, y: 368, w: 64, h: 64 }, release: { x: 180, y: 446 }, capacity: 160 }],
+    rocks: [{ x: 16, y: 384, w: 128, h: 32 }, { x: 216, y: 384, w: 248, h: 32 }],
+    coins: [{ x: 145, y: 290 }, { x: 235, y: 490 }, { x: 335, y: 550 }],
+    solution: [{ x: 104, y: 198 }, { x: 180, y: 340 }, { x: 180, y: 448 }, { x: 335, y: 550 }, { x: 392, y: 592 }],
   },
 ];

@@ -15,7 +15,7 @@ Canvas 2D 游戏包含三个关卡：`first-bath`（第一缸水）、`detour`�
 
 音乐与音效由 Web Audio 合成，音乐默认关闭；设置还包括震动、简化动作和画质选项。云端同步尚未实现。
 
-0.3.0 已按 PR 和自动部署流程发布。0.4.0 源码扩展至六关：通用章节分页、局部风力、有限水量喷水阀与接触传播的污水。`FluidWorld` 保存机关开关、水源预算以及清水/污水的类型和交付数；固定步长模拟风力、喷射与污染，Canvas 绘制道具并旋转独立扇叶，DOM 按钮与键盘提供可访问控制。污水进入浴缸时先判定失败，不写入通关成绩。合法存档关卡 ID 从关卡配置派生，v1 存档格式不变；前后端显示版本读取同一个 `package.json`。25 项业务测试和 1 项 PWA 构建检查通过；发布与浏览器验证结果见 [VERIFICATION.md](VERIFICATION.md)，设计见 [GAME_DESIGN.md](GAME_DESIGN.md)，持续工作见 [DEVELOPMENT_STATE.md](DEVELOPMENT_STATE.md)。
+0.4.0 已按 PR 和自动部署流程发布。0.5.0 源码扩展至八关：通用章节分页、局部风力、限量喷水阀、接触污染、水草阻水与吸收污水、海绵储水与排水队列。`FluidWorld` 保存开关、水源预算、清污类型、交付数、植物吸收量以及海绵库存/队列；质量核对包含全部这些去向，挤水保留水种类且有短暂的原海绵重吸保护。Canvas 绘制透明道具并动画扇叶、植物及挤水；DOM 按钮和键盘提供控制。污水进入浴缸时先判定失败，不写通关成绩。合法存档关卡 ID 从配置派生，v1 格式不变；前后端版本读取同一个 `package.json`。31 项业务测试和 1 项 PWA 检查通过；发布与浏览器结果见 [VERIFICATION.md](VERIFICATION.md)，设计见 [GAME_DESIGN.md](GAME_DESIGN.md)，续做状态见 [DEVELOPMENT_STATE.md](DEVELOPMENT_STATE.md)。
 
 原生 Node 测试覆盖三个关卡路线与全金币、质量守恒、长帧处理、石块不可变和存档收敛。
 

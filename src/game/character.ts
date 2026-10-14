@@ -27,7 +27,7 @@ export class FrogAnimator {
     },
   ) {
     const delta = this.lastTime
-      ? Math.max(0, Math.min(0.05, time - this.lastTime))
+      ? Math.max(0, time - this.lastTime)
       : 0;
     this.lastTime = time;
     if (options.won && this.winAt < 0) this.winAt = time;

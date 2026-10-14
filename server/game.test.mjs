@@ -12,13 +12,23 @@ for (const level of levels)
     const world = new FluidWorld(level);
     for (let i = 1; i < level.solution.length; i++)
       world.digLine(level.solution[i - 1], level.solution[i]);
+    for (const route of level.extraSolutions ?? [])
+      for (let i = 1; i < route.length; i++) world.digLine(route[i - 1], route[i]);
+    if (level.plants?.length) {
+      level.valves?.forEach((valve, index) => { if (valve.kind === "sewage") world.toggleValve(index); });
+      for (let i = 0; i < 2400 && world.plantRemaining.some(n => n > 0); i++) world.advance(1 / 60);
+      assert.ok(world.plantRemaining.every(n => n === 0), "plants must absorb the isolated sewage before opening clean water");
+    }
     level.fans?.forEach((_fan, i) => { if (!world.fanOn[i]) world.toggleFan(i); });
-    level.valves?.forEach((_valve, i) => world.toggleValve(i));
-    for (let i = 0; i < 2400 && world.delivered < 100; i++)
+    level.valves?.forEach((valve, i) => { if (valve.kind !== "sewage") world.toggleValve(i); });
+    for (let i = 0; i < 2400 && world.delivered < 100; i++) {
       world.advance(1 / 60);
+      level.sponges?.forEach((sponge, index) => { if (world.spongeContents[index].length === sponge.capacity) world.squeezeSponge(index); });
+    }
     assert.ok(world.delivered >= 100, `only ${world.delivered} delivered`);
     assert.equal(world.collected, 7);
-    assert.equal(world.particles.length + world.delivered, world.emitted);
+    assert.equal(world.dirtyDelivered, 0);
+    assert.equal(world.particles.length + world.delivered + world.dirtyDelivered + world.storedWater + world.plantAbsorbed, world.emitted);
   });
 
 test("wind acts only inside its zone and conserves water", () => {

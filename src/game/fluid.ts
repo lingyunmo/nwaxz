@@ -1,4 +1,4 @@
-import type { Level, Point, WaterKind } from "./levels.ts";
+import type { Level, Point, WaterKind, Rect } from "./levels.ts";
 export const WIDTH = 480,
   HEIGHT = 800,
   CELL = 8,
@@ -13,6 +13,9 @@ export type Particle = {
   oldX: number;
   oldY: number;
   kind?: WaterKind;
+  absorbed?: boolean;
+  releasedBy?: number;
+  recaptureAt?: number;
 };
 export class FluidWorld {
   readonly dirt = new Uint8Array(COLS * ROWS);
@@ -20,12 +23,21 @@ export class FluidWorld {
   particles: Particle[] = [];
   delivered = 0;
   dirtyDelivered = 0;
+  plantAbsorbed = 0;
   collected = 0;
   elapsed = 0;
   readonly fanOn: boolean[];
   readonly valveOn: boolean[];
   readonly valveRemaining: number[];
   private valveFractions: number[];
+  readonly plantRemaining: number[];
+  readonly spongeContents: Particle[][];
+  readonly spongeQueued: Particle[][];
+  private squeezeFractions: number[];
+  private readonly hasAbsorbers: boolean;
+  get storedWater() {
+    return this.spongeContents.reduce((sum, particles) => sum + particles.length, 0) + this.spongeQueued.reduce((sum, particles) => sum + particles.length, 0);
+  }
   emitted = 0;
   private accumulator = 0;
   level: Level;
@@ -35,6 +47,11 @@ export class FluidWorld {
     this.valveOn = (level.valves ?? []).map(() => false);
     this.valveRemaining = (level.valves ?? []).map(valve => valve.drops);
     this.valveFractions = (level.valves ?? []).map(() => 0);
+    this.plantRemaining = (level.plants ?? []).map(plant => plant.tolerance);
+    this.spongeContents = (level.sponges ?? []).map(() => []);
+    this.spongeQueued = (level.sponges ?? []).map(() => []);
+    this.squeezeFractions = (level.sponges ?? []).map(() => 0);
+    this.hasAbsorbers = Boolean(level.plants?.length || level.sponges?.length);
     for (let row = 0; row < ROWS; row++)
       for (let col = 0; col < COLS; col++) {
         const x = col * CELL,
@@ -72,6 +89,11 @@ export class FluidWorld {
   toggleValve(index: number) {
     if (!this.level.valves?.[index] || !this.valveRemaining[index]) return false;
     this.valveOn[index] = !this.valveOn[index];
+    return true;
+  }
+  squeezeSponge(index: number) {
+    if (!this.level.sponges?.[index] || !this.spongeContents[index].length) return false;
+    this.spongeQueued[index].push(...this.spongeContents[index].splice(0));
     return true;
   }
   dig(x: number, y: number, radius = 25) {
@@ -121,13 +143,24 @@ export class FluidWorld {
     }
   }
   private step(dt: number) {
+    this.level.sponges?.forEach((sponge, index) => {
+      if (!this.spongeQueued[index].length) return;
+      this.squeezeFractions[index] += 80 * dt;
+      while (this.squeezeFractions[index] >= 1 && this.spongeQueued[index].length) {
+        const captured = this.spongeQueued[index].pop()!,
+          x = sponge.release.x + ((this.spongeQueued[index].length % 3) - 1) * 7,
+          y = sponge.release.y;
+        this.particles.push({ x, y, oldX: x, oldY: y, vx: 0, vy: 80, kind: captured.kind, releasedBy: index, recaptureAt: this.elapsed + 1 });
+        this.squeezeFractions[index]--;
+      }
+    });
     this.level.valves?.forEach((valve, index) => {
       if (!this.valveOn[index]) return;
       this.valveFractions[index] += valve.rate * dt;
       while (this.valveFractions[index] >= 1 && this.valveRemaining[index] > 0) {
-        const x = valve.nozzle.x + ((this.valveRemaining[index] % 3) - 1) * 7,
+        const x = valve.nozzle.x + ((this.valveRemaining[index] % 3) - 1) * (valve.spread ?? 7),
           y = valve.nozzle.y;
-        this.particles.push({ x, y, oldX: x, oldY: y, vx: 0, vy: 80 });
+        this.particles.push({ x, y, oldX: x, oldY: y, vx: 0, vy: 80, kind: valve.kind });
         this.valveFractions[index]--;
         this.valveRemaining[index]--;
         this.emitted++;
@@ -149,6 +182,7 @@ export class FluidWorld {
       p.y += p.vy * dt;
       this.collide(p);
     }
+    if (this.hasAbsorbers) this.particles = this.particles.filter(p => !p.absorbed);
     // Spatial buckets keep the neighbour constraints near-linear at this scale.
     // This is a lightweight particle solver, not a full SPH or PBF simulation.
     for (let iteration = 0; iteration < 3; iteration++) {
@@ -182,6 +216,7 @@ export class FluidWorld {
             }
       });
       for (const p of this.particles) this.collide(p);
+      if (this.hasAbsorbers) this.particles = this.particles.filter(p => !p.absorbed);
     }
     const remaining: Particle[] = [];
     for (const p of this.particles) {
@@ -199,8 +234,29 @@ export class FluidWorld {
     this.particles = remaining;
   }
   private collide(p: Particle) {
+    if (p.absorbed) return;
     p.x = Math.max(16 + RADIUS, Math.min(464 - RADIUS, p.x));
     p.y = Math.max(RADIUS, Math.min(622, p.y));
+    if (this.level.plants) for (const [index, plant] of this.level.plants.entries()) {
+      if (!this.plantRemaining[index] || !this.touches(p, plant.rect)) continue;
+      if (p.kind === "sewage") {
+        p.absorbed = true;
+        this.plantRemaining[index]--;
+        this.plantAbsorbed++;
+        return;
+      }
+      this.resolveRect(p, plant.rect);
+    }
+    if (this.level.sponges) for (const [index, sponge] of this.level.sponges.entries()) {
+      if (p.releasedBy === index && this.elapsed < (p.recaptureAt ?? 0)) continue;
+      if (!this.touches(p, sponge.rect)) continue;
+      if (this.spongeContents[index].length < sponge.capacity) {
+        p.absorbed = true;
+        this.spongeContents[index].push(p);
+        return;
+      }
+      this.resolveRect(p, sponge.rect);
+    }
     const cx = Math.floor(p.x / CELL),
       cy = Math.floor(p.y / CELL);
     for (let row = cy - 1; row <= cy + 1; row++)
@@ -210,28 +266,25 @@ export class FluidWorld {
         if (!this.dirt[i] && !this.stone[i]) continue;
         const left = col * CELL,
           top = row * CELL;
-        const nx = Math.max(left, Math.min(left + CELL, p.x)),
-          ny = Math.max(top, Math.min(top + CELL, p.y));
-        const dx = p.x - nx,
-          dy = p.y - ny,
-          distance = Math.hypot(dx, dy);
-        if (distance >= RADIUS) continue;
-        if (distance > 0.001) {
-          p.x += (dx / distance) * (RADIUS - distance);
-          p.y += (dy / distance) * (RADIUS - distance);
-        } else {
-          const sides = [
-              p.x - left,
-              left + CELL - p.x,
-              p.y - top,
-              top + CELL - p.y,
-            ],
-            side = sides.indexOf(Math.min(...sides));
-          if (side === 0) p.x = left - RADIUS;
-          else if (side === 1) p.x = left + CELL + RADIUS;
-          else if (side === 2) p.y = top - RADIUS;
-          else p.y = top + CELL + RADIUS;
-        }
+        this.resolveRect(p, { x: left, y: top, w: CELL, h: CELL });
       }
+  }
+  private touches(p: Particle, r: Rect) {
+    return Math.hypot(p.x - Math.max(r.x, Math.min(r.x + r.w, p.x)), p.y - Math.max(r.y, Math.min(r.y + r.h, p.y))) < RADIUS;
+  }
+  private resolveRect(p: Particle, r: Rect) {
+    const nx = Math.max(r.x, Math.min(r.x + r.w, p.x)), ny = Math.max(r.y, Math.min(r.y + r.h, p.y)),
+      dx = p.x - nx, dy = p.y - ny, distance = Math.hypot(dx, dy);
+    if (distance >= RADIUS) return;
+    if (distance > .001) {
+      p.x += dx / distance * (RADIUS - distance);
+      p.y += dy / distance * (RADIUS - distance);
+    } else {
+      const sides = [p.x - r.x, r.x + r.w - p.x, p.y - r.y, r.y + r.h - p.y], side = sides.indexOf(Math.min(...sides));
+      if (side === 0) p.x = r.x - RADIUS;
+      else if (side === 1) p.x = r.x + r.w + RADIUS;
+      else if (side === 2) p.y = r.y - RADIUS;
+      else p.y = r.y + r.h + RADIUS;
+    }
   }
 }

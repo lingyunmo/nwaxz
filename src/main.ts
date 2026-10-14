@@ -156,10 +156,11 @@ function enterLevel(index: number) {
   const level = levels[index];
   const devices = [
     ...(level.fans ?? []).map((fan, i) => ({ point: fan.position, kind: "fan", index: i, label: "风扇" })),
-    ...(level.valves ?? []).map((valve, i) => ({ point: valve.position, kind: "valve", index: i, label: "喷水阀" })),
+    ...(level.valves ?? []).map((valve, i) => ({ point: valve.position, kind: "valve", index: i, label: valve.kind === "sewage" ? "污水阀" : "清水阀" })),
+    ...(level.sponges ?? []).map((sponge, i) => ({ point: sponge.position, kind: "sponge", index: i, label: "海绵" })),
   ];
   chrome(
-    `<main class="play-screen screen-enter" aria-label="游戏关卡"><div class="game-stage"><canvas id="game" tabindex="0" aria-label="挖土引水游戏。划动手指或按住鼠标挖土；方向键移动，空格挖土，Shift加方向键连续挖土；F切换风扇，V切换喷水阀。"></canvas><div class="play-hud"><div class="hud-buttons">${buttonIcon("pause", "暂停游戏", "pause")}${buttonIcon("restart", "重新开始", "restart")}</div><div class="water-badge">${icon("drop")}<progress id="water-meter" max="100" value="0" aria-label="浴缸水量"></progress><span id="water-count">0 / 100</span></div><div id="hud-coins" class="hud-coins" aria-label="已收集0枚泡泡币">${stars(0)}</div></div>${devices.map(device => `<button class="device-control" data-device="${device.kind}-${device.index}" aria-label="${device.label}" aria-pressed="false"></button>`).join("")}<div id="result" class="result-layer" hidden></div><div id="gesture-hint" class="gesture-hint" ${progress.levels[level.id]?.completed ? "hidden" : ""}>${level.hint}</div></div></main>`,
+    `<main class="play-screen screen-enter" aria-label="游戏关卡"><div class="game-stage"><canvas id="game" tabindex="0" aria-label="挖土引水游戏。划动手指或按住鼠标挖土；方向键移动，空格挖土，Shift加方向键连续挖土；F切换风扇，V切换清水阀，B切换污水阀，E挤出海绵的水。"></canvas><div class="play-hud"><div class="hud-buttons">${buttonIcon("pause", "暂停游戏", "pause")}${buttonIcon("restart", "重新开始", "restart")}</div><div class="water-badge">${icon("drop")}<progress id="water-meter" max="100" value="0" aria-label="浴缸水量"></progress><span id="water-count">0 / 100</span></div><div id="hud-coins" class="hud-coins" aria-label="已收集0枚泡泡币">${stars(0)}</div></div>${devices.map(device => `<button class="device-control" data-device="${device.kind}-${device.index}" aria-label="${device.label}" aria-pressed="false"></button>`).join("")}<div id="result" class="result-layer" hidden></div><div id="gesture-hint" class="gesture-hint" ${progress.levels[level.id]?.completed ? "hidden" : ""}>${level.hint}</div></div></main>`,
   );
   for (const device of devices) {
     const control = $(`[data-device="${device.kind}-${device.index}"]`);
@@ -192,18 +193,20 @@ function enterLevel(index: number) {
       },
       complete: finishLevel,
       failed: finishFailed,
-      devices() {
-        if (!game) return;
-        const state = JSON.stringify([game.world.fanOn, game.world.valveOn, game.world.valveRemaining.map(n => n === 0)]);
+      devices(interacted = false) {
+        if (!game || !devices.length) return;
+        if (interacted) $("#gesture-hint").hidden = true;
+        const state = JSON.stringify([game.world.fanOn, game.world.valveOn, game.world.valveRemaining.map(n => n === 0), game.world.spongeContents.map(particles => particles.length > 0), game.won, game.lost]);
         if (state === deviceState) return;
         deviceState = state;
         for (const device of devices) {
           const control = $<HTMLButtonElement>(`[data-device="${device.kind}-${device.index}"]`);
-          const on = device.kind === "fan" ? game.world.fanOn[device.index] : game.world.valveOn[device.index];
+          const on = device.kind === "fan" ? game.world.fanOn[device.index] : device.kind === "valve" ? game.world.valveOn[device.index] : game.world.spongeContents[device.index].length > 0;
           const empty = device.kind === "valve" && game.world.valveRemaining[device.index] === 0;
-          control.setAttribute("aria-pressed", String(on));
-          control.setAttribute("aria-label", empty ? "喷水阀水量已用完" : `${on ? "关闭" : "开启"}${device.label}`);
-          control.disabled = empty;
+          if (device.kind === "sponge") control.removeAttribute("aria-pressed");
+          else control.setAttribute("aria-pressed", String(on));
+          control.setAttribute("aria-label", device.kind === "sponge" ? on ? "挤出海绵里的水" : "海绵正在等待吸水" : empty ? `${device.label}水量已用完` : `${on ? "关闭" : "开启"}${device.label}`);
+          control.disabled = empty || (device.kind === "sponge" && !on) || game.won || game.lost;
         }
       },
       tap() {
@@ -268,7 +271,8 @@ function finishFailed() {
   audio.effect("tap");
   $("#gesture-hint").hidden = true;
   $("#result").hidden = false;
-  $("#result").innerHTML = `<section class="result-card failure-card" aria-label="本次挑战失败"><span class="result-kicker">清水被污染了</span><h1>水变脏啦！</h1><p class="dialog-copy">污水流进浴缸，奶蛙还不能洗澡。保留污水池下方的泥土，再给清水挖一条路吧。</p><button id="retry" class="game-button gold">再试一次 ${icon("restart")}</button><button id="failed-menu" class="game-button cream">返回选关</button></section>`;
+  const tip = levels[selected].plants?.length ? "先让水草吸收完紫水，等它枯萎后，再打开清水阀门。" : "保留污水池下方的泥土，再给清水挖一条路吧。";
+  $("#result").innerHTML = `<section class="result-card failure-card" aria-label="本次挑战失败"><span class="result-kicker">清水被污染了</span><h1>水变脏啦！</h1><p class="dialog-copy">污水流进浴缸，奶蛙还不能洗澡。${tip}</p><button id="retry" class="game-button gold">再试一次 ${icon("restart")}</button><button id="failed-menu" class="game-button cream">返回选关</button></section>`;
   $("#retry").onclick = () => enterLevel(selected);
   $("#failed-menu").onclick = renderLevels;
 }
@@ -409,7 +413,7 @@ function applySettings() {
 }
 function openHelp(fromPause = false) {
   const dialog = showDialog(
-    `${dialogTop("接一缸水")}<ol class="how-to"><li>按住鼠标或划动手指，挖开泥土。</li><li>把清水引进右下方的管道，接够 100 滴水。</li><li>顺路收集 3 枚泡泡币，用时越短得分越高。</li><li>石板挖不动，要绕个弯。</li><li>轻点风扇可以推水；喷水阀可开关，水量有限。</li><li>紫色污水会污染清水，流进浴缸就要重试。</li></ol><p class="keyboard-help">键盘：方向键移动，空格挖土，Shift + 方向键连续挖土，F 切换风扇，V 切换喷水阀，Esc 暂停。</p><button id="help-ok" class="game-button gold">我知道啦</button>`,
+    `${dialogTop("接一缸水")}<ol class="how-to"><li>按住鼠标或划动手指，挖开泥土。</li><li>把清水引进右下方的管道，接够 100 滴水。</li><li>顺路收集 3 枚泡泡币，用时越短得分越高。</li><li>石板挖不动，要绕个弯。</li><li>轻点风扇可以推水；喷水阀可开关，水量有限。</li><li>紫色污水会污染清水，流进浴缸就要重试。</li><li>水草挡水，吸收紫水后会枯萎；海绵吸水，轻点可以挤水。</li></ol><p class="keyboard-help">键盘：方向键移动，空格挖土，Shift + 方向键连续挖土，F 切换风扇，V 切换清水阀，B 切换污水阀，E 挤水，Esc 暂停。</p><button id="help-ok" class="game-button gold">我知道啦</button>`,
     () => openSettings(fromPause),
   );
   $("#dialog-close").onclick = () => dialog.close();

@@ -13,7 +13,7 @@
 | 名称 | 类型 | 用途 |
 | --- | --- | --- |
 | `DEPLOY_ENABLED` | Repository variable | 设为 `true` 才启用自动部署 |
-| `DEPLOY_HOST` | Repository secret | nwaxz 专用 SSH 主机名或地址，公开仓库中由 secret 遮蔽作业日志 |
+| `DEPLOY_HOST` | Repository secret | nwaxz 专用 SSH 主机名或地址，作为 secret 管理 |
 | `DEPLOY_HOST_KEY` | Repository variable | SSH `known_hosts` 格式的主机公钥条目 |
 | `DEPLOY_SSH_KEY` | Repository secret | `nwaxz-deploy` 限权账户使用的专用私钥 |
 
@@ -31,6 +31,6 @@
 
 首次配置应通过已批准的管理通道创建或确认专用 `nwaxz-deploy` OS 账户、命令限制及专用密钥；将对应私钥作为 `DEPLOY_SSH_KEY` secret 配置，将部署主机公钥条目放入 `DEPLOY_HOST_KEY`。使用无持久化权限的 GHCR workflow token 拉取镜像。不要复用旧 root 密钥。
 
-首个发布已在 GitHub Actions 的 [run 38606468423](https://github.com/lingyunmo/nwaxz/actions/runs/38606468423) 完成 Verify、Build image、Deploy nwaxz。生产站点 [nwaxz.bzlom.cn](https://nwaxz.bzlom.cn) 返回 HTTP 到 HTTPS 重定向，`/api/health` 报告修订 `1180b4fa9b5710d10169147110fc87598688c224`，线上 smoke 检查覆盖 HTML、资源和 Service Worker。详细证据及客户端验证边界见[首发验证记录](VERIFICATION.md)。这些结果只证明该次首发；之后每次发布都应重新检查对应工作流、目标修订和公开站点。
+首发记录和修复版本验证是两组独立证据：首发运行见 [run 38606468423](https://github.com/lingyunmo/nwaxz/actions/runs/38606468423)，当时健康接口报告修订 `1180b4fa9b5710d10169147110fc87598688c224`。离线缓存修复通过 PR #4 squash 合并，修复提交为 `282aa6ddb179cc4a1271981cdea16a32bd7a3714`；对应 [main workflow run 38612644262](https://github.com/lingyunmo/nwaxz/actions/runs/38612644262) 的 Verify、Build image、Deploy nwaxz 均成功，公网 smoke 精确核对该 SHA 成功。详细验证结果见[发布验证记录](VERIFICATION.md)。这些证据针对所列修复版本；其他提交均须根据各自工作流和线上检查判断。
 
 源码仓库现为公开，main 分支保护已启用：必须通过 PR，Verify 成功且分支最新；管理员同样受限，要求线性历史并禁止强制推送和删除。单人仓库所需审阅人数为 0。规则由 GitHub 强制执行。

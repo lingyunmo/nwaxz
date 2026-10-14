@@ -1,36 +1,32 @@
 # 发布与验证记录
 
-线上游戏：[nwaxz.bzlom.cn](https://nwaxz.bzlom.cn)。此页区分已部署版本和仍在开发的版本；某个版本通过的检查不代表其他提交自动通过。
+线上游戏：[nwaxz.bzlom.cn](https://nwaxz.bzlom.cn)。记录区分已发布版本与开发中的代码；每次发布应以其对应工作流、提交 SHA 和实际浏览器验收为准。
 
-## 已核对发布 0.2.0
+## 已发布 0.3.0
 
-- 该版本提交：`6dbd28b813fb601a15addaab10c44e6436311021`。
-- [GitHub Actions run 38639392080](https://github.com/lingyunmo/nwaxz/actions/runs/38639392080) 的 Verify、Build image、Deploy nwaxz 全部成功；公网 smoke 精确核对该提交 SHA。
-- Chrome 验证旧版存档升级后保留全部 9/9 泡泡币。
+- 线上提交：`13f2c2870e8832e30b860fa14d04dbbad0b08ad9`。
+- [GitHub Actions run 38641714810](https://github.com/lingyunmo/nwaxz/actions/runs/38641714810) 的 Verify、Build image、Deploy nwaxz 全部成功；公网 smoke 精确核对该 SHA。
+- Chrome 更新后确认第二章选关可用，旧存档的 9 枚泡泡币均保留。
+- 相对 0.2.0 发布后的服务器只读基线，21 个其他容器的 ID、StartedAt 和 RestartCount 均相同。
 
-## 历史版本 0.1.0 与离线缓存修复
+## 历史发布
 
-- 首发工作流 [run 38606468423](https://github.com/lingyunmo/nwaxz/actions/runs/38606468423) 成功；该版本的健康接口修订为 `1180b4fa9b5710d10169147110fc87598688c224`。
-- PR #4 的缓存修复提交 `282aa6ddb179cc4a1271981cdea16a32bd7a3714` 由 [run 38612644262](https://github.com/lingyunmo/nwaxz/actions/runs/38612644262) 完成 Verify、Build image、Deploy nwaxz，公网 smoke 精确核对该 SHA。
-- 修复版本的 Chrome 离线测试更新后缓存 17 项，断网重载可打开游戏、角色和本机存档，并可离线完成第一关。
-- 上述两个修订是历史记录，不应作为当前 0.2.0 提交来引用。
+- 0.2.0：提交 `6dbd28b813fb601a15addaab10c44e6436311021`；[run 38639392080](https://github.com/lingyunmo/nwaxz/actions/runs/38639392080) 的 Verify、Build image、Deploy nwaxz 成功，公网 smoke 精确核对提交 SHA。
+- 0.1.0 首发：[run 38606468423](https://github.com/lingyunmo/nwaxz/actions/runs/38606468423)，健康接口修订为 `1180b4fa9b5710d10169147110fc87598688c224`。
+- 离线缓存修复：PR #4 合并 SHA `282aa6ddb179cc4a1271981cdea16a32bd7a3714`；[run 38612644262](https://github.com/lingyunmo/nwaxz/actions/runs/38612644262) 全部发布作业成功，公网 smoke 精确核对该 SHA。Chrome 离线实测更新后缓存资源，断网可打开游戏和本机存档并通关第一关。
 
-## 0.3.0 开发版
+## 开发版 0.4.0
 
-- 19 项业务测试和 1 项 PWA 构建检查通过。
-- 五关均通过半径 25 的模拟路线验证，路线可通关并收集 3/3 泡泡币。
-- Chrome 本地实际通关两道新关卡，各获 3/3 泡泡币；风扇 3104 分、00:39，阀门 2713 分、01:18。这些是自动化操作结果，不作为正常玩家的时长基准。
-- 验证 390 × 844 无横向溢出，真实触摸划土和机关开关、F/V 键、暂停时水量冻结、阀门耗尽提示。
-- 断网冷重载后保留 15/15 泡泡币与两关成绩，可离线选关、加载道具并暂停；随后已恢复网络、触摸模拟和视口。
-- 本节记录本地发布前验证，线上发布仍须核对 main 工作流和公网精确 SHA。
-- 存档 ID 从关卡定义动态读取，v1 数据格式和原有 ID 保持不变。
+- `pnpm check` 通过 25 项业务测试和 1 项 PWA 构建检查。
+- 六关模拟路线均能通关并收集全部 3 枚泡泡币。
+- Chrome 实际验证错误污水路线触发失败，重试后水量和地形重置，选关记录仍未通关。
+- 390 × 844 手机真实触摸正确路线获 100 滴清水和 3/3 泡泡币，3374 分、00:12；未出现应用控制台错误。这是测试操作结果，不作为玩家时长基准。
+- 离线冷重载后保留第六关最高分、最快时间与全关 18/18 泡泡币，可离线进入第三章并暂停。随后已恢复网络、视口，触摸模拟已关闭。
+- 本段记录发布前验收，仍须核对 main 工作流与公网精确 SHA。
+- 游戏前后端版本读取 `package.json`；增加关卡不改变 v1 存档格式。
 
-## 生产范围检查
+## 仓库策略与发布范围
 
-服务器检查为只读。`nwaxz-app` 使用既有 `common-net` 网络且不发布宿主机端口；nwaxz 发布前后的既有服务检查没有发现其他生产资源由本次部署操作。
+源码仓库公开。main 分支保护要求 PR、Verify 成功且分支最新，管理员也受约束；要求线性历史，禁止强制推送和删除，所需审阅人数为 0。`DEPLOY_HOST` 作为 Repository secret 保存；私密漏洞报告 API 已启用。
 
-只读容器基线中，`lom-app` 的容器 ID 与部署前记录相同，但其 `StartedAt` 为 `2026-10-14T20:14:59Z`，早于 nwaxz 发布时刻 `2026-10-14T21:21:02Z`。其他既有容器的基线记录相同。此次没有操作 `lom`；因此不声称所有容器的启动时间都保持不变。
-
-## 仓库保护
-
-源码仓库为公开仓库。main 分支保护要求 PR、Verify 成功且分支最新，管理员也受规则约束；要求线性历史，禁止强制推送和删除，单人维护的所需审阅人数为 0。`DEPLOY_HOST` 作为 Repository secret 保存；私密漏洞报告 API 已启用（`enabled=true`）。
+生产操作限于 nwaxz。服务器检查只读；发布比对表明 0.3.0 相对 0.2.0 发布后的基线未改变其他 21 个容器的 ID、StartedAt 或 RestartCount。文档不记录真实服务器地址。

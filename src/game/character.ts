@@ -20,6 +20,7 @@ export class FrogAnimator {
     time: number,
     options: {
       won: boolean;
+      lost: boolean;
       tapAt: number;
       deliveryAt: number;
       reducedMotion: boolean;
@@ -45,7 +46,8 @@ export class FrogAnimator {
               : celebration % 7 < 4.4
                 ? 6
                 : 7;
-    } else if (time - options.deliveryAt < 0.8) pose = 10;
+    } else if (options.lost) pose = cycle % 4 < 2 ? 10 : 5;
+    else if (time - options.deliveryAt < 0.8) pose = 10;
     else if (tapping < 2.3 || (cycle >= 14 && cycle < 16.3)) {
       const phase = tapping < 2.3 ? tapping : cycle - 14;
       pose = phase < 0.35 ? 2 : phase < 0.75 ? 3 : phase < 1.65 ? 4 : 2;
@@ -54,7 +56,7 @@ export class FrogAnimator {
     else if (cycle > 10.2 && cycle < 12) pose = 9;
     else if (cycle > 18 && cycle < 20) pose = 5;
     else if (time % 4.8 > 4.58) pose = 1;
-    if (options.reducedMotion) pose = options.won ? 11 : 0;
+    if (options.reducedMotion) pose = options.won ? 11 : options.lost ? 10 : 0;
     const blend = options.reducedMotion ? 1 : 1 - Math.exp(-delta / 0.065);
     const nextWeights = this.weights.map(
       (weight, index) => weight + ((index === pose ? 1 : 0) - weight) * blend,

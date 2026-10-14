@@ -2,6 +2,8 @@ export type Rect = { x: number; y: number; w: number; h: number };
 export type Point = { x: number; y: number };
 export type Fan = { position: Point; zone: Rect; force: Point; on: boolean };
 export type Valve = { position: Point; nozzle: Point; drops: number; rate: number };
+export type WaterKind = "clean" | "sewage";
+export type WaterPool = { x: number; y: number; columns: number; rows: number; kind: WaterKind };
 export type Level = {
   id: string;
   title: string;
@@ -13,6 +15,7 @@ export type Level = {
   initialWater?: number;
   fans?: Fan[];
   valves?: Valve[];
+  extraPools?: WaterPool[];
 };
 export const levels: Level[] = [
   {
@@ -94,5 +97,15 @@ export const levels: Level[] = [
     rocks: [{ x: 160, y: 352, w: 304, h: 32 }],
     coins: [{ x: 112, y: 285 }, { x: 118, y: 438 }, { x: 320, y: 550 }],
     solution: [{ x: 104, y: 198 }, { x: 112, y: 315 }, { x: 118, y: 442 }, { x: 320, y: 550 }, { x: 392, y: 592 }],
+  },
+  {
+    id: "clean-water-only",
+    title: "清水保卫战",
+    chapter: 3,
+    hint: "紫色是污水。保留它下方的泥土，只给左边的清水挖路。",
+    extraPools: [{ x: 312, y: 136, columns: 8, rows: 8, kind: "sewage" }],
+    rocks: [],
+    coins: [{ x: 140, y: 280 }, { x: 220, y: 410 }, { x: 335, y: 540 }],
+    solution: [{ x: 104, y: 198 }, { x: 140, y: 280 }, { x: 220, y: 410 }, { x: 335, y: 540 }, { x: 392, y: 592 }],
   },
 ];

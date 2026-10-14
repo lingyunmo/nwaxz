@@ -1,0 +1,128 @@
+{
+  "image": "/assets/props/garden-props-v1.webp",
+  "fallbackImage": "/assets/props/garden-props-v1.png",
+  "width": 1024,
+  "height": 1024,
+  "columns": 2,
+  "rows": 2,
+  "frameWidth": 512,
+  "frameHeight": 512,
+  "frames": [
+    {
+      "index": 0,
+      "name": "grassHealthy",
+      "sourceRect": [
+        0,
+        0,
+        512,
+        512
+      ],
+      "anchor": [
+        256,
+        436
+      ],
+      "anchorKind": "rootJunction",
+      "bounds": [
+        67,
+        69,
+        419,
+        480
+      ],
+      "originalRect": [
+        78,
+        29,
+        584,
+        619
+      ],
+      "rootBottom": 479
+    },
+    {
+      "index": 1,
+      "name": "grassWithered",
+      "sourceRect": [
+        512,
+        0,
+        512,
+        512
+      ],
+      "anchor": [
+        256,
+        436
+      ],
+      "anchorKind": "rootJunction",
+      "bounds": [
+        63,
+        109,
+        417,
+        479
+      ],
+      "originalRect": [
+        692,
+        88,
+        1201,
+        620
+      ],
+      "rootBottom": 478
+    },
+    {
+      "index": 2,
+      "name": "spongeDry",
+      "sourceRect": [
+        0,
+        512,
+        512,
+        512
+      ],
+      "anchor": [
+        256,
+        256
+      ],
+      "anchorKind": "bodyCenter",
+      "bounds": [
+        74,
+        122,
+        438,
+        389
+      ],
+      "originalRect": [
+        47,
+        772,
+        593,
+        1173
+      ]
+    },
+    {
+      "index": 3,
+      "name": "spongeWet",
+      "sourceRect": [
+        512,
+        512,
+        512,
+        512
+      ],
+      "anchor": [
+        256,
+        256
+      ],
+      "anchorKind": "bodyCenter",
+      "bounds": [
+        73,
+        122,
+        437,
+        389
+      ],
+      "originalRect": [
+        667,
+        774,
+        1214,
+        1175
+      ]
+    }
+  ],
+  "poseAliases": {
+    "grassHealthy": 0,
+    "grassWithered": 1,
+    "spongeDry": 2,
+    "spongeWet": 3
+  }
+}

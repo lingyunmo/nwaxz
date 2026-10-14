@@ -1,4 +1,4 @@
-import type { Level, Point } from "./levels.ts";
+import type { Level, Point, WaterKind } from "./levels.ts";
 export const WIDTH = 480,
   HEIGHT = 800,
   CELL = 8,
@@ -12,12 +12,14 @@ export type Particle = {
   vy: number;
   oldX: number;
   oldY: number;
+  kind?: WaterKind;
 };
 export class FluidWorld {
   readonly dirt = new Uint8Array(COLS * ROWS);
   readonly stone = new Uint8Array(COLS * ROWS);
   particles: Particle[] = [];
   delivered = 0;
+  dirtyDelivered = 0;
   collected = 0;
   elapsed = 0;
   readonly fanOn: boolean[];
@@ -41,7 +43,8 @@ export class FluidWorld {
         if (y >= 200 && y < 592) this.dirt[i] = 1;
         if (x < 16 || x >= 464 || (y >= 592 && !(x >= 352 && x < 432)))
           this.stone[i] = 1;
-        if (y >= 112 && y < 200 && (x < 40 || x >= 176)) this.stone[i] = 1;
+        const extraBasin = level.extraPools?.some(pool => x >= pool.x - 8 && x < pool.x + pool.columns * 7 + 8);
+        if (y >= 112 && y < 200 && (x < 40 || x >= 176) && !extraBasin) this.stone[i] = 1;
         for (const r of level.rocks)
           if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)
             this.stone[i] = 1;
@@ -53,6 +56,12 @@ export class FluidWorld {
         if (this.particles.length < (level.initialWater ?? 208))
           this.particles.push({ x, y, oldX: x, oldY: y, vx: 0, vy: 0 });
       }
+    for (const pool of level.extraPools ?? [])
+      for (let row = 0; row < pool.rows; row++)
+        for (let col = 0; col < pool.columns; col++) {
+          const x = pool.x + col * 7, y = pool.y + row * 7;
+          this.particles.push({ x, y, oldX: x, oldY: y, vx: 0, vy: 0, kind: pool.kind });
+        }
     this.emitted = this.particles.length;
   }
   toggleFan(index: number) {
@@ -161,6 +170,8 @@ export class FluidWorld {
                 vx = q.x - p.x,
                 vy = q.y - p.y,
                 distance = Math.hypot(vx, vy);
+              if (distance < RADIUS * 2 + .8 && (p.kind === "sewage" || q.kind === "sewage"))
+                p.kind = q.kind = "sewage";
               if (distance > 0.001 && distance < RADIUS * 2) {
                 const correction = ((RADIUS * 2 - distance) * 0.5) / distance;
                 p.x -= vx * correction;
@@ -176,11 +187,13 @@ export class FluidWorld {
     for (const p of this.particles) {
       p.vx = Math.max(-220, Math.min(220, (p.x - p.oldX) / dt)) * 0.997;
       p.vy = Math.max(-350, Math.min(440, (p.y - p.oldY) / dt));
-      this.level.coins.forEach((coin, i) => {
-        if (Math.hypot(p.x - coin.x, p.y - coin.y) < 20)
-          this.collected |= 1 << i;
+      if (p.kind !== "sewage") this.level.coins.forEach((coin, i) => {
+        if (Math.hypot(p.x - coin.x, p.y - coin.y) < 20) this.collected |= 1 << i;
       });
-      if (p.y > 608 && p.x > 352 && p.x < 432) this.delivered++;
+      if (p.y > 608 && p.x > 352 && p.x < 432) {
+        if (p.kind === "sewage") this.dirtyDelivered++;
+        else this.delivered++;
+      }
       else remaining.push(p);
     }
     this.particles = remaining;

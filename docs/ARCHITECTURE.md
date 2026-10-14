@@ -7,9 +7,9 @@
 - `public/`：静态公开资源，包括角色图集。
 - `ops/`：部署辅助脚本。
 
-Canvas 2D 游戏包含三个关卡：`first-bath`（第一缸水）、`detour`（绕个小弯）、`last-drop`（曲曲折折）。水流使用 208 粒子求解器，固定 120 Hz 步进并用空间分桶；可挖网格为 CELL8，石块不可挖。胜利条件为收集 3 枚金币并接到 100 滴水。
+Canvas 2D 游戏包含三个关卡：`first-bath`（第一缸水）、`detour`（绕个小弯）、`last-drop`（曲曲折折）。水流使用 208 粒子求解器，固定 120 Hz 步进并用空间分桶；可挖网格为 CELL8，石块不可挖。接到 100 滴水即可获胜，3 枚泡泡币为额外收集目标。
 
-进度保存在浏览器 IndexedDB，支持手动导入/导出，并通过 BroadcastChannel 合并存档。PWA 缓存静态资源并在更新可用时提示用户。角色透明图集位于 `public/assets/character/milk-frog-atlas.webp`，包含 idle、breath、blink、look、tap、laugh、celebrate 动作。当前没有音效。云端同步尚未实现。
+进度保存在浏览器 IndexedDB，支持手动导入/导出，并通过 BroadcastChannel 合并同源标签页的存档。PWA 缓存静态资源并在更新可用时提示用户；每个 URL 仅登记一次，固定名称角色素材使用内容修订，只有 Vite 内容哈希文件长期缓存。本地生产构建断网重载已通过，更新部署后的公网离线复测待完成。角色透明图集位于 `public/assets/character/milk-frog-atlas.webp`，包含 idle、breath、blink、look、tap、laugh、celebrate 动作。当前没有音效。云端同步尚未实现。
 
 原生 Node 测试覆盖三个关卡路线与全金币、质量守恒、长帧处理、石块不可变和存档收敛。
 
@@ -23,4 +23,4 @@ GitHub Actions 工作流执行 Verify、Build image、Deploy nwaxz。`main` 分�
 
 部署脚本使用 GHCR 不可变镜像 digest，在 `network none` 下运行候选镜像冒烟检查，再更新 nwaxz 服务并做健康检查；失败时尝试恢复原 nwaxz 镜像。不得执行 `docker compose down`、清理共享 Docker 资源或修改其他服务及共享网络。数据库迁移不得破坏现有数据。
 
-唯一获准的外围生产变更为新增 `nwaxz` 反向代理主机及 `nwaxz.bzlom.cn` DNS 记录。不得修改 `lom` 或其他生产服务、DNS、共享网络配置。详细配置见 [部署说明](DEPLOYMENT.md)。以上描述工作流及范围，不表示线上 DNS、代理、CI 或部署已经验证。
+外围变更仅新增 `nwaxz` 反向代理主机及 `nwaxz.bzlom.cn` DNS 记录。不得修改 `lom` 或其他生产服务、DNS、共享网络配置。源码仓库为公开仓库，main 分支保护已启用；实际规则和首发检查记录见[发布验证](VERIFICATION.md)，配置边界见[部署说明](DEPLOYMENT.md)。

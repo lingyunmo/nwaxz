@@ -38,7 +38,7 @@ export function createApp({ distDir, revision = "development" }) {
         setHeaders(res, filename) {
           res.set(
             "Cache-Control",
-            filename.includes(`${path.sep}assets${path.sep}`)
+            /[\\/]assets[\\/][^\\/]+-[A-Za-z0-9_-]{8}\.(?:js|css)$/.test(filename)
               ? "public, max-age=31536000, immutable"
               : "no-cache",
           );

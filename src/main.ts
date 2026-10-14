@@ -184,6 +184,9 @@ window.addEventListener("offline", () => {
 window.addEventListener("online", () => {
   $("#offline-status").textContent = "网络已连接 · 进度保存在本机";
 });
+if (!navigator.onLine) {
+  $("#offline-status").textContent = "离线游玩 · 进度保存在本机";
+}
 const updateSW = registerSW({
   onOfflineReady() {
     $("#offline-status").textContent = "游戏与奶蛙已缓存，可以离线游玩";

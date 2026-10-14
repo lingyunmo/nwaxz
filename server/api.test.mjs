@@ -12,9 +12,11 @@ test("release readiness, UTF-8, asset caching, and private-file isolation", asyn
     '<!doctype html><meta charset="UTF-8"><title>奶娃爱洗澡</title>',
   );
   fs.writeFileSync(
-    path.join(directory, "assets", "app-test.js"),
+    path.join(directory, "assets", "app-1234abcd.js"),
     'console.log("ready")',
   );
+  fs.mkdirSync(path.join(directory, "assets", "character"));
+  fs.writeFileSync(path.join(directory, "assets", "character", "atlas.json"), "{}");
   fs.writeFileSync(path.join(directory, ".env"), "private-value");
   const server = createApp({
     distDir: directory,
@@ -38,8 +40,12 @@ test("release readiness, UTF-8, asset caching, and private-file isolation", asyn
   assert.match(page.headers.get("content-type"), /charset=utf-8/i);
   assert.equal(page.headers.get("cache-control"), "no-cache");
   assert.match(
-    (await request("/assets/app-test.js")).headers.get("cache-control"),
+    (await request("/assets/app-1234abcd.js")).headers.get("cache-control"),
     /immutable/,
+  );
+  assert.equal(
+    (await request("/assets/character/atlas.json")).headers.get("cache-control"),
+    "no-cache",
   );
   assert.equal((await request("/.env")).status, 404);
   assert.equal((await request("/api/unknown")).status, 404);

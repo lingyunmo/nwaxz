@@ -1,6 +1,6 @@
 # 部署说明
 
-本文描述 nwaxz 的发布流程和预期配置，不证明 CI、服务器、DNS 或反向代理已经成功配置。不要在文档中记录生产地址或密钥。
+本文记录 nwaxz 发布流程。首个线上版本已通过所列 CI 与生产检查；单次成功不代表后续发布自动成功。不要在文档中记录生产地址或密钥。
 
 ## CI 流程
 
@@ -13,7 +13,7 @@
 | 名称 | 类型 | 用途 |
 | --- | --- | --- |
 | `DEPLOY_ENABLED` | Repository variable | 设为 `true` 才启用自动部署 |
-| `DEPLOY_HOST` | Repository variable | nwaxz 专用 SSH 主机名或地址，仅在 GitHub 配置中维护 |
+| `DEPLOY_HOST` | Repository secret | nwaxz 专用 SSH 主机名或地址，公开仓库中由 secret 遮蔽作业日志 |
 | `DEPLOY_HOST_KEY` | Repository variable | SSH `known_hosts` 格式的主机公钥条目 |
 | `DEPLOY_SSH_KEY` | Repository secret | `nwaxz-deploy` 限权账户使用的专用私钥 |
 
@@ -25,10 +25,12 @@
 
 部署使用不可变 GHCR digest。候选镜像先在 `network none` 下运行冒烟检查；通过后仅更新 `nwaxz-app` 并检查健康状态。失败时尝试恢复之前的 nwaxz 镜像。不要执行 `docker compose down`、`docker system prune`，不要更改共享网络或其他容器/服务，不运行破坏性数据库迁移。
 
-外围配置授权也仅限新增 `nwaxz` 反向代理主机及 `nwaxz.bzlom.cn` DNS 记录。不得编辑 `lom` 主机、其 DNS 或其他生产服务。代理应将该主机名转发至 Docker 网络中的 nwaxz 服务，不需要开放宿主机应用端口。
+外围配置授权也仅限新增 `nwaxz` 反向代理主机及 `nwaxz.bzlom.cn` DNS 记录。不得编辑 `lom` 主机、其 DNS 或其他生产服务。已配置的主机将该域名转发至 `http://nwaxz-app:3000`，使用现有 `Cloudflare_bzlom_cn` 证书并启用 Force SSL 与 HTTP/2；该域名的 Cloudflare A 记录为 Proxied。无需开放宿主机应用端口。
 
 ## 安全引导与验证
 
 首次配置应通过已批准的管理通道创建或确认专用 `nwaxz-deploy` OS 账户、命令限制及专用密钥；将对应私钥作为 `DEPLOY_SSH_KEY` secret 配置，将部署主机公钥条目放入 `DEPLOY_HOST_KEY`。使用无持久化权限的 GHCR workflow token 拉取镜像。不要复用旧 root 密钥。
 
-配置完成后，先在 GitHub Actions 中确认 Verify 和 Build image 成功；启用 `DEPLOY_ENABLED=true` 后再观察 Deploy nwaxz 作业。部署成功需以作业结果和 `/api/health` 返回目标修订为准。还应单独确认 `nwaxz.bzlom.cn` 的 DNS 解析及对应反向代理主机访问。未实际检查的项目必须标记为待验证，不要声称线上部署已通过。
+首个发布已在 GitHub Actions 的 [run 38606468423](https://github.com/lingyunmo/nwaxz/actions/runs/38606468423) 完成 Verify、Build image、Deploy nwaxz。生产站点 [nwaxz.bzlom.cn](https://nwaxz.bzlom.cn) 返回 HTTP 到 HTTPS 重定向，`/api/health` 报告修订 `1180b4fa9b5710d10169147110fc87598688c224`，线上 smoke 检查覆盖 HTML、资源和 Service Worker。详细证据及客户端验证边界见[首发验证记录](VERIFICATION.md)。这些结果只证明该次首发；之后每次发布都应重新检查对应工作流、目标修订和公开站点。
+
+源码仓库现为公开，main 分支保护已启用：必须通过 PR，Verify 成功且分支最新；管理员同样受限，要求线性历史并禁止强制推送和删除。单人仓库所需审阅人数为 0。规则由 GitHub 强制执行。

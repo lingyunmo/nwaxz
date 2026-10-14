@@ -72,7 +72,7 @@ jobs:
     steps:
       - name: Deploy through project-restricted SSH key
         env:
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           HOST_KEY: ${{ vars.DEPLOY_HOST_KEY }}
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}

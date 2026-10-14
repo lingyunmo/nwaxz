@@ -2,14 +2,42 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#102e40" />
-    <meta name="description" content="划开泥土，把清水送进奶娃的浴缸。支持本地存档和离线游玩。" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#286f70" />
+    <meta
+      name="description"
+      content="奶蛙在等一缸清水。划开泥土、收集泡泡币，开启一场快乐的洗澡冒险。"
+    />
+    <link rel="stylesheet" href="/boot.css" />
+    <link rel="preload" as="image" href="/assets/scenes/bath-cover-v2.webp" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <title>奶娃爱洗澡 · nwaxz</title>
+    <title>奶蛙爱洗澡 · nwaxz</title>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div class="boot-screen">
+        <div class="boot-stage">
+          <img
+            class="boot-art"
+            src="/assets/scenes/bath-cover-v2.webp"
+            alt="奶蛙和它的浴缸"
+          />
+          <h1 class="game-logo"><span>奶蛙</span><span>爱洗澡</span></h1>
+          <div class="boot-loading" role="status">
+            <small id="boot-label">正在准备洗澡水…</small
+            ><progress
+              id="boot-progress"
+              value="0"
+              max="100"
+              aria-label="游戏加载进度"
+            ></progress>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

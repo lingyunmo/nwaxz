@@ -1,49 +1,85 @@
 import { CELL, COLS, FluidWorld, HEIGHT, ROWS, WIDTH } from "./fluid";
 import type { Level, Point } from "./levels";
+import type { Artwork } from "../artwork";
+import type { Settings } from "../settings";
+import { FrogAnimator } from "./character";
+
+export type RunResult = { collected: number; elapsedMs: number };
+type Preferences = {
+  art: Artwork;
+  reducedMotion: boolean;
+  quality: Settings["quality"];
+};
 
 type Callbacks = {
   progress: (water: number, coins: number) => void;
-  complete: (coins: number) => void;
+  complete: (result: RunResult) => void;
   tap: () => void;
+  dig: () => void;
 };
 export class BathGame {
   world: FluidWorld;
-  paused = false;
+  private pauseState = false;
+  get paused() {
+    return this.pauseState;
+  }
+  set paused(value: boolean) {
+    if (value === this.pauseState || this.destroyed) return;
+    this.pauseState = value;
+    this.pointer = undefined;
+    if (value) {
+      cancelAnimationFrame(this.raf);
+      this.draw();
+    } else {
+      this.lastTime = 0;
+      this.raf = requestAnimationFrame(this.frame);
+    }
+  }
   won = false;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private terrain = document.createElement("canvas");
+  private rockMask = document.createElement("canvas");
   private terrainDirty = true;
   private raf = 0;
   private lastTime = 0;
   private clock = 0;
   private pointer?: Point;
   private cursor?: Point;
-  private sprite = new Image();
-  private spriteReady = false;
+  private artwork: Artwork;
+  private animator = new FrogAnimator();
+  private startedAt?: number;
+  private destroyed = false;
   private tapAt = -20;
   private lastDeliveryAt = -20;
   private lastDelivered = 0;
   private keyboardCursor = { x: 108, y: 200 };
   private controller = new AbortController();
   private callbacks: Callbacks;
-  private reducedMotion = matchMedia("(prefers-reduced-motion: reduce)")
-    .matches;
-  constructor(canvas: HTMLCanvasElement, level: Level, callbacks: Callbacks) {
+  private reducedMotion: boolean;
+  constructor(
+    canvas: HTMLCanvasElement,
+    level: Level,
+    callbacks: Callbacks,
+    preferences: Preferences,
+  ) {
     this.canvas = canvas;
     this.callbacks = callbacks;
+    this.artwork = preferences.art;
+    this.reducedMotion = preferences.reducedMotion;
     this.world = new FluidWorld(level);
-    const ratio = Math.min(devicePixelRatio || 1, 2);
+    const ratio = Math.min(
+      devicePixelRatio || 1,
+      preferences.quality === "high" ? 2 : 1.5,
+    );
     canvas.width = WIDTH * ratio;
     canvas.height = HEIGHT * ratio;
     this.ctx = canvas.getContext("2d", { alpha: false })!;
     this.ctx.scale(ratio, ratio);
     this.terrain.width = WIDTH;
     this.terrain.height = HEIGHT;
-    this.sprite.onload = () => {
-      this.spriteReady = true;
-    };
-    this.sprite.src = "/assets/character/milk-frog-atlas.webp";
+    this.rockMask.width = WIDTH;
+    this.rockMask.height = HEIGHT;
     const signal = this.controller.signal;
     const point = (event: PointerEvent): Point => {
       const r = canvas.getBoundingClientRect();
@@ -62,6 +98,7 @@ export class BathGame {
         this.cursor = this.pointer;
         if (this.pointer.y > 620) {
           this.tap();
+          this.pointer = undefined;
           return;
         }
         this.dig(this.pointer, this.pointer);
@@ -129,25 +166,43 @@ export class BathGame {
     this.raf = requestAnimationFrame(this.frame);
   }
   private dig(a: Point, b: Point) {
-    if (!this.paused && !this.won && this.world.digLine(a, b))
+    if (!this.paused && !this.won && this.world.digLine(a, b)) {
       this.terrainDirty = true;
+      this.startedAt ??= this.clock;
+      this.callbacks.dig();
+    }
+  }
+  setPreferences(preferences: Pick<Settings, "reducedMotion" | "quality">) {
+    this.reducedMotion = preferences.reducedMotion;
+    const ratio = Math.min(
+      devicePixelRatio || 1,
+      preferences.quality === "high" ? 2 : 1.5,
+    );
+    this.canvas.width = WIDTH * ratio;
+    this.canvas.height = HEIGHT * ratio;
+    this.ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    if (this.paused) this.draw();
   }
   tap() {
     this.tapAt = this.clock;
     this.callbacks.tap();
   }
   destroy() {
+    this.destroyed = true;
     cancelAnimationFrame(this.raf);
     this.controller.abort();
-    this.sprite.onload = null;
   }
   private frame = (time: number) => {
-    const seconds = this.lastTime
-      ? Math.min((time - this.lastTime) / 1000, 0.05)
+    if (this.destroyed) return;
+    const elapsed = this.lastTime
+      ? Math.max(0, (time - this.lastTime) / 1000)
       : 0;
+    const seconds = Math.min(elapsed, 0.05);
     this.lastTime = time;
     if (!document.hidden && !this.paused) {
-      this.clock += seconds;
+      // Score/animation use active wall time; only physics has a capped step.
+      // A slow render must not award an unfair time bonus.
+      this.clock += elapsed;
       if (!this.won) this.world.advance(seconds);
       if (this.world.delivered !== this.lastDelivered) {
         this.lastDeliveryAt = this.clock;
@@ -156,31 +211,47 @@ export class BathGame {
       this.callbacks.progress(this.world.delivered, this.world.collected);
       if (!this.won && this.world.delivered >= 100) {
         this.won = true;
-        this.callbacks.complete(this.world.collected);
+        this.callbacks.complete({
+          collected: this.world.collected,
+          elapsedMs: Math.min(
+            3_600_000,
+            Math.round((this.clock - (this.startedAt ?? this.clock)) * 1000),
+          ),
+        });
       }
     }
     if (!document.hidden) this.draw();
-    this.raf = requestAnimationFrame(this.frame);
+    if (!this.paused) this.raf = requestAnimationFrame(this.frame);
   };
   private paintTerrain() {
     const ctx = this.terrain.getContext("2d")!;
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
+    // The grid is a collision/edit mask. Soil itself comes from the painted art.
     for (let row = 0; row < ROWS; row++)
       for (let col = 0; col < COLS; col++) {
         const i = row * COLS + col;
-        if (this.world.stone[i]) {
-          ctx.fillStyle = (row + col) % 11 === 0 ? "#85969c" : "#758891";
+        if (this.world.dirt[i] && !this.world.stone[i]) {
+          ctx.fillStyle = "white";
           ctx.fillRect(col * CELL, row * CELL, CELL, CELL);
-        } else if (this.world.dirt[i]) {
-          ctx.fillStyle =
-            (row * 17 + col * 23) % 19 === 0 ? "#d4a573" : "#dfb585";
-          ctx.fillRect(col * CELL, row * CELL, CELL, CELL);
-          if ((row * 7 + col) % 7 === 0) {
-            ctx.fillStyle = "#c99c6c";
-            ctx.fillRect(col * CELL + 2, row * CELL + 3, 2, 1);
-          }
         }
       }
+    ctx.globalCompositeOperation = "source-in";
+    ctx.drawImage(this.artwork.stage, 0, 0, WIDTH, HEIGHT);
+    ctx.globalCompositeOperation = "source-over";
+    const rocks = this.rockMask.getContext("2d")!;
+    rocks.clearRect(0, 0, WIDTH, HEIGHT);
+    for (let row = 0; row < ROWS; row++)
+      for (let col = 0; col < COLS; col++) {
+        if (!this.world.stone[row * COLS + col]) continue;
+        rocks.fillStyle = "white";
+        rocks.fillRect(col * CELL, row * CELL, CELL, CELL);
+      }
+    rocks.globalCompositeOperation = "source-in";
+    rocks.filter = "saturate(.3) brightness(.58)";
+    rocks.drawImage(this.artwork.stage, 0, 0, WIDTH, 178, 0, 0, WIDTH, 624);
+    rocks.filter = "none";
+    rocks.globalCompositeOperation = "source-over";
+    ctx.drawImage(this.rockMask, 0, 0);
     this.terrainDirty = false;
   }
   private roundRect(
@@ -198,27 +269,11 @@ export class BathGame {
   }
   private draw() {
     const ctx = this.ctx;
-    ctx.fillStyle = "#eef3e9";
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    const sky = ctx.createLinearGradient(0, 0, 0, 200);
-    sky.addColorStop(0, "#e8f4ef");
-    sky.addColorStop(1, "#d5e8df");
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, WIDTH, 200);
-    ctx.fillStyle = "#aecbbc";
-    ctx.beginPath();
-    ctx.ellipse(368, 119, 155, 34, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#d1e3d2";
-    ctx.beginPath();
-    ctx.ellipse(365, 117, 150, 28, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#597866";
-    ctx.font = "600 15px sans-serif";
-    ctx.fillText("清水池", 47, 67);
-    ctx.font = "12px sans-serif";
-    ctx.fillStyle = "#83998b";
-    ctx.fillText("↓  从这里开始挖", 46, 91);
+    ctx.drawImage(this.artwork.stage, 0, 0, WIDTH, HEIGHT);
+    // An excavated tunnel reveals the painted tiled wall under the soil layer.
+    ctx.drawImage(this.artwork.stage, 0, 0, WIDTH, 100, 0, 200, WIDTH, 422);
+    ctx.fillStyle = "#073c42b3";
+    ctx.fillRect(0, 200, WIDTH, 422);
     if (this.terrainDirty) this.paintTerrain();
     ctx.drawImage(this.terrain, 0, 0);
     ctx.fillStyle = "#38b8e2";
@@ -282,22 +337,6 @@ export class BathGame {
   }
   private drawBathroom() {
     const ctx = this.ctx;
-    ctx.fillStyle = "#f4eee0";
-    ctx.fillRect(0, 622, WIDTH, 178);
-    ctx.strokeStyle = "#e4dccc";
-    ctx.lineWidth = 1;
-    for (let x = 0; x < WIDTH; x += 48) {
-      ctx.beginPath();
-      ctx.moveTo(x, 622);
-      ctx.lineTo(x, 800);
-      ctx.stroke();
-    }
-    for (let y = 622; y < HEIGHT; y += 40) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(WIDTH, y);
-      ctx.stroke();
-    }
     this.roundRect(352, 594, 80, 18, 5, "#516b76");
     ctx.strokeStyle = "#91a6aa";
     ctx.lineWidth = 12;
@@ -323,60 +362,12 @@ export class BathGame {
     ctx.fill();
     ctx.fillStyle = "#cee0e3";
     ctx.fillRect(448, 643, 8, 3);
-    ctx.fillStyle = "#8f9684";
-    ctx.font = "12px sans-serif";
-    ctx.fillText(this.won ? "终于可以洗澡啦！" : "奶蛙在等水…", 25, 658);
-    ctx.fillStyle = "#abb3a3";
-    ctx.font = "10px sans-serif";
-    ctx.fillText("点点奶蛙，敲敲水龙头", 25, 678);
-    if (this.spriteReady) {
-      const cycle = this.clock % 13,
-        tapElapsed = this.clock - this.tapAt;
-      let frame = this.won
-        ? 6
-        : cycle > 8 && cycle < 10
-          ? 5
-          : cycle > 5 && cycle < 7
-            ? 2
-            : this.clock % 4.6 > 4.42
-              ? 1
-              : 0;
-      if (
-        !this.won &&
-        !this.reducedMotion &&
-        ((cycle > 10 && cycle < 12.1) || (tapElapsed >= 0 && tapElapsed < 2.1))
-      ) {
-        const t = tapElapsed < 2.1 ? tapElapsed : cycle - 10;
-        frame = t < 0.35 ? 2 : t < 0.75 ? 3 : t < 1.65 ? 4 : 0;
-      }
-      if (this.won && !this.reducedMotion && this.clock % 3 < 0.7) frame = 7;
-      const bounce = this.reducedMotion
-        ? 0
-        : this.won
-          ? Math.sin(this.clock * 5) * 2
-          : Math.sin(this.clock * 2.2) * 1.5;
-      const breathe = this.reducedMotion
-        ? 1
-        : 1 + Math.sin(this.clock * 2.2) * 0.009;
-      const frameWidth = this.sprite.width / 4,
-        frameHeight = this.sprite.height / 2;
-      const height = 182 * breathe;
-      ctx.drawImage(
-        this.sprite,
-        (frame % 4) * frameWidth,
-        Math.floor(frame / 4) * frameHeight,
-        frameWidth,
-        frameHeight,
-        286,
-        793 - height + bounce,
-        174,
-        height,
-      );
-    } else {
-      ctx.fillStyle = "#809487";
-      ctx.font = "12px sans-serif";
-      ctx.fillText("奶蛙正在赶来…", 320, 709);
-    }
+    this.animator.draw(ctx, this.artwork, this.clock, {
+      won: this.won,
+      tapAt: this.tapAt,
+      deliveryAt: this.lastDeliveryAt,
+      reducedMotion: this.reducedMotion,
+    });
     if (this.won || this.clock - this.lastDeliveryAt < 1) {
       ctx.strokeStyle = "#48b9df";
       ctx.lineWidth = 5;

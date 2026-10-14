@@ -1,0 +1,93 @@
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #286f70;
+  font-family: system-ui, "Microsoft YaHei", sans-serif;
+}
+button {
+  font: inherit;
+}
+#app {
+  height: 100%;
+  width: 100%;
+}
+.boot-screen {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #286f70;
+}
+.boot-stage {
+  position: relative;
+  width: min(100vw, calc(100svh * 2 / 3));
+  height: 100svh;
+  overflow: hidden;
+}
+.boot-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.game-logo {
+  position: absolute;
+  top: 5%;
+  left: 0;
+  width: 100%;
+  margin: 0;
+  display: grid;
+  text-align: center;
+  line-height: 1.04;
+  font-size: clamp(42px, 9vw, 76px);
+  font-weight: 1000;
+  letter-spacing: 2px;
+  color: #ffe98b;
+  -webkit-text-stroke: 2px #52712d;
+  paint-order: stroke fill;
+  text-shadow:
+    0 5px 0 #315f43,
+    0 8px 10px #27584c55;
+}
+.game-logo span:last-child {
+  color: #fffcef;
+  font-size: 1.15em;
+}
+.boot-loading {
+  position: absolute;
+  bottom: 7%;
+  left: 15%;
+  width: 70%;
+  text-align: center;
+  color: #225f60;
+  font-weight: 800;
+}
+.boot-loading progress {
+  display: block;
+  width: 100%;
+  height: 15px;
+  accent-color: #f2ba42;
+  margin: 12px 0;
+  border: 3px solid #f8ffe9;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #459295;
+}
+.boot-loading small {
+  font-size: 13px;
+}
+.boot-loading button {
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 16px;
+  background: #ffe28a;
+  color: #365d49;
+  font-weight: 800;
+}

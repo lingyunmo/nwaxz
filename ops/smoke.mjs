@@ -6,7 +6,7 @@ try {
   if (!response.ok || health.status !== 'ok' || (revision && health.revision !== revision)) throw new Error('health or revision mismatch');
   const page = await fetch(base, { signal: AbortSignal.timeout(3000) });
   const html = await page.text();
-  if (!page.ok || !html.includes('奶娃爱洗澡') || !html.includes('UTF-8')) throw new Error('game document unavailable');
+  if (!page.ok || !html.includes('奶蛙爱洗澡') || !html.includes('UTF-8')) throw new Error('game document unavailable');
   for (const asset of html.matchAll(/(?:src|href)="(\/assets\/[^"?#]+)"/g)) {
     const resource = await fetch(`${base}${asset[1]}`, { signal: AbortSignal.timeout(3000) });
     if (!resource.ok) throw new Error('game asset unavailable');

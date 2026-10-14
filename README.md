@@ -1,19 +1,23 @@
-# 奶娃爱洗澡（nwaxz）
+# 奶蛙爱洗澡（nwaxz）
 
-面向手机浏览器的 H5 挖水解谜游戏。划开泥土，让水流进入奶娃的浴缸。
+面向手机浏览器的 H5 挖水解谜游戏。划开泥土，让水流进入奶蛙的浴缸。
 
 ## 当前功能
 
+- 0.2.0 源码已实现完整游戏流程：主界面、普通模式三关选关、暂停/重来确认、结算与设置。原生全屏按浏览器能力尽力请求，不支持时仍以全视口游戏运行。
 - Canvas 2D 三关：`first-bath`（第一缸水）、`detour`（绕个小弯）、`last-drop`（曲曲折折）。
 - 208 粒子水流求解器，采用固定 120 Hz 步进和空间分桶；挖掘网格单元为 CELL8，石块不可挖。
 - 每关接到 100 滴水即可获胜，可额外收集 3 枚泡泡币。
+- 成绩包含分数和用时；计时从首次有效挖土开始，暂停及后台不计时。最高分与最快用时独立合并；旧版 v1 存档可继续读取，旧纪录不会补造分数。
 - 浏览器 IndexedDB 本地存档，支持导入/导出；通过 BroadcastChannel 合并存档。
-- PWA 静态资源缓存和提示式更新。
+- 设置包含音乐、音效、震动、简化动作和画质选项。音效和轻音乐由 Web Audio 合成，音乐默认关闭，不使用外部录音。
+- PWA 静态资源缓存和提示式更新；当前构建缓存 24 项、约 1.71 MiB。
 - 透明角色图集 `public/assets/character/milk-frog-atlas.webp`，包含 idle、breath、blink、look、tap、laugh、celebrate 动作。
+- 12 种角色姿态（原有 8 种及新增 4 种），姿态间平滑混合并连续呼吸摆动。
 
-三关均已在公网 Chrome 实际通关，每关获得 3/3 泡泡币，刷新后存档仍保留 3/3。修复版本也已通过公网离线复测：断网重载可打开完整游戏、角色和 3/3 本机存档，并能离线通关第一关（100/100 水、3/3 泡泡币）。当前没有音效；云端同步仍是后续计划，尚未实现。
+0.2.0 已完成 13 项业务测试和 1 项 PWA 构建检查。本地 Chrome 已实玩三关、验证成绩保存、390 × 844 视口、触控事件、键盘暂停，以及断网重载后选关和进入游戏。发布是否完成以对应 GitHub Actions 和线上健康接口修订为准。云端同步尚未实现。
 
-线上游戏：[立即游玩](https://nwaxz.bzlom.cn)。修复版本的代码、部署与离线验证证据见[发布验证记录](docs/VERIFICATION.md)；未来提交需要按各自工作流结果单独确认。
+线上游戏：[立即游玩](https://nwaxz.bzlom.cn)。美术资源说明见 [ART_V2.md](docs/ART_V2.md)，持续开发计划见 [DEVELOPMENT_STATE.md](docs/DEVELOPMENT_STATE.md)，玩法说明见 [GAME_DESIGN.md](docs/GAME_DESIGN.md)，发布证据见[验证记录](docs/VERIFICATION.md)。
 
 ## 技术栈
 
@@ -43,6 +47,8 @@ pnpm smoke      # HTTP 冒烟检查
 ## 文档
 
 - [架构说明](docs/ARCHITECTURE.md)
+- [开发状态与后续计划](docs/DEVELOPMENT_STATE.md)
+- [游戏设计](docs/GAME_DESIGN.md)
 - [部署说明](docs/DEPLOYMENT.md)
 - [贡献指南](CONTRIBUTING.md)
 - [安全问题报告](SECURITY.md)

@@ -3,6 +3,7 @@ export const artworkPaths = {
   stage: "/assets/scenes/bath-stage-v2.webp",
   frog: "/assets/character/milk-frog-atlas.webp",
   extra: "/assets/character/milk-frog-extra-v2.webp",
+  props: "/assets/props/bath-props-v1.webp",
 };
 export type Artwork = { [K in keyof typeof artworkPaths]: HTMLImageElement };
 export async function loadArtwork(

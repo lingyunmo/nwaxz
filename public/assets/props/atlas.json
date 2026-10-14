@@ -1,0 +1,163 @@
+{
+  "image": "/assets/props/bath-props-v1.webp",
+  "fallbackImage": "/assets/props/bath-props-v1.png",
+  "width": 1024,
+  "height": 1024,
+  "columns": 2,
+  "rows": 2,
+  "frameWidth": 512,
+  "frameHeight": 512,
+  "frames": [
+    {
+      "index": 0,
+      "name": "fanBody",
+      "sourceRect": [
+        0,
+        0,
+        512,
+        512
+      ],
+      "anchor": [
+        256,
+        190
+      ],
+      "bounds": [
+        106,
+        42,
+        408,
+        430
+      ],
+      "originalRect": [
+        78,
+        50,
+        585,
+        700
+      ],
+      "baseBottom": 429
+    },
+    {
+      "index": 1,
+      "name": "fanBlades",
+      "sourceRect": [
+        512,
+        0,
+        512,
+        512
+      ],
+      "anchor": [
+        256,
+        190
+      ],
+      "bounds": [
+        154,
+        83,
+        360,
+        277
+      ],
+      "originalRect": [
+        703,
+        105,
+        1185,
+        560
+      ]
+    },
+    {
+      "index": 2,
+      "name": "valveClosed",
+      "sourceRect": [
+        0,
+        512,
+        512,
+        512
+      ],
+      "anchor": [
+        256,
+        300
+      ],
+      "bounds": [
+        74,
+        116,
+        460,
+        389
+      ],
+      "originalRect": [
+        51,
+        758,
+        628,
+        1165
+      ],
+      "leverPivot": [
+        254,
+        210
+      ],
+      "sprayOutlet": [
+        435,
+        370
+      ],
+      "sprayDirection": [
+        0,
+        1
+      ]
+    },
+    {
+      "index": 3,
+      "name": "valveOpen",
+      "sourceRect": [
+        512,
+        512,
+        512,
+        512
+      ],
+      "anchor": [
+        256,
+        300
+      ],
+      "bounds": [
+        69,
+        178,
+        461,
+        389
+      ],
+      "originalRect": [
+        666,
+        848,
+        1250,
+        1167
+      ],
+      "leverPivot": [
+        255,
+        210
+      ],
+      "sprayOutlet": [
+        434,
+        371
+      ],
+      "sprayDirection": [
+        0,
+        1
+      ]
+    }
+  ],
+  "poseAliases": {
+    "fanBody": 0,
+    "fanBlades": 1,
+    "valveClosed": 2,
+    "valveOpen": 3
+  },
+  "fanAssembly": {
+    "fanCenter": [
+      256,
+      190
+    ],
+    "bladeCenter": [
+      256,
+      190
+    ],
+    "bladeRadius": 108,
+    "housingInnerRadius": 115,
+    "drawOrder": [
+      "fanBody",
+      "fanBlades"
+    ]
+  }
+}

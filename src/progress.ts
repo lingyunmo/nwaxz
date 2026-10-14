@@ -1,3 +1,5 @@
+import { levels } from "./game/levels.ts";
+
 export type LevelRecord = {
   completed: boolean;
   collected: number;
@@ -6,7 +8,8 @@ export type LevelRecord = {
 };
 export type Record = LevelRecord;
 export type Progress = { version: 1; levels: { [id: string]: Record } };
-const ids = ["first-bath", "detour", "last-drop"];
+const levelIds = new Set(levels.map(({ id }) => id));
+const poisonedIds = new Set(["__proto__", "prototype", "constructor"]);
 const recordKeys = ["completed", "collected", "bestScore", "bestTimeMs"];
 const hasOwn = (value: object, key: PropertyKey) =>
   Object.prototype.hasOwnProperty.call(value, key);
@@ -26,7 +29,8 @@ export function parseProgress(value: unknown): Progress {
   const result = emptyProgress();
   for (const [id, record] of Object.entries(raw.levels)) {
     if (
-      !ids.includes(id) ||
+      poisonedIds.has(id) ||
+      !levelIds.has(id) ||
       !record ||
       typeof record !== "object" ||
       Array.isArray(record)
@@ -67,7 +71,7 @@ export function mergeProgress(left: Progress, right: Progress) {
   const a = parseProgress(left),
     b = parseProgress(right),
     result = emptyProgress();
-  for (const id of ids) {
+  for (const id of levelIds) {
     const x = a.levels[id],
       y = b.levels[id];
     if (x || y)

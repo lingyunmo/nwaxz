@@ -26,7 +26,7 @@ export function createApp({ distDir, revision = "development" }) {
       .status(ready ? 200 : 503)
       .json({
         status: ready ? "ok" : "unavailable",
-        version: "0.2.0",
+        version: "0.3.0",
         revision,
       });
   });

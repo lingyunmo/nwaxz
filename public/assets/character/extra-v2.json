@@ -1,0 +1,107 @@
+{
+  "image": "/assets/character/milk-frog-extra-v2.webp",
+  "width": 1024,
+  "height": 1024,
+  "columns": 2,
+  "rows": 2,
+  "frameWidth": 512,
+  "frameHeight": 512,
+  "baseline": 476,
+  "anchorX": 256,
+  "frames": [
+    {
+      "index": 0,
+      "name": "wave",
+      "sourceRect": [
+        0,
+        0,
+        512,
+        512
+      ],
+      "bounds": [
+        100,
+        47,
+        386,
+        475
+      ],
+      "originalRect": [
+        182,
+        32,
+        567,
+        607
+      ]
+    },
+    {
+      "index": 1,
+      "name": "yawn",
+      "sourceRect": [
+        512,
+        0,
+        512,
+        512
+      ],
+      "bounds": [
+        124,
+        47,
+        379,
+        475
+      ],
+      "originalRect": [
+        730,
+        32,
+        1075,
+        607
+      ]
+    },
+    {
+      "index": 2,
+      "name": "surprise",
+      "sourceRect": [
+        0,
+        512,
+        512,
+        512
+      ],
+      "bounds": [
+        128,
+        47,
+        474,
+        475
+      ],
+      "originalRect": [
+        210,
+        633,
+        675,
+        1206
+      ]
+    },
+    {
+      "index": 3,
+      "name": "wash",
+      "sourceRect": [
+        512,
+        512,
+        512,
+        512
+      ],
+      "bounds": [
+        111,
+        47,
+        391,
+        475
+      ],
+      "originalRect": [
+        717,
+        637,
+        1097,
+        1213
+      ]
+    }
+  ],
+  "poseAliases": {
+    "wave": 0,
+    "yawn": 1,
+    "surprise": 2,
+    "wash": 3
+  }
+}

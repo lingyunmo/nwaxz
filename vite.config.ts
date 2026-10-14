@@ -14,12 +14,12 @@ export default defineConfig({
       // The glob below already includes the icon and character files.
       includeManifestIcons: false,
       manifest: {
-        name: "奶娃爱洗澡",
+        name: "奶蛙爱洗澡",
         short_name: "nwaxz",
         lang: "zh-CN",
-        description: "划开泥土，让水流进奶娃的浴缸。",
-        theme_color: "#102e40",
-        background_color: "#eff7fa",
+        description: "划开泥土，让奶蛙洗个快乐澡。",
+        theme_color: "#286f70",
+        background_color: "#286f70",
         display: "standalone",
         start_url: "/",
         scope: "/",

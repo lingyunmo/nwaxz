@@ -1,0 +1,17 @@
+{
+  "image": "/assets/scenes/bath-cover-v2.webp",
+  "width": 1024,
+  "height": 1536,
+  "titleSafeArea": [
+    102,
+    30,
+    820,
+    380
+  ],
+  "buttonSafeArea": [
+    102,
+    1240,
+    820,
+    266
+  ]
+}

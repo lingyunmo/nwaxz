@@ -1,0 +1,24 @@
+{
+  "image": "/assets/scenes/bath-stage-v2.webp",
+  "width": 480,
+  "height": 800,
+  "topRect": [
+    0,
+    0,
+    480,
+    178
+  ],
+  "soilSafeRect": [
+    0,
+    192,
+    480,
+    414
+  ],
+  "bottomRect": [
+    0,
+    628,
+    480,
+    172
+  ],
+  "note": "soilSafeRect is an interior source texture rectangle; gameplay masks and obstacles are overlaid separately."
+}

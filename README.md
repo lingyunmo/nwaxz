@@ -4,21 +4,22 @@
 
 ## 当前功能
 
-- 0.3.0 源码在 0.2.0 正式流程上扩展到第二章，包含五关；普通模式选关保留第一页的前三关。
-- Canvas 2D 第一章三关：`first-bath`（第一缸水）、`detour`（绕个小弯）、`last-drop`（曲曲折折）；第二章新增 `fan-crossing` 与 `valve-timing`。
-- 208 粒子水流求解器，采用固定 120 Hz 步进和空间分桶；挖掘网格单元为 CELL8，石块不可挖。
+- 0.3.0 已发布，扩展第二章两关。0.4.0 开发版再新增第三章第六关 `clean-water-only`。
+- Canvas 2D 第一章三关：`first-bath`（第一缸水）、`detour`（绕个小弯）、`last-drop`（曲曲折折）；第二章为 `fan-crossing`、`valve-timing`；第三章当前有 `clean-water-only`。
+- 基础清水源包含 208 滴的粒子水流求解器，采用固定 120 Hz 步进和空间分桶；挖掘网格单元为 CELL8，石块不可挖。
 - 第二章加入可交互风扇和限量喷水阀：打开风扇可改变局部水流，阀门按固定流速消耗有限水量。
+- 第三章清污分流：污水池生成 64 滴紫色污水；水滴接触会传播污染，污水不能收集泡泡币或计入清水进度。污水流入浴缸会失败并可重试，失败局不保存成绩。
 - 每关接到 100 滴水即可获胜，可额外收集 3 枚泡泡币。
-- 成绩包含分数和用时；计时从首次有效挖土开始，暂停及后台不计时。最高分与最快用时独立合并；旧版 v1 存档可继续读取，旧纪录不会补造分数。
+- 成绩包含分数和用时；计时从首次有效挖土或操作机关开始，暂停及后台不计时。最高分与最快用时独立合并；旧版 v1 存档可继续读取，旧纪录不会补造分数。
 - 浏览器 IndexedDB 本地存档，支持导入/导出；通过 BroadcastChannel 合并存档。
 - 设置包含音乐、音效、震动、简化动作和画质选项。音效和轻音乐由 Web Audio 合成，音乐默认关闭，不使用外部录音。
-- PWA 静态资源缓存和提示式更新；当前构建缓存 27 项、约 2.16 MiB。
+- PWA 静态资源缓存和提示式更新；构建会检查必需离线资源，离线能力以实际浏览器测试为准。
 - 透明角色图集 `public/assets/character/milk-frog-atlas.webp`，包含 idle、breath、blink、look、tap、laugh、celebrate 动作。
 - 12 种角色姿态（原有 8 种及新增 4 种），姿态间平滑混合并连续呼吸摆动。
 
-0.3.0 本地发布前检查通过 19 项业务测试和 1 项 PWA 构建检查。五关均以半径 25 的模拟路线验证可通关并收齐 3 枚泡泡币；Chrome 实际完成两道新关卡的全币通关、手机触摸划土和机关开关、F/V 键、暂停、存档刷新与离线冷重载。发布以对应 GitHub Actions 和公网健康接口修订为准。云端同步尚未实现。
+0.4.0 开发版 `pnpm check` 通过 25 项业务测试和 1 项 PWA 检查；六关模拟路线均可通关并收齐泡泡币。Chrome 已实际验证污水失败、重试不写成绩、手机正确路线全币通关（3374 分、00:12）与断网重载保留成绩。本段是发布前验收，部署以对应 Actions 与公网精确 SHA 为准。云端同步尚未实现。
 
-线上游戏：[立即游玩](https://nwaxz.bzlom.cn)。版本与 QA 状态见 [DEVELOPMENT_STATE.md](docs/DEVELOPMENT_STATE.md)，玩法说明见 [GAME_DESIGN.md](docs/GAME_DESIGN.md)，已核对的发布证据见[验证记录](docs/VERIFICATION.md)。绘制资源见 [ART_V2.md](docs/ART_V2.md) 和 [ART_PROPS.md](docs/ART_PROPS.md)。
+线上游戏：[立即游玩](https://nwaxz.bzlom.cn)。版本与 QA 状态见 [DEVELOPMENT_STATE.md](docs/DEVELOPMENT_STATE.md)，污水机制说明见 [GAME_DESIGN.md](docs/GAME_DESIGN.md)，已核对的发布证据见[验证记录](docs/VERIFICATION.md)。绘制资源见 [ART_V2.md](docs/ART_V2.md) 和 [ART_PROPS.md](docs/ART_PROPS.md)。
 
 ## 技术栈
 

@@ -1,3 +1,5 @@
+import packageInfo from "../package.json" with { type: "json" };
+const { version } = packageInfo;
 import express from "express";
 import path from "node:path";
 import fs from "node:fs";
@@ -26,7 +28,7 @@ export function createApp({ distDir, revision = "development" }) {
       .status(ready ? 200 : 503)
       .json({
         status: ready ? "ok" : "unavailable",
-        version: "0.3.0",
+        version,
         revision,
       });
   });

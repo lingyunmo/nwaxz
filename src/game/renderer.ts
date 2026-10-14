@@ -14,6 +14,7 @@ type Preferences = {
 type Callbacks = {
   progress: (water: number, coins: number) => void;
   complete: (result: RunResult) => void;
+  failed: () => void;
   tap: () => void;
   dig: () => void;
   devices: () => void;
@@ -37,6 +38,7 @@ export class BathGame {
     }
   }
   won = false;
+  lost = false;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private terrain = document.createElement("canvas");
@@ -92,7 +94,7 @@ export class BathGame {
     canvas.addEventListener(
       "pointerdown",
       (event) => {
-        if (event.button !== 0 || this.paused) return;
+        if (event.button !== 0 || this.paused || this.won || this.lost) return;
         canvas.focus({ preventScroll: true });
         canvas.setPointerCapture(event.pointerId);
         this.pointer = point(event);
@@ -113,7 +115,7 @@ export class BathGame {
     canvas.addEventListener(
       "pointermove",
       (event) => {
-        if (this.paused || this.won) return;
+        if (this.paused || this.won || this.lost) return;
         this.cursor = point(event);
         if (this.pointer) {
           this.dig(this.pointer, this.cursor);
@@ -137,7 +139,7 @@ export class BathGame {
     canvas.addEventListener(
       "keydown",
       (event) => {
-        if (this.paused || this.won) return;
+        if (this.paused || this.won || this.lost) return;
         if (event.key.toLowerCase() === "f" || event.key.toLowerCase() === "v") {
           event.preventDefault();
           const devices = event.key.toLowerCase() === "f" ? this.world.level.fans : this.world.level.valves;
@@ -179,7 +181,7 @@ export class BathGame {
     this.raf = requestAnimationFrame(this.frame);
   }
   private dig(a: Point, b: Point) {
-    if (!this.paused && !this.won && this.world.digLine(a, b)) {
+    if (!this.paused && !this.won && !this.lost && this.world.digLine(a, b)) {
       this.terrainDirty = true;
       this.startedAt ??= this.clock;
       this.callbacks.dig();
@@ -201,7 +203,7 @@ export class BathGame {
     this.callbacks.tap();
   }
   activateDevice(point: Point) {
-    if (this.paused || this.won) return false;
+    if (this.paused || this.won || this.lost) return false;
     const fan = this.world.level.fans?.findIndex(device => Math.hypot(device.position.x - point.x, device.position.y - point.y) <= 32) ?? -1;
     const valve = this.world.level.valves?.findIndex(device => Math.hypot(device.position.x - point.x, device.position.y - point.y) <= 32) ?? -1;
     const changed = fan >= 0 ? this.world.toggleFan(fan) : valve >= 0 ? this.world.toggleValve(valve) : false;
@@ -228,14 +230,18 @@ export class BathGame {
       // Score/animation use active wall time; only physics has a capped step.
       // A slow render must not award an unfair time bonus.
       this.clock += elapsed;
-      if (!this.won) this.world.advance(seconds);
+      if (!this.won && !this.lost) this.world.advance(seconds);
       if (this.world.delivered !== this.lastDelivered) {
         this.lastDeliveryAt = this.clock;
         this.lastDelivered = this.world.delivered;
       }
       this.callbacks.progress(this.world.delivered, this.world.collected);
       this.callbacks.devices();
-      if (!this.won && this.world.delivered >= 100) {
+      if (!this.won && !this.lost && this.world.dirtyDelivered > 0) {
+        this.lost = true;
+        this.callbacks.failed();
+      }
+      if (!this.won && !this.lost && this.world.delivered >= 100) {
         this.won = true;
         this.callbacks.complete({
           collected: this.world.collected,
@@ -302,16 +308,19 @@ export class BathGame {
     ctx.fillRect(0, 200, WIDTH, 422);
     if (this.terrainDirty) this.paintTerrain();
     ctx.drawImage(this.terrain, 0, 0);
-    ctx.fillStyle = "#38b8e2";
-    ctx.beginPath();
-    for (const p of this.world.particles) {
-      ctx.moveTo(p.x + 4.5, p.y);
-      ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+    for (const kind of ["clean", "sewage"]) {
+      ctx.fillStyle = kind === "clean" ? "#38b8e2" : "#a268bd";
+      ctx.beginPath();
+      for (const p of this.world.particles) {
+        if ((p.kind ?? "clean") !== kind) continue;
+        ctx.moveTo(p.x + 4.5, p.y);
+        ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+      }
+      ctx.fill();
     }
-    ctx.fill();
-    ctx.fillStyle = "#9ee5f3";
     for (let i = 0; i < this.world.particles.length; i += 12) {
       const p = this.world.particles[i];
+      ctx.fillStyle = p.kind === "sewage" ? "#dec0e8" : "#9ee5f3";
       ctx.beginPath();
       ctx.arc(p.x - 0.8, p.y - 1.2, 1, 0, Math.PI * 2);
       ctx.fill();
@@ -343,6 +352,7 @@ export class BathGame {
       this.cursor.y >= 195 &&
       this.cursor.y < 595 &&
       !this.won
+      && !this.lost
     ) {
       ctx.strokeStyle = "#ffffff9e";
       ctx.lineWidth = 1.5;
@@ -423,6 +433,7 @@ export class BathGame {
     ctx.fillRect(448, 643, 8, 3);
     this.animator.draw(ctx, this.artwork, this.clock, {
       won: this.won,
+      lost: this.lost,
       tapAt: this.tapAt,
       deliveryAt: this.lastDeliveryAt,
       reducedMotion: this.reducedMotion,

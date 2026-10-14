@@ -1,5 +1,7 @@
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Point = { x: number; y: number };
+export type Fan = { position: Point; zone: Rect; force: Point; on: boolean };
+export type Valve = { position: Point; nozzle: Point; drops: number; rate: number };
 export type Level = {
   id: string;
   title: string;
@@ -7,6 +9,10 @@ export type Level = {
   rocks: Rect[];
   coins: Point[];
   solution: Point[];
+  chapter?: number;
+  initialWater?: number;
+  fans?: Fan[];
+  valves?: Valve[];
 };
 export const levels: Level[] = [
   {
@@ -67,5 +73,26 @@ export const levels: Level[] = [
       { x: 132, y: 525 },
       { x: 392, y: 592 },
     ],
+  },
+  {
+    id: "fan-crossing",
+    title: "借一阵风",
+    chapter: 2,
+    hint: "水会停在低处。挖好绕过高台的水道，轻点风扇把水向右上方吹。",
+    rocks: [{ x: 16, y: 416, w: 184, h: 32 }, { x: 200, y: 328, w: 168, h: 120 }],
+    fans: [{ position: { x: 48, y: 380 }, zone: { x: 64, y: 256, w: 312, h: 160 }, force: { x: 1800, y: -1000 }, on: false }],
+    coins: [{ x: 135, y: 372 }, { x: 285, y: 300 }, { x: 397, y: 530 }],
+    solution: [{ x: 104, y: 198 }, { x: 104, y: 374 }, { x: 170, y: 374 }, { x: 174, y: 300 }, { x: 395, y: 300 }, { x: 397, y: 450 }, { x: 392, y: 592 }],
+  },
+  {
+    id: "valve-timing",
+    title: "先挖路，再开水",
+    chapter: 2,
+    hint: "阀门里的水有限。先绕过石板挖好路，再轻点黄色手柄的阀门喷水。",
+    initialWater: 0,
+    valves: [{ position: { x: 70, y: 150 }, nozzle: { x: 106, y: 178 }, drops: 208, rate: 48 }],
+    rocks: [{ x: 160, y: 352, w: 304, h: 32 }],
+    coins: [{ x: 112, y: 285 }, { x: 118, y: 438 }, { x: 320, y: 550 }],
+    solution: [{ x: 104, y: 198 }, { x: 112, y: 315 }, { x: 118, y: 442 }, { x: 320, y: 550 }, { x: 392, y: 592 }],
   },
 ];

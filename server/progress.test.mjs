@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { levels } from "../src/game/levels.ts";
 import {
   emptyProgress,
   formatTime,
@@ -115,6 +116,49 @@ test("progress parser rejects bad score/time, unknown fields, and poisoned IDs",
       },
     }),
   );
+  for (const id of ["__proto__", "prototype", "constructor"])
+    assert.throws(() =>
+      parseProgress({
+        version: 1,
+        levels: { [id]: { completed: true, collected: 7 } },
+      }),
+    );
+});
+
+test("every defined level ID round-trips and survives progress merging", () => {
+  const previous = {
+    version: 1,
+    levels: Object.fromEntries(
+      levels.map(({ id }) => [id, { completed: false, collected: 1 }]),
+    ),
+  };
+  const newRuns = {
+    version: 1,
+    levels: Object.fromEntries(
+      levels.map(({ id }, index) => [
+        id,
+        {
+          completed: true,
+          collected: 2,
+          bestScore: 1500 + index,
+          bestTimeMs: 10_000 + index,
+        },
+      ]),
+    ),
+  };
+  assert.deepEqual(parseProgress(previous), previous);
+  assert.deepEqual(parseProgress(newRuns), newRuns);
+
+  const merged = mergeProgress(previous, newRuns);
+  assert.deepEqual(Object.keys(merged.levels).sort(), levels.map(({ id }) => id).sort());
+  for (const [index, { id }] of levels.entries())
+    assert.deepEqual(merged.levels[id], {
+      completed: true,
+      collected: 3,
+      bestScore: 1500 + index,
+      bestTimeMs: 10_000 + index,
+    });
+  assert.deepEqual(mergeProgress(merged, previous), merged);
 });
 
 test("score formula handles score and time boundaries", () => {

@@ -16,6 +16,7 @@ type Callbacks = {
   complete: (result: RunResult) => void;
   tap: () => void;
   dig: () => void;
+  devices: () => void;
 };
 export class BathGame {
   world: FluidWorld;
@@ -96,6 +97,10 @@ export class BathGame {
         canvas.setPointerCapture(event.pointerId);
         this.pointer = point(event);
         this.cursor = this.pointer;
+        if (this.activateDevice(this.pointer)) {
+          this.pointer = undefined;
+          return;
+        }
         if (this.pointer.y > 620) {
           this.tap();
           this.pointer = undefined;
@@ -108,6 +113,7 @@ export class BathGame {
     canvas.addEventListener(
       "pointermove",
       (event) => {
+        if (this.paused || this.won) return;
         this.cursor = point(event);
         if (this.pointer) {
           this.dig(this.pointer, this.cursor);
@@ -131,6 +137,13 @@ export class BathGame {
     canvas.addEventListener(
       "keydown",
       (event) => {
+        if (this.paused || this.won) return;
+        if (event.key.toLowerCase() === "f" || event.key.toLowerCase() === "v") {
+          event.preventDefault();
+          const devices = event.key.toLowerCase() === "f" ? this.world.level.fans : this.world.level.valves;
+          if (!event.repeat && devices?.[0]) this.activateDevice(devices[0].position);
+          return;
+        }
         const directions: { [key: string]: Point } = {
           ArrowUp: { x: 0, y: -12 },
           ArrowDown: { x: 0, y: 12 },
@@ -187,6 +200,18 @@ export class BathGame {
     this.tapAt = this.clock;
     this.callbacks.tap();
   }
+  activateDevice(point: Point) {
+    if (this.paused || this.won) return false;
+    const fan = this.world.level.fans?.findIndex(device => Math.hypot(device.position.x - point.x, device.position.y - point.y) <= 32) ?? -1;
+    const valve = this.world.level.valves?.findIndex(device => Math.hypot(device.position.x - point.x, device.position.y - point.y) <= 32) ?? -1;
+    const changed = fan >= 0 ? this.world.toggleFan(fan) : valve >= 0 ? this.world.toggleValve(valve) : false;
+    if (changed) {
+      this.startedAt ??= this.clock;
+      this.callbacks.tap();
+      this.callbacks.devices();
+    }
+    return changed;
+  }
   destroy() {
     this.destroyed = true;
     cancelAnimationFrame(this.raf);
@@ -209,6 +234,7 @@ export class BathGame {
         this.lastDelivered = this.world.delivered;
       }
       this.callbacks.progress(this.world.delivered, this.world.collected);
+      this.callbacks.devices();
       if (!this.won && this.world.delivered >= 100) {
         this.won = true;
         this.callbacks.complete({
@@ -310,6 +336,7 @@ export class BathGame {
       ctx.textAlign = "start";
       ctx.globalAlpha = 1;
     }
+    this.drawDevices();
     this.drawBathroom();
     if (
       this.cursor &&
@@ -334,6 +361,38 @@ export class BathGame {
       ctx.fillText("休息一下", WIDTH / 2, 360);
       ctx.textAlign = "start";
     }
+  }
+  private drawDevices() {
+    const ctx = this.ctx, sheet = this.artwork.props;
+    this.world.level.fans?.forEach((fan, index) => {
+      const { x, y } = fan.position, scale = .2;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.drawImage(sheet, 0, 0, 512, 512, -256 * scale, -190 * scale, 512 * scale, 512 * scale);
+      ctx.save();
+      if (this.world.fanOn[index] && !this.reducedMotion) ctx.rotate(this.clock * 13);
+      ctx.drawImage(sheet, 512, 0, 512, 512, -256 * scale, -190 * scale, 512 * scale, 512 * scale);
+      ctx.restore();
+      if (this.world.fanOn[index]) {
+        ctx.rotate(Math.atan2(fan.force.y, fan.force.x));
+        ctx.strokeStyle = "#d2ffffa8";
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 3; i++) {
+          const offset = this.reducedMotion ? 30 + i * 16 : 25 + ((this.clock * 55 + i * 28) % 75);
+          ctx.beginPath(); ctx.moveTo(offset, -12 + i * 12); ctx.lineTo(offset + 18, -12 + i * 12); ctx.stroke();
+        }
+      }
+      ctx.restore();
+    });
+    this.world.level.valves?.forEach((valve, index) => {
+      const on = this.world.valveOn[index], scale = .2;
+      ctx.drawImage(sheet, on ? 512 : 0, 512, 512, 512, valve.nozzle.x - 435 * scale, valve.nozzle.y - 370 * scale, 512 * scale, 512 * scale);
+      ctx.fillStyle = "#fff9e8";
+      ctx.font = "bold 11px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(String(this.world.valveRemaining[index]), valve.position.x, valve.position.y + 42);
+      ctx.textAlign = "start";
+    });
   }
   private drawBathroom() {
     const ctx = this.ctx;

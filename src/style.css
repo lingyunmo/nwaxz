@@ -347,6 +347,38 @@ button:disabled {
   line-height: 1.2;
   font-weight: 950;
 }
+.chapter-pager {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+.chapter-pager button {
+  width: 40px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #fff7ca80;
+  border-radius: 12px;
+  background: #245f5990;
+  color: #fff9e8;
+  font-size: 28px;
+  line-height: 1;
+}
+.chapter-pager button:disabled { opacity: .3; }
+.device-control {
+  position: absolute;
+  z-index: 2;
+  width: 13.3%;
+  aspect-ratio: 1;
+  min-width: 30px;
+  transform: translate(-50%, -50%);
+  border: 2px solid #fff9e850;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.device-control[aria-pressed="true"] { border-color: #9affd380; }
+.device-control:disabled { opacity: .4; }
 .level-map {
   position: relative;
   display: grid;

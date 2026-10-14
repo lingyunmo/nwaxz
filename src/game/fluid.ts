@@ -20,10 +20,19 @@ export class FluidWorld {
   delivered = 0;
   collected = 0;
   elapsed = 0;
+  readonly fanOn: boolean[];
+  readonly valveOn: boolean[];
+  readonly valveRemaining: number[];
+  private valveFractions: number[];
+  emitted = 0;
   private accumulator = 0;
   level: Level;
   constructor(level: Level) {
     this.level = level;
+    this.fanOn = (level.fans ?? []).map(fan => fan.on);
+    this.valveOn = (level.valves ?? []).map(() => false);
+    this.valveRemaining = (level.valves ?? []).map(valve => valve.drops);
+    this.valveFractions = (level.valves ?? []).map(() => 0);
     for (let row = 0; row < ROWS; row++)
       for (let col = 0; col < COLS; col++) {
         const x = col * CELL,
@@ -41,8 +50,20 @@ export class FluidWorld {
       for (let col = 0; col < 16; col++) {
         const x = 48 + col * 7,
           y = 100 + row * 7;
-        this.particles.push({ x, y, oldX: x, oldY: y, vx: 0, vy: 0 });
+        if (this.particles.length < (level.initialWater ?? 208))
+          this.particles.push({ x, y, oldX: x, oldY: y, vx: 0, vy: 0 });
       }
+    this.emitted = this.particles.length;
+  }
+  toggleFan(index: number) {
+    if (!this.level.fans?.[index]) return false;
+    this.fanOn[index] = !this.fanOn[index];
+    return true;
+  }
+  toggleValve(index: number) {
+    if (!this.level.valves?.[index] || !this.valveRemaining[index]) return false;
+    this.valveOn[index] = !this.valveOn[index];
+    return true;
   }
   dig(x: number, y: number, radius = 25) {
     let changed = false;
@@ -91,10 +112,30 @@ export class FluidWorld {
     }
   }
   private step(dt: number) {
+    this.level.valves?.forEach((valve, index) => {
+      if (!this.valveOn[index]) return;
+      this.valveFractions[index] += valve.rate * dt;
+      while (this.valveFractions[index] >= 1 && this.valveRemaining[index] > 0) {
+        const x = valve.nozzle.x + ((this.valveRemaining[index] % 3) - 1) * 7,
+          y = valve.nozzle.y;
+        this.particles.push({ x, y, oldX: x, oldY: y, vx: 0, vy: 80 });
+        this.valveFractions[index]--;
+        this.valveRemaining[index]--;
+        this.emitted++;
+      }
+      if (!this.valveRemaining[index]) this.valveOn[index] = false;
+    });
     for (const p of this.particles) {
       p.oldX = p.x;
       p.oldY = p.y;
       p.vy = Math.min(p.vy + 820 * dt, 440);
+      this.level.fans?.forEach((fan, index) => {
+        const z = fan.zone;
+        if (this.fanOn[index] && p.x >= z.x && p.x < z.x + z.w && p.y >= z.y && p.y < z.y + z.h) {
+          p.vx = Math.max(-220, Math.min(220, p.vx + fan.force.x * dt));
+          p.vy = Math.max(-350, Math.min(440, p.vy + fan.force.y * dt));
+        }
+      });
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       this.collide(p);

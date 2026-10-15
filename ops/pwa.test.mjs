@@ -45,6 +45,7 @@ test("built offline worker has one revision per URL and a cached navigation fall
     "boot.css",
     "assets/character/milk-frog-atlas.webp",
     "assets/character/milk-frog-extra-v2.webp",
+    "assets/character/wait.webp",
     "assets/scenes/bath-cover-v2.webp",
     "assets/scenes/bath-stage-v2.webp",
     "assets/scenes/workshop-stage-v1.webp",

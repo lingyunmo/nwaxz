@@ -6,6 +6,7 @@ export const artworkPaths = {
   extra: "/assets/character/milk-frog-extra-v2.webp",
   props: "/assets/props/bath-props-v1.webp",
   garden: "/assets/props/garden-props-v1.webp",
+  tub: "/assets/props/bathtub-v1.webp",
 };
 export type Artwork = { [K in keyof typeof artworkPaths]: HTMLImageElement };
 export async function loadArtwork(

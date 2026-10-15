@@ -471,19 +471,21 @@ export class BathGame {
       deliveryAt: this.lastDeliveryAt,
       reducedMotion: this.reducedMotion,
     });
+    // The painted front rim covers the frog's feet; only live water is drawn.
+    ctx.drawImage(this.artwork.tub, 273.6, 662, 204.8, 204.8);
     if (this.won || this.clock - this.lastDeliveryAt < 1) {
       ctx.strokeStyle = "#48b9df";
       ctx.lineWidth = 5;
       ctx.beginPath();
       ctx.moveTo(438, 681);
-      ctx.lineTo(438, 751);
+      ctx.lineTo(438, 759);
       ctx.stroke();
       ctx.fillStyle = "#a3ddee";
       for (let i = 0; i < 5; i++) {
         ctx.beginPath();
         ctx.arc(
           438 + Math.sin(this.clock * 3 + i) * 4,
-          685 + ((this.clock * 60 + i * 13) % 65),
+          685 + ((this.clock * 60 + i * 13) % 73),
           2,
           0,
           Math.PI * 2,
@@ -491,20 +493,22 @@ export class BathGame {
         ctx.fill();
       }
     }
-    this.roundRect(283, 752, 185, 37, 13, "#c7dce0");
-    this.roundRect(288, 748, 175, 17, 9, "#f8fafa");
-    this.roundRect(296, 750, 159, 10, 6, "#daedf1");
-    if (this.world.delivered)
-      this.roundRect(
-        298,
-        751,
-        Math.max(10, 154 * Math.min(1, this.world.delivered / 100)),
-        7,
-        5,
-        "#78cde6",
-      );
-    this.roundRect(302, 787, 12, 8, 3, "#90a9b2");
-    this.roundRect(439, 787, 12, 8, 3, "#90a9b2");
+    if (this.world.delivered) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(376, 759, 79, 4.5, 0, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.globalAlpha = .35 + .45 * Math.min(1, this.world.delivered / 100);
+      ctx.fillStyle = "#58c3df";
+      ctx.fill();
+      ctx.strokeStyle = "#d3f5f4";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      const ripple = this.reducedMotion ? 0 : Math.sin(this.clock * 2) * 1.2;
+      ctx.ellipse(418, 759 + ripple, 18, 2, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.lineCap = "butt";
   }
 }

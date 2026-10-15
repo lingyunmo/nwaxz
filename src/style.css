@@ -220,6 +220,31 @@ button:disabled {
   background: rgb(255 253 239 / 94%);
   color: #37665a;
 }
+.game-button.night {
+  background: linear-gradient(135deg, #27343c, #151722);
+  border-color: #bf9562;
+  color: #ffe0a8;
+  box-shadow: 0 4px 0 #15151d, 0 0 20px #ff9b2426;
+  gap: 7px;
+}
+.game-button.night img { width: 30px; height: 30px; object-fit: contain; }
+.game-button.night small { font-size: 10px; font-weight: 500; color: #c7b59b; }
+.horror-theme { --ink: #f1d7b6; --ink-soft: #c0b5af; --teal-deep: #ebd0a7; }
+.horror-theme::before { background-image: url("/assets/scenes/haunted-bath-v1.webp"); }
+.horror-theme .chapter-screen { background: #121722; }
+.horror-theme .chapter-screen::after { background: linear-gradient(#060a1666, #090c19b8); }
+.horror-theme .chapter-art { filter: brightness(.8); }
+.horror-theme .level-stop { background: #1e222ee8; border-color: #817262; color: #f1d7b6; }
+.horror-theme .level-stop.locked { opacity: .65; background: #222632e8; border-color: #56545a; color: #d5c8bf; }
+.horror-theme .level-number, .horror-theme .level-go { background: #42342a; color: #f9cc81; }
+.horror-theme .level-score, .horror-theme .chapter-heading { color: #d5c8bf; }
+.horror-theme .icon-button, .horror-theme .coin-badge, .horror-theme .chapter-pager button { background: #242936; border-color: #8b7c68; color: #f2d5ad; }
+.horror-theme .play-screen::before { background-image: var(--night-scene); filter: blur(20px) brightness(.3); }
+.horror-theme .gesture-hint { background: #131624db; color: #f2d5ad; border-color: #a88553; }
+.horror-theme dialog { color: #234b43; --teal-deep: #20594f; }
+.horror-theme .result-card { color: #234b43; }
+.horror-theme .celebration-card { background: #171c2eed; border-color: #a88553; color: #fff0d3; text-shadow: none; }
+.night-caption { margin: 10px 0 0; font-size: 12px; letter-spacing: 2px; color: #d6b487; }
 .game-button.cream {
   background: #fff8e7;
   color: #41685d;

@@ -3,6 +3,7 @@ import type { Level, Point } from "./levels";
 import type { Artwork } from "../artwork";
 import type { Settings } from "../settings";
 import { FrogAnimator } from "./character";
+import { HorrorScene, hauntState } from "./horror";
 
 export type RunResult = { collected: number; elapsedMs: number };
 type Preferences = {
@@ -18,6 +19,7 @@ type Callbacks = {
   tap: () => void;
   dig: () => void;
   devices: (interacted?: boolean) => void;
+  haunt: () => void;
 };
 export class BathGame {
   world: FluidWorld;
@@ -52,6 +54,8 @@ export class BathGame {
   private artwork: Artwork;
   private stageArt: HTMLImageElement;
   private animator = new FrogAnimator();
+  private horror?: HorrorScene;
+  private laughCycle = -1;
   private startedAt?: number;
   private destroyed = false;
   private tapAt = -20;
@@ -70,7 +74,8 @@ export class BathGame {
     this.canvas = canvas;
     this.callbacks = callbacks;
     this.artwork = preferences.art;
-    this.stageArt = level.scene === "workshop" ? preferences.art.workshop : preferences.art.stage;
+    this.stageArt = level.scene && level.scene !== "bath" ? preferences.art[level.scene] : preferences.art.stage;
+    if (level.mode === "horror") this.horror = new HorrorScene();
     this.reducedMotion = preferences.reducedMotion;
     this.world = new FluidWorld(level);
     const ratio = Math.min(
@@ -234,6 +239,10 @@ export class BathGame {
       // Score/animation use active wall time; only physics has a capped step.
       // A slow render must not award an unfair time bonus.
       this.clock += elapsed;
+      if (this.horror && !this.won && !this.lost && hauntState(this.clock).laughing && Math.floor(this.clock / 12) !== this.laughCycle) {
+        this.laughCycle = Math.floor(this.clock / 12);
+        this.callbacks.haunt();
+      }
       if (!this.won && !this.lost) this.world.advance(seconds);
       if (this.world.delivered !== this.lastDelivered) {
         this.lastDeliveryAt = this.clock;
@@ -351,6 +360,7 @@ export class BathGame {
     }
     this.drawDevices();
     this.drawBathroom();
+    this.horror?.drawLighting(ctx, this.artwork, this.clock, this.world.level.pumpkins ?? [], this.reducedMotion, this.won, this.cursor);
     if (
       this.cursor &&
       this.cursor.y >= 195 &&
@@ -464,7 +474,8 @@ export class BathGame {
     ctx.fill();
     ctx.fillStyle = "#cee0e3";
     ctx.fillRect(448, 643, 8, 3);
-    this.animator.draw(ctx, this.artwork, this.clock, {
+    if (this.horror) this.horror.drawFrog(ctx, this.artwork, this.clock, this.reducedMotion, this.won);
+    else this.animator.draw(ctx, this.artwork, this.clock, {
       won: this.won,
       lost: this.lost,
       tapAt: this.tapAt,

@@ -1,10 +1,18 @@
 # 开发状态与后续计划
 
-## 已发布版本 0.8.2
+## 0.9.0 恐怖模式候选
+
+Issue #27 新增独立恐怖模式三关：废弃浴室、南瓜灯廊、暗水机房。普通十二关与恐怖三关分别解锁、计币、显示成绩及终点，使用兼容的 v1 存档。三幅绘制场景、恐怖奶蛙四姿态和南瓜灯见 [ART_HORROR.md](ART_HORROR.md)，阴森循环与怪笑见 [AUDIO.md](AUDIO.md)。经典通关捧腹动作保留；简化动作关闭奔跑与扫光。每关自动全币验证及浏览器实玩通过，其他候选 QA 与发布状态见 [VERIFICATION.md](VERIFICATION.md)。
+
+## 最近核对发布：0.8.3
+
+PR #26 合并 SHA `f6db8e95f619f95c1b880c3ae82d3f8632f4c638`，[发布 run 38699201929](https://github.com/lingyunmo/nwaxz/actions/runs/38699201929) 的 Verify、Build image、Deploy nwaxz 全部成功。公网 health、精确 SHA、钢琴 MP3 SHA256/MIME 和离线缓存已核对，浏览器更新显示 v0.8.3，旧 36/36 泡泡币和设置保留。
+
+## 已发布版本 0.8.2（历史）
 
 PR #24 合并提交 `5cdf387d80a2dc96f149122fc3040155bbfa0145`，发布工作流 [38693652784](https://github.com/lingyunmo/nwaxz/actions/runs/38693652784) 的 Verify、Build image、Deploy nwaxz 均成功，公网 smoke 精确核对该 SHA。Chrome 提示式更新后设置显示 v0.8.2，旧 9 枚泡泡币和 3/12 关进度保留。
 
-## 0.8.3 钢琴配乐候选
+## 0.8.3 钢琴配乐发布前验收（历史）
 
 Issue #25 用用户选定的 FL Studio 柔和钢琴版《奶蛙泡泡日》替换原单音合成 BGM。录音约 42 秒、92 BPM，采用同源 MP3 + Web Audio 解码循环，暂停续播、后台静音和音乐开关保留，并加入 PWA 预缓存。51 项业务测试及 1 项 PWA 构建检查通过；候选浏览器验收与后续发布状态见 [VERIFICATION.md](VERIFICATION.md)。音效、关卡、经典捧腹大笑与存档格式未调整，配乐来源见 [AUDIO.md](AUDIO.md)。
 

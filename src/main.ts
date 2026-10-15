@@ -2,6 +2,7 @@ import "./style.css";
 import { version } from "../package.json";
 import { registerSW } from "virtual:pwa-register";
 import { levels } from "./game/levels";
+import { canEnter, modeIndices, modeOf, nextLevel, type GameMode } from "./game/modes";
 import { BathGame, type RunResult } from "./game/renderer";
 import { artworkPaths, loadArtwork, type Artwork } from "./artwork";
 import { AudioManager } from "./audio";
@@ -22,6 +23,7 @@ const app = document.querySelector<HTMLDivElement>("#app")!;
 let progress: Progress = emptyProgress(),
   settings = loadSettings(),
   art: Artwork;
+let mode: GameMode = "normal";
 let game: BathGame | undefined,
   selected = 0,
   chapter = 1,
@@ -30,7 +32,8 @@ let offlineReady = false,
   updateAvailable = false,
   toastTimer = 0;
 const audio = new AudioManager(settings);
-const chapterCount = Math.max(...levels.map(level => level.chapter ?? 1));
+const chapterCount = () => Math.max(...modeIndices(mode).map(index => levels[index].chapter ?? 1));
+const modeName = () => mode === "horror" ? "恐怖模式" : "普通模式";
 const chapterNames: { [chapter: number]: string } = { 1: "等水的奶蛙", 2: "风和水的小机关", 3: "清水的守护者", 4: "暖暖水工坊" };
 const channel =
   typeof BroadcastChannel === "undefined"
@@ -56,13 +59,13 @@ const buttonIcon = (name: keyof typeof icons, label: string, id: string) =>
   `<button class="icon-button" id="${id}" aria-label="${label}" title="${label}">${icon(name)}</button>`;
 const stars = (count: number) =>
   `<span class="stars" aria-label="${count} / 3 泡泡币">${[0, 1, 2].map((i) => `<span class="${i < count ? "earned" : ""}">${icon("star")}</span>`).join("")}</span>`;
-const totalCoins = () =>
-  levels.reduce(
-    (sum, level) => sum + starCount(progress.levels[level.id]?.collected ?? 0),
+const totalCoins = (target: GameMode = mode) =>
+  modeIndices(target).reduce(
+    (sum, index) => sum + starCount(progress.levels[levels[index].id]?.collected ?? 0),
     0,
   );
 const unlocked = (index: number) =>
-  index === 0 || Boolean(progress.levels[levels[index - 1].id]?.completed);
+  canEnter(index, progress);
 const scoreText = (value: number) => value.toLocaleString("zh-CN");
 function chrome(content: string) {
   app.innerHTML = `${content}<dialog id="dialog" aria-labelledby="dialog-title"></dialog><div id="toast" class="toast" role="status" aria-live="polite" hidden></div>`;
@@ -95,31 +98,44 @@ function leaveGame() {
 }
 function renderHome() {
   leaveGame();
+  mode = "normal";
+  audio.setMode(mode);
+  document.body.classList.remove("horror-theme");
   screen = "home";
   chrome(
-    `<main class="menu-stage home-screen screen-enter" aria-label="游戏主界面"><img class="cover-art" src="/assets/scenes/bath-cover-v2.webp" alt="奶蛙站在冒泡泡的浴缸旁"/><h1 class="game-logo"><span>奶蛙</span><span>爱洗澡</span></h1><div class="home-top">${buttonIcon("settings", "设置", "settings")}</div><div class="home-actions"><button id="normal" class="game-button gold">普通模式 ${icon("play")}</button><button id="continue" class="game-button glass">继续洗澡</button></div><div class="home-status"><span>${totalCoins()} / ${levels.length * 3} 泡泡币</span><button id="update" ${updateAvailable ? "" : "hidden"}>有新版本 ${icon("restart")}</button></div></main>`,
+    `<main class="menu-stage home-screen screen-enter" aria-label="游戏主界面"><img class="cover-art" src="/assets/scenes/bath-cover-v2.webp" alt="奶蛙站在冒泡泡的浴缸旁"/><h1 class="game-logo"><span>奶蛙</span><span>爱洗澡</span></h1><div class="home-top">${buttonIcon("settings", "设置", "settings")}</div><div class="home-actions"><button id="normal" class="game-button gold">普通模式 ${icon("play")}</button><button id="continue" class="game-button glass">继续洗澡</button><button id="horror" class="game-button night"><img src="/assets/props/pumpkin-v1.webp" alt=""/>恐怖模式 <small>夜幕初临 · 3 关</small></button></div><div class="home-status"><span>${totalCoins()} / ${modeIndices(mode).length * 3} 泡泡币</span><button id="update" ${updateAvailable ? "" : "hidden"}>有新版本 ${icon("restart")}</button></div></main>`,
   );
   $("#normal").onclick = () => {
+    chapter = 1;
     audio.unlock();
     audio.effect("tap");
     renderLevels();
   };
+  $("#horror").onclick = () => {
+    mode = "horror";
+    chapter = 1;
+    audio.setMode(mode);
+    void audio.unlock();
+    renderLevels();
+  };
   $("#continue").onclick = () => {
     const first = levels.findIndex(
-      (level, i) => unlocked(i) && !progress.levels[level.id]?.completed,
+      (level, i) => modeOf(i) === "normal" && unlocked(i) && !progress.levels[level.id]?.completed,
     );
-    enterLevel(first < 0 ? selected : first);
+    enterLevel(first < 0 ? modeOf(selected) === "normal" ? selected : 0 : first);
   };
   $("#settings").onclick = () => openSettings();
   $("#update").onclick = applyUpdate;
 }
 function renderLevels() {
   leaveGame();
+  document.body.classList.toggle("horror-theme", mode === "horror");
   screen = "levels";
   chrome(
-    `<main class="menu-stage chapter-screen screen-enter" aria-label="普通模式选关"><img class="cover-art chapter-art" src="/assets/scenes/bath-cover-v2.webp" alt=""/><header class="menu-header">${buttonIcon("back", "返回主界面", "home")}<h1>普通模式</h1><span class="coin-badge">${icon("star")}${totalCoins()} / ${levels.length * 3}</span></header><div class="chapter-heading"><div class="chapter-pager"><button id="previous-chapter" aria-label="上一章" ${chapter === 1 ? "disabled" : ""}>‹</button><span>第${["", "一", "二", "三", "四"][chapter] ?? chapter}章</span><button id="next-chapter" aria-label="下一章" ${chapter === chapterCount ? "disabled" : ""}>›</button></div><h2>${chapterNames[chapter] ?? "新的水路"}</h2></div><nav class="level-map" aria-label="选择关卡">${levels
+    `<main class="menu-stage chapter-screen screen-enter" aria-label="${modeName()}选关"><img class="cover-art chapter-art" src="${mode === "horror" ? "/assets/scenes/haunted-bath-v1.webp" : "/assets/scenes/bath-cover-v2.webp"}" alt=""/><header class="menu-header">${buttonIcon("back", "返回主界面", "home")}<h1>${modeName()}</h1><span class="coin-badge">${icon("star")}${totalCoins()} / ${modeIndices(mode).length * 3}</span></header><div class="chapter-heading"><div class="chapter-pager"><button id="previous-chapter" aria-label="上一章" ${chapter === 1 ? "disabled" : ""}>‹</button><span>第${["", "一", "二", "三", "四"][chapter] ?? chapter}章</span><button id="next-chapter" aria-label="下一章" ${chapter === chapterCount() ? "disabled" : ""}>›</button></div><h2>${mode === "horror" ? "夜幕初临" : chapterNames[chapter] ?? "新的水路"}</h2>${mode === "horror" ? '<p class="night-caption">灯灭之后，奶蛙还在笑。</p>' : ""}</div><nav class="level-map" aria-label="选择关卡">${levels
       .map((level, index) => {
-        if ((level.chapter ?? 1) !== chapter) return "";
+        if (modeOf(index) !== mode || (level.chapter ?? 1) !== chapter) return "";
+        const number = modeIndices(mode).indexOf(index) + 1;
         const record = progress.levels[level.id],
           locked = !unlocked(index);
         const score =
@@ -128,7 +144,7 @@ function renderLevels() {
             : record?.completed
               ? "已通关 · 再玩一次记录分数"
               : "还没洗上澡";
-        return `<button class="level-stop ${locked ? "locked" : record?.completed ? "completed" : ""}" data-level="${index}" ${locked ? "disabled" : ""} aria-label="第${index + 1}关 ${level.title}${locked ? "，尚未解锁" : ""}"><span class="level-number">${locked ? icon("lock") : String(index + 1).padStart(2, "0")}</span><span class="level-info"><strong>${level.title}</strong>${stars(starCount(record?.collected ?? 0))}<span class="level-score">${locked ? "上一关通关后解锁" : score}</span></span>${locked ? "" : `<span class="level-go">${icon("play")}</span>`}</button>`;
+        return `<button class="level-stop ${locked ? "locked" : record?.completed ? "completed" : ""}" data-level="${index}" ${locked ? "disabled" : ""} aria-label="第${number}关 ${level.title}${locked ? "，尚未解锁" : ""}"><span class="level-number">${locked ? icon("lock") : String(number).padStart(2, "0")}</span><span class="level-info"><strong>${level.title}</strong>${stars(starCount(record?.collected ?? 0))}<span class="level-score">${locked ? "上一关通关后解锁" : score}</span></span>${locked ? "" : `<span class="level-go">${icon("play")}</span>`}</button>`;
       })
       .join(
         "",
@@ -137,7 +153,7 @@ function renderLevels() {
   $("#home").onclick = renderHome;
   $("#settings").onclick = () => openSettings();
   $("#previous-chapter").onclick = () => { chapter = Math.max(1, chapter - 1); renderLevels(); };
-  $("#next-chapter").onclick = () => { chapter = Math.min(chapterCount, chapter + 1); renderLevels(); };
+  $("#next-chapter").onclick = () => { chapter = Math.min(chapterCount(), chapter + 1); renderLevels(); };
   for (const element of app.querySelectorAll<HTMLButtonElement>("[data-level]"))
     element.onclick = () => enterLevel(Number(element.dataset.level));
 }
@@ -151,6 +167,9 @@ function enterLevel(index: number) {
       .catch(() => {});
   game?.destroy();
   selected = index;
+  mode = modeOf(index);
+  audio.setMode(mode);
+  document.body.classList.toggle("horror-theme", mode === "horror");
   chapter = levels[index].chapter ?? 1;
   screen = "play";
   const level = levels[index];
@@ -163,6 +182,7 @@ function enterLevel(index: number) {
     `<main class="play-screen screen-enter" aria-label="游戏关卡"><div class="game-stage"><canvas id="game" tabindex="0" aria-label="挖土引水游戏。划动手指或按住鼠标挖土；方向键移动，空格挖土，Shift加方向键连续挖土；F切换风扇，V切换清水阀，B切换污水阀，E挤出海绵的水。"></canvas><div class="play-hud"><div class="hud-buttons">${buttonIcon("pause", "暂停游戏", "pause")}${buttonIcon("restart", "重新开始", "restart")}</div><div class="water-badge">${icon("drop")}<progress id="water-meter" max="100" value="0" aria-label="浴缸水量"></progress><span id="water-count">0 / 100</span></div><div id="hud-coins" class="hud-coins" aria-label="已收集0枚泡泡币">${stars(0)}</div></div>${devices.map(device => `<button class="device-control" data-device="${device.kind}-${device.index}" aria-label="${device.label}" aria-pressed="false"></button>`).join("")}<div id="result" class="result-layer" hidden></div><div id="gesture-hint" class="gesture-hint" ${progress.levels[level.id]?.completed ? "hidden" : ""}>${level.hint}</div></div></main>`,
   );
   $(".play-screen").classList.toggle("workshop", level.scene === "workshop");
+  if (mode === "horror") $(".play-screen").style.setProperty("--night-scene", `url("${artworkPaths[level.scene as keyof typeof artworkPaths]}")`);
   for (const device of devices) {
     const control = $(`[data-device="${device.kind}-${device.index}"]`);
     control.style.left = `${device.point.x / 480 * 100}%`;
@@ -194,6 +214,7 @@ function enterLevel(index: number) {
       },
       complete: finishLevel,
       failed: finishFailed,
+      haunt() { audio.haunt(); },
       devices(interacted = false) {
         if (!game || !devices.length) return;
         if (interacted) $("#gesture-hint").hidden = true;
@@ -247,6 +268,8 @@ async function persist(value: Progress) {
 function finishLevel(result: RunResult) {
   audio.setPlaying(false);
   audio.effect("win");
+  if (mode === "horror") audio.haunt();
+  const next = nextLevel(selected);
   const score = scoreRun(result.collected, result.elapsedMs),
     previous = progress.levels[levels[selected].id]?.bestScore;
   const incoming = emptyProgress();
@@ -264,16 +287,16 @@ function finishLevel(result: RunResult) {
   const showCelebration = () => {
     $("#result").hidden = false;
     $("#result").classList.add("celebration-layer");
-    $("#result").innerHTML = `<section class="celebration-card" aria-label="奶蛙通关庆祝"><h1>洗澡成功！</h1>${stars(starCount(result.collected))}<p>奶蛙开心得捧腹大笑</p><button id="show-score" class="game-button gold">查看成绩 ${icon("play")}</button></section>`;
+    $("#result").innerHTML = `<section class="celebration-card" aria-label="奶蛙通关庆祝"><h1>${mode === "horror" ? "黑夜里也要洗澡！" : "洗澡成功！"}</h1>${stars(starCount(result.collected))}<p>${mode === "horror" ? "嘻嘻嘻……奶蛙捧着肚子笑了" : "奶蛙开心得捧腹大笑"}</p><button id="show-score" class="game-button gold">查看成绩 ${icon("play")}</button></section>`;
     $("#show-score").onclick = showScore;
     $("#show-score").focus({ preventScroll: true });
   };
   const showScore = () => {
     $("#result").classList.remove("celebration-layer");
     $("#result").innerHTML =
-      `<section class="result-card" aria-label="通关结算"><span class="result-kicker">奶蛙洗上澡啦！</span><h1>洗澡成功</h1>${stars(starCount(result.collected))}<div class="score-value">${scoreText(score)}<small>分</small></div><span class="score-record">${previous === undefined || score > previous ? "新纪录！" : `最高分 ${scoreText(previous)}`}</span><div class="result-stats"><span>通关用时<strong>${formatTime(result.elapsedMs)}</strong></span><span>泡泡币<strong>${starCount(result.collected)} / 3</strong></span></div><p class="score-breakdown">接水 1000 + 泡泡币 ${starCount(result.collected) * 500} + 时间奖励 ${score - 1000 - starCount(result.collected) * 500}</p><button id="next" class="game-button gold">${selected < levels.length - 1 ? (levels[selected + 1].chapter ?? 1) !== chapter ? "进入下一章" : "下一关" : "普通模式完成 · 回到选关"} ${icon("play")}</button><div class="result-secondary"><button id="replay">${icon("restart")}再玩一次</button><button id="level-menu">返回选关</button></div></section>`;
+      `<section class="result-card" aria-label="通关结算"><span class="result-kicker">${modeName()} · 奶蛙洗上澡啦！</span><h1>洗澡成功</h1>${stars(starCount(result.collected))}<div class="score-value">${scoreText(score)}<small>分</small></div><span class="score-record">${previous === undefined || score > previous ? "新纪录！" : `最高分 ${scoreText(previous)}`}</span><div class="result-stats"><span>通关用时<strong>${formatTime(result.elapsedMs)}</strong></span><span>泡泡币<strong>${starCount(result.collected)} / 3</strong></span></div><p class="score-breakdown">接水 1000 + 泡泡币 ${starCount(result.collected) * 500} + 时间奖励 ${score - 1000 - starCount(result.collected) * 500}</p><button id="next" class="game-button gold">${next !== undefined ? (levels[next].chapter ?? 1) !== chapter ? "进入下一章" : "下一关" : `${modeName()}完成 · 回到选关`} ${icon("play")}</button><div class="result-secondary"><button id="replay">${icon("restart")}再玩一次</button><button id="level-menu">返回选关</button></div></section>`;
     $("#next").onclick = () =>
-      selected < levels.length - 1 ? enterLevel(selected + 1) : renderLevels();
+      next !== undefined ? enterLevel(next) : renderLevels();
     $("#replay").onclick = () => enterLevel(selected);
     $("#level-menu").onclick = renderLevels;
     const watchAgain = document.createElement("button");
@@ -367,7 +390,7 @@ function openSettings(fromPause = false) {
   audio.unlock();
   const toggles: { key: keyof Settings; title: string; description: string }[] =
     [
-      { key: "music", title: "背景音乐", description: "奶蛙泡泡日 · 柔和钢琴" },
+      { key: "music", title: "背景音乐", description: mode === "horror" ? "午夜浴室 · 阴森氛围" : "奶蛙泡泡日 · 柔和钢琴" },
       {
         key: "sound",
         title: "游戏音效",
@@ -385,7 +408,7 @@ function openSettings(fromPause = false) {
       },
     ];
   const dialog = showDialog(
-    `${dialogTop("设置")}<div class="settings-options">${toggles.map(({ key, title, description }) => `<label class="setting-row"><span>${title}<small>${description}</small></span><input type="checkbox" role="switch" data-setting="${key}" ${settings[key] ? "checked" : ""}/><span class="switch-knob" aria-hidden="true"></span></label>`).join("")}<label class="setting-row"><span>画质<small>平衡模式适合大多数手机</small></span><select id="quality" aria-label="画质"><option value="balanced" ${settings.quality === "balanced" ? "selected" : ""}>平衡</option><option value="high" ${settings.quality === "high" ? "selected" : ""}>高清</option></select></label></div><div class="save-settings"><h3>我的存档</h3><span>${levels.filter((l) => progress.levels[l.id]?.completed).length} / ${levels.length} 关 · ${totalCoins()} 枚泡泡币</span><div><button id="export">导出存档</button><button id="import">导入存档</button></div><small>保存在这台设备，换设备可导入备份。</small></div><div class="settings-bottom"><span>${offlineReady ? "已准备好离线游玩" : navigator.onLine ? "游戏正在缓存" : "离线游玩"} · v${version}</span>${updateAvailable ? '<button id="settings-update">更新游戏</button>' : ""}<button id="help">怎么玩</button></div>`,
+    `${dialogTop("设置")}<div class="settings-options">${toggles.map(({ key, title, description }) => `<label class="setting-row"><span>${title}<small>${description}</small></span><input type="checkbox" role="switch" data-setting="${key}" ${settings[key] ? "checked" : ""}/><span class="switch-knob" aria-hidden="true"></span></label>`).join("")}<label class="setting-row"><span>画质<small>平衡模式适合大多数手机</small></span><select id="quality" aria-label="画质"><option value="balanced" ${settings.quality === "balanced" ? "selected" : ""}>平衡</option><option value="high" ${settings.quality === "high" ? "selected" : ""}>高清</option></select></label></div><div class="save-settings"><h3>我的存档</h3><span>${levels.filter((l) => progress.levels[l.id]?.completed).length} / ${levels.length} 关 · ${totalCoins("normal") + totalCoins("horror")} 枚泡泡币</span><div><button id="export">导出存档</button><button id="import">导入存档</button></div><small>保存在这台设备，换设备可导入备份。</small></div><div class="settings-bottom"><span>${offlineReady ? "已准备好离线游玩" : navigator.onLine ? "游戏正在缓存" : "离线游玩"} · v${version}</span>${updateAvailable ? '<button id="settings-update">更新游戏</button>' : ""}<button id="help">怎么玩</button></div>`,
     () => {
       audio.stopPreview();
       if (fromPause) openPause();

@@ -35,6 +35,12 @@ export default defineConfig({
       workbox: {
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         globPatterns: ["**/*.{js,css,html,svg,png,webp,json,woff2}"],
+        // Keep editable masters published; gameplay loads their smaller WebPs.
+        globIgnores: [
+          "assets/character/milk-frog-atlas.png",
+          "assets/props/bath-props-v1.png",
+          "assets/props/garden-props-v1.png",
+        ],
         // Only Vite's content-hashed bundles can omit a cache revision.
         dontCacheBustURLsMatching: /^assets\/[^/]+-[A-Za-z0-9_-]{8}\.(?:js|css)$/,
         clientsClaim: true,

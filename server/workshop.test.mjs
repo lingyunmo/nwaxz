@@ -24,6 +24,18 @@ const assertConserved = (world) => {
   );
 };
 
+test("reference dig routes begin clear of the device touch targets", () => {
+  for (const level of levels) {
+    const start = level.solution[0];
+    for (const device of [...(level.fans ?? []), ...(level.valves ?? []), ...(level.sponges ?? [])]) {
+      assert.ok(
+        Math.abs(start.x - device.position.x) > 32 || Math.abs(start.y - device.position.y) > 32,
+        `${level.id}: a 64px device target must not intercept the starting dig gesture`,
+      );
+    }
+  }
+});
+
 test("valve-wind-relay needs wind to clear the raised route", () => {
   const level = levelById("valve-wind-relay");
   const world = prepare(level);
@@ -127,6 +139,34 @@ test("wind-sponge-relay needs both squeezing and wind, even after the tank empti
     if (i % 60 === 59) world.squeezeSponge(0);
   }
   assert.ok(world.delivered >= 100, `combined devices delivered only ${world.delivered}`);
+  assert.equal(world.collected, 7);
+  assert.equal(world.dirtyDelivered, 0);
+  assertConserved(world);
+});
+
+test("garden-wind-relay keeps early clean water recoverable and requires both gates", () => {
+  const world = prepare(levelById("garden-wind-relay"));
+  world.toggleValve(0);
+  world.toggleFan(0);
+  for (let i = 0; i < 1200; i++) world.advance(1 / 60);
+  assert.equal(world.emitted, 208);
+  assert.equal(world.plantRemaining[0], 12);
+  assert.equal(world.delivered, 0, "clean water and wind cannot bypass the living plant");
+  assertConserved(world);
+
+  world.toggleFan(0);
+  world.toggleValve(1);
+  for (let i = 0; i < 1200; i++) world.advance(1 / 60);
+  assert.equal(world.plantRemaining[0], 0);
+  assert.equal(world.plantAbsorbed, 12);
+  assert.equal(world.dirtyDelivered, 0);
+  assert.equal(world.emitted, 220);
+  assert.ok(world.delivered < 100, "withered grass alone cannot replace the fan");
+  assertConserved(world);
+
+  world.toggleFan(0);
+  for (let i = 0; i < 3600 && world.delivered < 100; i++) world.advance(1 / 60);
+  assert.ok(world.delivered >= 100, `recovered route delivered only ${world.delivered}`);
   assert.equal(world.collected, 7);
   assert.equal(world.dirtyDelivered, 0);
   assertConserved(world);

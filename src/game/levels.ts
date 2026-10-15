@@ -191,4 +191,24 @@ export const levels: Level[] = [
     coins: [{ x: 108, y: 228 }, { x: 285, y: 300 }, { x: 397, y: 530 }],
     solution: [{ x: 104, y: 198 }, { x: 108, y: 374 }, { x: 170, y: 374 }, { x: 174, y: 300 }, { x: 395, y: 300 }, { x: 397, y: 450 }, { x: 392, y: 592 }],
   },
+  {
+    id: "garden-wind-relay",
+    title: "草门后的风车",
+    chapter: 4,
+    scene: "workshop",
+    hint: "紫水喂给水草，等它枯萎。再开清水阀和风扇，把水送过高台。",
+    initialWater: 0,
+    plants: [{ position: { x: 108, y: 312 }, rect: { x: 76, y: 248, w: 64, h: 64 }, tolerance: 12 }],
+    valves: [
+      { position: { x: 70, y: 150 }, nozzle: { x: 106, y: 178 }, drops: 208, rate: 40 },
+      { position: { x: 44, y: 220 }, nozzle: { x: 80, y: 248 }, drops: 12, rate: 12, kind: "sewage", spread: 0 },
+    ],
+    fans: [{ position: { x: 48, y: 380 }, zone: { x: 64, y: 256, w: 312, h: 160 }, force: { x: 1800, y: -1000 }, on: false }],
+    rocks: [
+      { x: 16, y: 272, w: 56, h: 24 }, { x: 144, y: 272, w: 320, h: 24 },
+      { x: 16, y: 416, w: 184, h: 32 }, { x: 200, y: 328, w: 168, h: 120 },
+    ],
+    coins: [{ x: 135, y: 372 }, { x: 285, y: 300 }, { x: 397, y: 530 }],
+    solution: [{ x: 104, y: 198 }, { x: 108, y: 374 }, { x: 170, y: 374 }, { x: 174, y: 300 }, { x: 395, y: 300 }, { x: 397, y: 450 }, { x: 392, y: 592 }],
+  },
 ];

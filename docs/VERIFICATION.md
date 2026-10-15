@@ -2,11 +2,11 @@
 
 线上游戏：[nwaxz.bzlom.cn](https://nwaxz.bzlom.cn)。记录区分已发布版本与开发中的代码；每次发布应以其对应工作流、提交 SHA 和实际浏览器验收为准。
 
-## 最近核对的线上发布：0.7.0
+## 最近核对的线上发布：0.7.1
 
-- PR #16 已合并至 main；发布提交：`86382cd0b34efad0b80f9e1fbe98a3f7b3b06b2f`。
-- [GitHub Actions run 38667821736](https://github.com/lingyunmo/nwaxz/actions/runs/38667821736) 的 Verify、Build image、Deploy nwaxz 全部成功；公网 smoke 精确核对该 SHA。
-- 发布包含第 11 关 `wind-sponge-relay`。Chrome 应用更新后确认该关入口和锁定规则正常，旧存档的 9 枚泡泡币保留，现为 9/33。
+- PR #18 已合并至 main；发布提交：`10ed1da87e29ea61c04eb4df22816aea71556b0c`。
+- [GitHub Actions run 38668826451](https://github.com/lingyunmo/nwaxz/actions/runs/38668826451) 的 Verify、Build image、Deploy nwaxz 全部成功；公网 smoke 精确核对该 SHA。
+- Chrome 公网提示式更新后，设置显示 v0.7.1、关卡进度为 3/11；原有 9 枚泡泡币得到保留。CacheStorage 实查为 28 项，无 PNG，且包含 `wait.webp`。
 - 本轮未执行其他生产容器基线比较。
 
 ## 0.7.0 发布前候选验收
@@ -22,10 +22,20 @@
 - `pnpm check` 的 38 项业务测试及 1 项 PWA 构建检查通过，新增暂停 wait.webp 必需资源检查。十一关模拟均可全币通关，关卡及存档代码未改。本地 HTTP smoke 通过 development 修订检查。
 - Chrome 390 × 844 候选 `index-CqhsmhzP.js` 从旧版提示式更新后，CacheStorage 实际为 28 项、无 PNG、保留 wait.webp。断网冷重载保留 33/33 泡泡币；第一关触摸全币通关 3380 分、00:12，原最高分 3470 与最快 00:03 未退步。测试用时不作玩家或性能基准。
 - 离线进入工坊第十一关，F/V 操作、暂停和设置可用；暂停角色图 complete=true，实际解码 512 × 512。设置显示已准备好离线游玩及 v0.7.1，无应用控制台错误。已恢复网络、触摸模拟及视口。
-- 此记录为发布前候选，main 工作流与公网精确 SHA 仍需独立核对。本批不修改生产入口，未执行其他生产容器审计。文件导入/导出完整 UI 和原生全屏验证边界仍见下文。
+- 此记录为发布前候选本地验收；线上工作流及公网精确 SHA 见本页首段。本批不修改生产入口，未执行其他生产容器审计。文件导入/导出完整 UI 和原生全屏验证边界仍见下文。
+
+## 0.8.0 发布前候选验收（尚未发布）
+
+- 分支 `codex/garden-wind-level` 的候选 `index-DxQQcxXv.js` 本地验收已完成；仍未提交合并或上线，线上最近核对版本保持 0.7.1。`pnpm check` 通过 41 项业务测试和 1 项 PWA 检查；十二关模拟路线均全币通关且守恒。
+- Chrome 390 × 844 实玩第 12 关：触摸挖土和清水阀、`B` 紫水阀、`F` 风扇，取得 3/3 泡泡币、2757 分、01:14。自动化等待包含在计时内，不作玩家用时或性能基准。
+- 暂停两次画布 SHA-256 都为 `d24c82ff2b2c1168ec6145f10fda572ad372d539938bdaf4fa9d04ac138e2c44`。断网冷重载保留 36/36 泡泡币和第 9/10/11 关旧纪录（2500/01:53、2500/02:15、2500/02:58）及第 12 关 2757/01:14；离线进入第 12 关后全部美术与机关正常加载，按 `Esc` 可暂停。无应用错误日志；测试结束已恢复网络、触摸模拟和视口。
+- 390 × 844、320 × 568 选关页四卡均无横向溢出且可触控进入；320 × 568 测量来自本批较早候选构建。0.6 的横屏 HUD 历史验证保留在下文，本批未重新测试横屏。
+- 紫阀移至 `(44, 220)`、喷口移至 `(80, 248)`，避开参考路线起点；新增检查确认十二关起点与 64 px 触控区域不冲突。阀门预算标签置于水草图层后并增加深色底，显示清水/紫水。
+- 本批尚未提交合并或上线；主分支发布状态仍见本文首段。没有执行其他生产容器基线比较。
 
 ## 历史发布
 
+- 0.7.0：PR #16 合并提交 `86382cd0b34efad0b80f9e1fbe98a3f7b3b06b2f`；[run 38667821736](https://github.com/lingyunmo/nwaxz/actions/runs/38667821736) 的 Verify、Build image、Deploy nwaxz 成功，公网 smoke 精确核对 SHA。Chrome 更新后确认第 11 关入口与锁定规则，9 枚旧币保留并显示 9/33。
 - 0.6.0：PR #14 合并提交 `2d2ecca7e29c6115791e7ec0625a54fd224fcf74`；[run 38666857471](https://github.com/lingyunmo/nwaxz/actions/runs/38666857471) 的 Verify、Build image、Deploy nwaxz 成功，公网 smoke 精确核对 SHA。Chrome 更新后确认第 9、10 关入口及锁定规则，旧存档 9 枚币保留并显示 9/30。
 - 0.5.0：PR #12 合并提交 `548071e6ba57e368ad8edc50a03964f80e085488`；[run 38650527805](https://github.com/lingyunmo/nwaxz/actions/runs/38650527805) 的 Verify、Build image、Deploy nwaxz 成功，公网 smoke 精确核对 SHA。Chrome 更新后确认原 9/18 泡泡币记录保留并扩展至 9/24。
 - 0.4.0：提交 `3dbd632c4c1a7073d707fd593edc70cca57f2298`；[run 38643628629](https://github.com/lingyunmo/nwaxz/actions/runs/38643628629) 的 Verify、Build image、Deploy nwaxz 全部成功，公网 smoke 精确核对 SHA。Chrome 更新后确认第三章第六关入口、保留旧存档 9 枚泡泡币及正确解锁限制。

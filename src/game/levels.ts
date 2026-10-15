@@ -14,6 +14,7 @@ export type Level = {
   coins: Point[];
   solution: Point[];
   chapter?: number;
+  scene?: "bath" | "workshop";
   initialWater?: number;
   fans?: Fan[];
   valves?: Valve[];
@@ -137,5 +138,40 @@ export const levels: Level[] = [
     rocks: [{ x: 16, y: 384, w: 128, h: 32 }, { x: 216, y: 384, w: 248, h: 32 }],
     coins: [{ x: 145, y: 290 }, { x: 235, y: 490 }, { x: 335, y: 550 }],
     solution: [{ x: 104, y: 198 }, { x: 180, y: 340 }, { x: 180, y: 448 }, { x: 335, y: 550 }, { x: 392, y: 592 }],
+  },
+  {
+    id: "valve-wind-relay",
+    title: "风车开水啦",
+    chapter: 4,
+    scene: "workshop",
+    hint: "先挖路、开风扇，再开清水阀。水不够时，检查高台右侧的水道。",
+    initialWater: 0,
+    valves: [{ position: { x: 70, y: 150 }, nozzle: { x: 106, y: 178 }, drops: 208, rate: 36 }],
+    fans: [{ position: { x: 48, y: 380 }, zone: { x: 64, y: 256, w: 312, h: 160 }, force: { x: 1800, y: -1000 }, on: false }],
+    rocks: [
+      { x: 16, y: 416, w: 184, h: 32 }, { x: 200, y: 328, w: 168, h: 120 },
+      { x: 264, y: 496, w: 200, h: 24 },
+    ],
+    coins: [{ x: 135, y: 372 }, { x: 285, y: 300 }, { x: 235, y: 524 }],
+    solution: [{ x: 104, y: 198 }, { x: 104, y: 374 }, { x: 170, y: 374 }, { x: 174, y: 300 }, { x: 395, y: 300 }, { x: 397, y: 460 }, { x: 235, y: 480 }, { x: 235, y: 540 }, { x: 392, y: 592 }],
+  },
+  {
+    id: "sponge-relay",
+    title: "海绵接力赛",
+    chapter: 4,
+    scene: "workshop",
+    hint: "先挖路、开水阀，再依次挤上面和下面的海绵。还有水就可以继续挤。",
+    initialWater: 0,
+    valves: [{ position: { x: 70, y: 150 }, nozzle: { x: 106, y: 178 }, drops: 208, rate: 40 }],
+    sponges: [
+      { position: { x: 160, y: 340 }, rect: { x: 128, y: 308, w: 64, h: 64 }, release: { x: 160, y: 386 }, capacity: 128 },
+      { position: { x: 300, y: 480 }, rect: { x: 268, y: 448, w: 64, h: 64 }, release: { x: 300, y: 526 }, capacity: 128 },
+    ],
+    rocks: [
+      { x: 16, y: 328, w: 108, h: 32 }, { x: 196, y: 328, w: 268, h: 32 },
+      { x: 16, y: 472, w: 248, h: 32 }, { x: 336, y: 472, w: 128, h: 32 },
+    ],
+    coins: [{ x: 130, y: 270 }, { x: 225, y: 420 }, { x: 350, y: 565 }],
+    solution: [{ x: 104, y: 198 }, { x: 160, y: 290 }, { x: 160, y: 402 }, { x: 300, y: 430 }, { x: 300, y: 536 }, { x: 392, y: 592 }],
   },
 ];

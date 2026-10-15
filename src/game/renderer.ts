@@ -50,6 +50,7 @@ export class BathGame {
   private pointer?: Point;
   private cursor?: Point;
   private artwork: Artwork;
+  private stageArt: HTMLImageElement;
   private animator = new FrogAnimator();
   private startedAt?: number;
   private destroyed = false;
@@ -69,6 +70,7 @@ export class BathGame {
     this.canvas = canvas;
     this.callbacks = callbacks;
     this.artwork = preferences.art;
+    this.stageArt = level.scene === "workshop" ? preferences.art.workshop : preferences.art.stage;
     this.reducedMotion = preferences.reducedMotion;
     this.world = new FluidWorld(level);
     const ratio = Math.min(
@@ -143,7 +145,7 @@ export class BathGame {
         if (["f", "v", "b", "e"].includes(event.key.toLowerCase())) {
           event.preventDefault();
           const key = event.key.toLowerCase(),
-            device = key === "f" ? this.world.level.fans?.[0] : key === "e" ? this.world.level.sponges?.[0] : this.world.level.valves?.find(valve => key === "b" ? valve.kind === "sewage" : valve.kind !== "sewage");
+            device = key === "f" ? this.world.level.fans?.[0] : key === "e" ? this.world.level.sponges?.find((_sponge, index) => this.world.spongeContents[index].length > 0) : this.world.level.valves?.find(valve => key === "b" ? valve.kind === "sewage" : valve.kind !== "sewage");
           if (!event.repeat && device) this.activateDevice(device.position);
           return;
         }
@@ -270,7 +272,7 @@ export class BathGame {
         }
       }
     ctx.globalCompositeOperation = "source-in";
-    ctx.drawImage(this.artwork.stage, 0, 0, WIDTH, HEIGHT);
+    ctx.drawImage(this.stageArt, 0, 0, WIDTH, HEIGHT);
     ctx.globalCompositeOperation = "source-over";
     const rocks = this.rockMask.getContext("2d")!;
     rocks.clearRect(0, 0, WIDTH, HEIGHT);
@@ -282,7 +284,7 @@ export class BathGame {
       }
     rocks.globalCompositeOperation = "source-in";
     rocks.filter = "saturate(.3) brightness(.58)";
-    rocks.drawImage(this.artwork.stage, 0, 0, WIDTH, 178, 0, 0, WIDTH, 624);
+    rocks.drawImage(this.stageArt, 0, 0, WIDTH, 178, 0, 0, WIDTH, 624);
     rocks.filter = "none";
     rocks.globalCompositeOperation = "source-over";
     ctx.drawImage(this.rockMask, 0, 0);
@@ -303,10 +305,10 @@ export class BathGame {
   }
   private draw() {
     const ctx = this.ctx;
-    ctx.drawImage(this.artwork.stage, 0, 0, WIDTH, HEIGHT);
+    ctx.drawImage(this.stageArt, 0, 0, WIDTH, HEIGHT);
     // An excavated tunnel reveals the painted tiled wall under the soil layer.
-    ctx.drawImage(this.artwork.stage, 0, 0, WIDTH, 100, 0, 200, WIDTH, 422);
-    ctx.fillStyle = "#073c42b3";
+    ctx.drawImage(this.stageArt, 0, 0, WIDTH, 100, 0, 200, WIDTH, 422);
+    ctx.fillStyle = this.world.level.scene === "workshop" ? "#44301cb3" : "#073c42b3";
     ctx.fillRect(0, 200, WIDTH, 422);
     if (this.terrainDirty) this.paintTerrain();
     ctx.drawImage(this.terrain, 0, 0);

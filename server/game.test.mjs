@@ -23,7 +23,8 @@ for (const level of levels)
     level.valves?.forEach((valve, i) => { if (valve.kind !== "sewage") world.toggleValve(i); });
     for (let i = 0; i < 2400 && world.delivered < 100; i++) {
       world.advance(1 / 60);
-      level.sponges?.forEach((sponge, index) => { if (world.spongeContents[index].length === sponge.capacity) world.squeezeSponge(index); });
+      // A player may squeeze a partially filled sponge repeatedly.
+      if (i % 60 === 59) level.sponges?.forEach((_sponge, index) => world.squeezeSponge(index));
     }
     assert.ok(world.delivered >= 100, `only ${world.delivered} delivered`);
     assert.equal(world.collected, 7);

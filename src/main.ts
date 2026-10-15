@@ -3,7 +3,7 @@ import { version } from "../package.json";
 import { registerSW } from "virtual:pwa-register";
 import { levels } from "./game/levels";
 import { BathGame, type RunResult } from "./game/renderer";
-import { loadArtwork, type Artwork } from "./artwork";
+import { artworkPaths, loadArtwork, type Artwork } from "./artwork";
 import { AudioManager } from "./audio";
 import { loadSettings, saveSettings, type Settings } from "./settings";
 import {
@@ -31,7 +31,7 @@ let offlineReady = false,
   toastTimer = 0;
 const audio = new AudioManager(settings);
 const chapterCount = Math.max(...levels.map(level => level.chapter ?? 1));
-const chapterNames: { [chapter: number]: string } = { 1: "等水的奶蛙", 2: "风和水的小机关", 3: "清水的守护者" };
+const chapterNames: { [chapter: number]: string } = { 1: "等水的奶蛙", 2: "风和水的小机关", 3: "清水的守护者", 4: "暖暖水工坊" };
 const channel =
   typeof BroadcastChannel === "undefined"
     ? undefined
@@ -157,11 +157,12 @@ function enterLevel(index: number) {
   const devices = [
     ...(level.fans ?? []).map((fan, i) => ({ point: fan.position, kind: "fan", index: i, label: "风扇" })),
     ...(level.valves ?? []).map((valve, i) => ({ point: valve.position, kind: "valve", index: i, label: valve.kind === "sewage" ? "污水阀" : "清水阀" })),
-    ...(level.sponges ?? []).map((sponge, i) => ({ point: sponge.position, kind: "sponge", index: i, label: "海绵" })),
+    ...(level.sponges ?? []).map((sponge, i) => ({ point: sponge.position, kind: "sponge", index: i, label: level.sponges!.length > 1 ? `${i + 1}号海绵` : "海绵" })),
   ];
   chrome(
     `<main class="play-screen screen-enter" aria-label="游戏关卡"><div class="game-stage"><canvas id="game" tabindex="0" aria-label="挖土引水游戏。划动手指或按住鼠标挖土；方向键移动，空格挖土，Shift加方向键连续挖土；F切换风扇，V切换清水阀，B切换污水阀，E挤出海绵的水。"></canvas><div class="play-hud"><div class="hud-buttons">${buttonIcon("pause", "暂停游戏", "pause")}${buttonIcon("restart", "重新开始", "restart")}</div><div class="water-badge">${icon("drop")}<progress id="water-meter" max="100" value="0" aria-label="浴缸水量"></progress><span id="water-count">0 / 100</span></div><div id="hud-coins" class="hud-coins" aria-label="已收集0枚泡泡币">${stars(0)}</div></div>${devices.map(device => `<button class="device-control" data-device="${device.kind}-${device.index}" aria-label="${device.label}" aria-pressed="false"></button>`).join("")}<div id="result" class="result-layer" hidden></div><div id="gesture-hint" class="gesture-hint" ${progress.levels[level.id]?.completed ? "hidden" : ""}>${level.hint}</div></div></main>`,
   );
+  $(".play-screen").classList.toggle("workshop", level.scene === "workshop");
   for (const device of devices) {
     const control = $(`[data-device="${device.kind}-${device.index}"]`);
     control.style.left = `${device.point.x / 480 * 100}%`;
@@ -205,7 +206,7 @@ function enterLevel(index: number) {
           const empty = device.kind === "valve" && game.world.valveRemaining[device.index] === 0;
           if (device.kind === "sponge") control.removeAttribute("aria-pressed");
           else control.setAttribute("aria-pressed", String(on));
-          control.setAttribute("aria-label", device.kind === "sponge" ? on ? "挤出海绵里的水" : "海绵正在等待吸水" : empty ? `${device.label}水量已用完` : `${on ? "关闭" : "开启"}${device.label}`);
+          control.setAttribute("aria-label", device.kind === "sponge" ? on ? `挤出${device.label}里的水` : `${device.label}正在等待吸水` : empty ? `${device.label}水量已用完` : `${on ? "关闭" : "开启"}${device.label}`);
           control.disabled = empty || (device.kind === "sponge" && !on) || game.won || game.lost;
         }
       },
@@ -491,10 +492,7 @@ if ("serviceWorker" in navigator && "caches" in window) {
     .then(async () => {
       const resources = [
         "/index.html",
-        "/assets/scenes/bath-cover-v2.webp",
-        "/assets/scenes/bath-stage-v2.webp",
-        "/assets/character/milk-frog-atlas.webp",
-        "/assets/character/milk-frog-extra-v2.webp",
+        ...Object.values(artworkPaths),
       ];
       offlineReady = (
         await Promise.all(

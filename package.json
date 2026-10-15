@@ -1,6 +1,6 @@
 {
   "name": "nwaxz",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "license": "UNLICENSED",
@@ -13,7 +13,7 @@
     "dev:server": "node --watch server/index.mjs",
     "build": "tsc --noEmit && vite build && node --test ops/pwa.test.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test server/api.test.mjs server/game.test.mjs server/progress.test.mjs server/hazards.test.mjs server/garden.test.mjs",
+    "test": "node --test server/api.test.mjs server/game.test.mjs server/progress.test.mjs server/hazards.test.mjs server/garden.test.mjs server/workshop.test.mjs",
     "check": "pnpm test && pnpm build",
     "start": "node server/index.mjs",
     "smoke": "node ops/smoke.mjs"

@@ -558,12 +558,16 @@ button:disabled {
   filter: blur(20px) brightness(0.48) saturate(0.8);
 }
 .game-stage {
+  container-type: inline-size;
   position: relative;
   width: min(100vw, calc(100dvh * 0.6));
   height: min(100dvh, calc(100vw * 5 / 3));
   overflow: hidden;
   background: #b7d6b0;
   box-shadow: 0 0 32px rgb(0 0 0 / 30%);
+}
+.play-screen.workshop::before {
+  background-image: url("/assets/scenes/workshop-stage-v1.webp");
 }
 #game {
   display: block;
@@ -1312,6 +1316,21 @@ dialog::backdrop {
     float: right;
     margin: -58px 12px 12px;
   }
+}
+@container (max-width: 300px) {
+  .play-hud {
+    right: 7px;
+    left: 7px;
+    gap: 4px;
+    grid-template-columns: auto 1fr auto;
+  }
+  .hud-buttons { gap: 4px; }
+  .hud-buttons .icon-button { width: 36px; height: 36px; padding: 8px; }
+  .water-badge { justify-content: center; padding: 5px; }
+  .water-badge progress, .water-badge svg { display: none; }
+  .hud-coins { padding-inline: 5px; }
+  .hud-coins .stars { gap: 0; }
+  .hud-coins .stars > span { width: 16px; height: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *,

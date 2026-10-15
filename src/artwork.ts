@@ -1,6 +1,7 @@
 export const artworkPaths = {
   cover: "/assets/scenes/bath-cover-v2.webp",
   stage: "/assets/scenes/bath-stage-v2.webp",
+  workshop: "/assets/scenes/workshop-stage-v1.webp",
   frog: "/assets/character/milk-frog-atlas.webp",
   extra: "/assets/character/milk-frog-extra-v2.webp",
   props: "/assets/props/bath-props-v1.webp",

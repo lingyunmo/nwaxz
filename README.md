@@ -4,12 +4,11 @@
 
 ## 当前功能
 
-- 已发布版本为 0.4.0，包含六关及清污分流基础机制。线上版本以 [发布验证记录](docs/VERIFICATION.md) 中最近核对的 main SHA 和 Actions 运行为准。
-- 当前 0.5.0 开发快照含八关：第一章 `first-bath`（第一缸水）、`detour`（绕个小弯）、`last-drop`（曲曲折折）；第二章 `fan-crossing`、`valve-timing`；第三章 `clean-water-only`、`garden-gate`、`sponge-transfer`。后两关已完成本地浏览器验收，发布以对应 Actions 与公网修订为准。
+- 已发布版本为 0.5.0，包含八关：第一章 `first-bath`（第一缸水）、`detour`（绕个小弯）、`last-drop`（曲曲折折）；第二章 `fan-crossing`、`valve-timing`；第三章 `clean-water-only`、`garden-gate`、`sponge-transfer`。发布 SHA 与公网验证见 [发布验证记录](docs/VERIFICATION.md)。
 - 基础清水源包含 208 滴的粒子水流求解器，采用固定 120 Hz 步进和空间分桶；挖掘网格单元为 CELL8，石块不可挖。
 - 第二章加入可交互风扇和限量喷水阀：打开风扇可改变局部水流，阀门按固定流速消耗有限水量。
 - 清污分流：污水池生成 64 滴紫色污水；水滴接触会传播污染，污水不能收集泡泡币或计入清水进度。污水流入浴缸会失败并可重试，失败局不保存成绩。
-- 当前开发快照新增水草与海绵：水草阻挡清水、吸收最多 12 滴污水后枯萎；先开污水阀（12 滴、spread 0），再开清水阀（208 滴），可用屏幕按钮或 `B`/`V`。海绵容量 160 滴，点击或按 `E` 将库存放入队列，以每秒 80 滴向下挤出并保留水的种类；释放后 1 秒内不会被原海绵立即吸回。水量守恒统计包含植物吸收、海绵库存和待释放队列。发布状态见验证记录。
+- 水草阻挡清水、吸收最多 12 滴污水后枯萎；先开污水阀（12 滴、spread 0），再开清水阀（208 滴），可用屏幕按钮或 `B`/`V`。海绵容量 160 滴，点击或按 `E` 将库存放入队列，以每秒 80 滴向下挤出并保留水的种类；释放后 1 秒内不会被原海绵立即吸回。水量守恒统计包含植物吸收、海绵库存和待释放队列。
 - 每关接到 100 滴水即可获胜，可额外收集 3 枚泡泡币。
 - 成绩包含分数和用时；计时从首次有效挖土或操作机关开始，暂停及后台不计时。最高分与最快用时独立合并；旧版 v1 存档可继续读取，旧纪录不会补造分数。
 - 浏览器 IndexedDB 本地存档，支持导入/导出；通过 BroadcastChannel 合并存档。
@@ -18,9 +17,11 @@
 - 透明角色图集 `public/assets/character/milk-frog-atlas.webp`，包含 idle、breath、blink、look、tap、laugh、celebrate 动作。
 - 12 种角色姿态（原有 8 种及新增 4 种），姿态间平滑混合并连续呼吸摆动。
 
-0.5.0 开发快照 `pnpm check` 通过 31 项业务测试和 1 项 PWA 检查；八关模拟路线均以半径 25 挖掘并收齐泡泡币。新增水草、海绵关已在本地浏览器全币通关，并完成触控、键盘、暂停和离线验收。云端同步尚未实现。
+0.5.0 发布前 `pnpm check` 通过 31 项业务测试和 1 项 PWA 检查；八关模拟路线均以半径 25 挖掘并收齐泡泡币。本地浏览器验收包括水草与海绵关全币通关、暂停、触控及离线冷重载。云端同步尚未实现。
 
-线上游戏：[立即游玩](https://nwaxz.bzlom.cn)。版本与 QA 状态见 [DEVELOPMENT_STATE.md](docs/DEVELOPMENT_STATE.md)，玩法说明见 [GAME_DESIGN.md](docs/GAME_DESIGN.md)，已核对的发布证据见 [验证记录](docs/VERIFICATION.md)。绘制资源见 [ART_V2.md](docs/ART_V2.md) 和 [ART_PROPS.md](docs/ART_PROPS.md)。
+当前 0.6.0 源码新增第四章“暖暖水工坊”：暖色绘制场景、风扇与阀门折反水路、双海绵接力，总计十关。发布前 `pnpm check` 的 36 项业务测试和 1 项 PWA 检查通过；两个新关已本地手机全币实玩，横屏 HUD、暂停、成绩存档和断网重开通过。该段为发布前快照，线上发布证据与已知验证边界见 [验证记录](docs/VERIFICATION.md)。
+
+线上游戏：[立即游玩](https://nwaxz.bzlom.cn)。版本与 QA 状态见 [DEVELOPMENT_STATE.md](docs/DEVELOPMENT_STATE.md)，玩法说明见 [GAME_DESIGN.md](docs/GAME_DESIGN.md)，已核对的发布证据见 [验证记录](docs/VERIFICATION.md)。绘制资源见 [ART_V2.md](docs/ART_V2.md)、[ART_PROPS.md](docs/ART_PROPS.md) 和 [ART_WORKSHOP.md](docs/ART_WORKSHOP.md)。
 
 ## 技术栈
 
@@ -45,7 +46,7 @@ pnpm start      # 启动服务端
 pnpm smoke      # HTTP 冒烟检查
 ```
 
-原生测试覆盖三个关卡的路线与全金币、质量守恒、长帧处理、石块不可变和存档收敛。运行 `pnpm check` 可在本地复现测试及构建检查；最近一次发布的具体结果见[验证记录](docs/VERIFICATION.md)。
+原生测试覆盖关卡路线与全金币、质量守恒、长帧处理、石块不可变和存档收敛。运行 `pnpm check` 可在本地复现测试及构建检查；最近一次发布的具体结果见[验证记录](docs/VERIFICATION.md)。
 
 ## 文档
 
@@ -58,4 +59,4 @@ pnpm smoke      # HTTP 冒烟检查
 
 源码仓库：[lingyunmo/nwaxz](https://github.com/lingyunmo/nwaxz)（公开）。
 
-0.5.0 合并前浏览器验收：两道新关卡均全币通关，手机触摸与键盘操作、暂停画面冻结、离线冷重载和 24/24 本地存档保留通过。发布状态以对应 Actions 与公网修订为准。
+0.5.0 发布前浏览器验收：两道新关卡均全币通关，手机触摸与键盘操作、暂停画面冻结、离线冷重载和 24/24 本地存档保留通过。线上发布证据见 [验证记录](docs/VERIFICATION.md)。

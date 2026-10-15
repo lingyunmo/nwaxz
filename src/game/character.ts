@@ -1,5 +1,12 @@
 import type { Artwork } from "../artwork";
 
+// The classic belly laugh leads every victory and remains the main loop.
+export function victoryPose(elapsed: number, reducedMotion = false): number {
+  if (reducedMotion) return 6;
+  const phase = Math.max(0, elapsed) % 6;
+  return phase < 3.6 ? 6 : phase < 4.5 ? 7 : phase < 5.4 ? 11 : 6;
+}
+
 // Each pose shares the same foot anchor. Blend poses while moving that anchor
 // continuously, rather than switching full images abruptly.
 export class FrogAnimator {
@@ -35,17 +42,7 @@ export class FrogAnimator {
       tapping = time - options.tapAt;
     let pose = 0;
     if (options.won) {
-      const celebration = time - this.winAt;
-      pose =
-        celebration < 0.7
-          ? 10
-          : celebration < 1.6
-            ? 7
-            : celebration % 7 < 3
-              ? 11
-              : celebration % 7 < 4.4
-                ? 6
-                : 7;
+      pose = victoryPose(time - this.winAt, options.reducedMotion);
     } else if (options.lost) pose = cycle % 4 < 2 ? 10 : 5;
     else if (time - options.deliveryAt < 0.8) pose = 10;
     else if (tapping < 2.3 || (cycle >= 14 && cycle < 16.3)) {
@@ -56,7 +53,7 @@ export class FrogAnimator {
     else if (cycle > 10.2 && cycle < 12) pose = 9;
     else if (cycle > 18 && cycle < 20) pose = 5;
     else if (time % 4.8 > 4.58) pose = 1;
-    if (options.reducedMotion) pose = options.won ? 11 : options.lost ? 10 : 0;
+    if (options.reducedMotion) pose = options.won ? 6 : options.lost ? 10 : 0;
     const blend = options.reducedMotion ? 1 : 1 - Math.exp(-delta / 0.065);
     const nextWeights = this.weights.map(
       (weight, index) => weight + ((index === pose ? 1 : 0) - weight) * blend,
@@ -67,10 +64,11 @@ export class FrogAnimator {
         (weight, index) => Math.abs(weight - this.weights[index]) > 0.002,
       );
     this.weights = nextWeights;
-    const breath = options.reducedMotion ? 0 : Math.sin(time * 2) * 0.013;
+    const laughing = options.won && pose === 6;
+    const breath = options.reducedMotion ? 0 : Math.sin(time * (laughing ? 13 : 2)) * (laughing ? .022 : .013);
     const sway = options.reducedMotion ? 0 : Math.sin(time * 1.1) * 0.017;
     const jump =
-      options.reducedMotion || !options.won
+      options.reducedMotion || !options.won || pose !== 7
         ? 0
         : Math.max(0, Math.sin((time - this.winAt) * 4)) * 5;
     const mixture = this.mixedContext;

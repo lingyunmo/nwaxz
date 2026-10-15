@@ -258,14 +258,31 @@ function finishLevel(result: RunResult) {
   };
   progress = mergeProgress(progress, incoming);
   void persist(progress);
-  $("#result").hidden = false;
+  $<HTMLButtonElement>("#pause").disabled = true;
+  $<HTMLButtonElement>("#restart").disabled = true;
   $("#gesture-hint").hidden = true;
-  $("#result").innerHTML =
-    `<section class="result-card" aria-label="通关结算"><span class="result-kicker">奶蛙洗上澡啦！</span><h1>洗澡成功</h1>${stars(starCount(result.collected))}<div class="score-value">${scoreText(score)}<small>分</small></div><span class="score-record">${previous === undefined || score > previous ? "新纪录！" : `最高分 ${scoreText(previous)}`}</span><div class="result-stats"><span>通关用时<strong>${formatTime(result.elapsedMs)}</strong></span><span>泡泡币<strong>${starCount(result.collected)} / 3</strong></span></div><p class="score-breakdown">接水 1000 + 泡泡币 ${starCount(result.collected) * 500} + 时间奖励 ${score - 1000 - starCount(result.collected) * 500}</p><button id="next" class="game-button gold">${selected < levels.length - 1 ? (levels[selected + 1].chapter ?? 1) !== chapter ? "进入下一章" : "下一关" : "普通模式完成 · 回到选关"} ${icon("play")}</button><div class="result-secondary"><button id="replay">${icon("restart")}再玩一次</button><button id="level-menu">返回选关</button></div></section>`;
-  $("#next").onclick = () =>
-    selected < levels.length - 1 ? enterLevel(selected + 1) : renderLevels();
-  $("#replay").onclick = () => enterLevel(selected);
-  $("#level-menu").onclick = renderLevels;
+  const showCelebration = () => {
+    $("#result").hidden = false;
+    $("#result").classList.add("celebration-layer");
+    $("#result").innerHTML = `<section class="celebration-card" aria-label="奶蛙通关庆祝"><h1>洗澡成功！</h1>${stars(starCount(result.collected))}<p>奶蛙开心得捧腹大笑</p><button id="show-score" class="game-button gold">查看成绩 ${icon("play")}</button></section>`;
+    $("#show-score").onclick = showScore;
+    $("#show-score").focus({ preventScroll: true });
+  };
+  const showScore = () => {
+    $("#result").classList.remove("celebration-layer");
+    $("#result").innerHTML =
+      `<section class="result-card" aria-label="通关结算"><span class="result-kicker">奶蛙洗上澡啦！</span><h1>洗澡成功</h1>${stars(starCount(result.collected))}<div class="score-value">${scoreText(score)}<small>分</small></div><span class="score-record">${previous === undefined || score > previous ? "新纪录！" : `最高分 ${scoreText(previous)}`}</span><div class="result-stats"><span>通关用时<strong>${formatTime(result.elapsedMs)}</strong></span><span>泡泡币<strong>${starCount(result.collected)} / 3</strong></span></div><p class="score-breakdown">接水 1000 + 泡泡币 ${starCount(result.collected) * 500} + 时间奖励 ${score - 1000 - starCount(result.collected) * 500}</p><button id="next" class="game-button gold">${selected < levels.length - 1 ? (levels[selected + 1].chapter ?? 1) !== chapter ? "进入下一章" : "下一关" : "普通模式完成 · 回到选关"} ${icon("play")}</button><div class="result-secondary"><button id="replay">${icon("restart")}再玩一次</button><button id="level-menu">返回选关</button></div></section>`;
+    $("#next").onclick = () =>
+      selected < levels.length - 1 ? enterLevel(selected + 1) : renderLevels();
+    $("#replay").onclick = () => enterLevel(selected);
+    $("#level-menu").onclick = renderLevels;
+    const watchAgain = document.createElement("button");
+    watchAgain.textContent = "再看庆祝";
+    watchAgain.onclick = showCelebration;
+    $(".result-secondary").append(watchAgain);
+    $("#next").focus({ preventScroll: true });
+  };
+  showCelebration();
 }
 function finishFailed() {
   audio.setPlaying(false);
@@ -370,16 +387,35 @@ function openSettings(fromPause = false) {
   const dialog = showDialog(
     `${dialogTop("设置")}<div class="settings-options">${toggles.map(({ key, title, description }) => `<label class="setting-row"><span>${title}<small>${description}</small></span><input type="checkbox" role="switch" data-setting="${key}" ${settings[key] ? "checked" : ""}/><span class="switch-knob" aria-hidden="true"></span></label>`).join("")}<label class="setting-row"><span>画质<small>平衡模式适合大多数手机</small></span><select id="quality" aria-label="画质"><option value="balanced" ${settings.quality === "balanced" ? "selected" : ""}>平衡</option><option value="high" ${settings.quality === "high" ? "selected" : ""}>高清</option></select></label></div><div class="save-settings"><h3>我的存档</h3><span>${levels.filter((l) => progress.levels[l.id]?.completed).length} / ${levels.length} 关 · ${totalCoins()} 枚泡泡币</span><div><button id="export">导出存档</button><button id="import">导入存档</button></div><small>保存在这台设备，换设备可导入备份。</small></div><div class="settings-bottom"><span>${offlineReady ? "已准备好离线游玩" : navigator.onLine ? "游戏正在缓存" : "离线游玩"} · v${version}</span>${updateAvailable ? '<button id="settings-update">更新游戏</button>' : ""}<button id="help">怎么玩</button></div>`,
     () => {
+      audio.stopPreview();
       if (fromPause) openPause();
       else if (screen === "levels") renderLevels();
       else renderHome();
     },
   );
   $("#dialog-close").onclick = () => dialog.close();
+  const previews = document.createElement("div");
+  previews.className = "audio-preview";
+  previews.innerHTML = '<button id="preview-music">试听音乐</button><button id="preview-sound">试听音效</button><p id="audio-feedback" role="status" aria-live="polite">开启音乐后，关卡内会播放背景音乐。</p>';
+  $(".settings-options").after(previews);
+  const previewAudio = async (kind: "music" | "sound") => {
+    const ready = await audio.preview(kind);
+    if (!dialog.open) return;
+    $("#audio-feedback").textContent = ready
+      ? kind === "music" ? "正在试听音乐（4 秒）" : "提示音已播放；若仍无声，请检查设备音量和标签页静音。"
+      : "声音未能开启，请再次点击试听。";
+  };
+  $("#preview-music").onclick = () => { void previewAudio("music"); };
+  $("#preview-sound").onclick = () => { void previewAudio("sound"); };
   for (const input of app.querySelectorAll<HTMLInputElement>("[data-setting]"))
     input.onchange = () => {
       settings = { ...settings, [input.dataset.setting!]: input.checked };
       applySettings();
+      audio.unlock();
+      if (input.dataset.setting === "music") {
+        if (input.checked) void previewAudio("music");
+        else audio.stopPreview();
+      }
       audio.effect("tap");
     };
   $<HTMLSelectElement>("#quality").onchange = () => {
@@ -392,6 +428,7 @@ function openSettings(fromPause = false) {
   $("#export").onclick = exportSave;
   $("#import").onclick = () => $("#import-file").click();
   $("#help").onclick = () => {
+    audio.stopPreview();
     dialog.onclose = null;
     dialog.close();
     openHelp(fromPause);
@@ -476,7 +513,8 @@ document.addEventListener("visibilitychange", () => {
 document.addEventListener("fullscreenchange", () => {
   if (!document.fullscreenElement && screen === "play") openPause();
 });
-window.addEventListener("pagehide", () => audio.setPlaying(false));
+window.addEventListener("pagehide", () => audio.suspend());
+window.addEventListener("pageshow", () => audio.resume());
 const updateSW = registerSW({
   onOfflineReady() {
     offlineReady = true;

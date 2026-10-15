@@ -545,7 +545,7 @@ button:disabled {
   inset: 0;
   display: grid;
   place-items: center;
-  overflow: hidden;
+  overflow: clip;
   background: #235e56;
   isolation: isolate;
 }
@@ -562,7 +562,7 @@ button:disabled {
   position: relative;
   width: min(100vw, calc(100dvh * 0.6));
   height: min(100dvh, calc(100vw * 5 / 3));
-  overflow: hidden;
+  overflow: clip;
   background: #b7d6b0;
   box-shadow: 0 0 32px rgb(0 0 0 / 30%);
 }
@@ -731,6 +731,31 @@ button:disabled {
     0 20px 45px rgb(0 0 0 / 25%);
   animation: result-pop 260ms cubic-bezier(0.2, 1.25, 0.45, 1) both;
 }
+.result-layer.celebration-layer {
+  place-items: start center;
+  padding-top: 12%;
+  background: none;
+  backdrop-filter: none;
+  pointer-events: none;
+}
+.celebration-card {
+  width: min(90%, 300px);
+  padding: 16px;
+  border: 2px solid #fff9da;
+  border-radius: 25px;
+  background: #fffbedf2;
+  color: var(--ink);
+  text-align: center;
+  box-shadow: 0 8px 25px #24483b44;
+  pointer-events: auto;
+}
+.celebration-card h1 { margin: 0 0 6px; font-size: 26px; }
+.celebration-card > .stars { justify-content: center; }
+.celebration-card p { margin: 8px 0 12px; font-size: 13px; }
+.celebration-card .game-button { min-height: 44px; }
+.audio-preview { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.audio-preview button { flex: 1; padding: 10px; border: 1px solid #b7d5c5; border-radius: 12px; background: #edf5e6; color: #345f50; font: inherit; font-weight: 750; cursor: pointer; }
+.audio-preview p { width: 100%; margin: 0; font-size: 11px; color: #5a796c; }
 .result-kicker {
   color: #6d9a78;
   font-size: 12px;
@@ -815,6 +840,7 @@ button:disabled {
 }
 .result-secondary {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
   margin-top: 10px;

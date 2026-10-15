@@ -2,15 +2,23 @@
 
 线上游戏：[nwaxz.bzlom.cn](https://nwaxz.bzlom.cn)。记录区分已发布版本与开发中的代码；每次发布应以其对应工作流、提交 SHA 和实际浏览器验收为准。
 
-## 最近核对的线上发布：0.5.0
+## 最近核对的线上发布：0.6.0
 
-- PR #12 已合并至 main；发布提交：`548071e6ba57e368ad8edc50a03964f80e085488`。
-- [GitHub Actions run 38650527805](https://github.com/lingyunmo/nwaxz/actions/runs/38650527805) 的 Verify、Build image、Deploy nwaxz 全部成功；本轮公网 smoke 精确核对该 SHA。
-- 发布包含八关、水草与海绵机制。Chrome 点击“有新版本”更新后确认原 9/18 泡泡币记录得到保留，现显示 9/24。
-- 本轮只记录上述工作流、公网 smoke 和浏览器更新结果；未做本轮其他生产容器基线比较。
+- PR #14 已合并至 main；发布提交：`2d2ecca7e29c6115791e7ec0625a54fd224fcf74`。
+- [GitHub Actions run 38666857471](https://github.com/lingyunmo/nwaxz/actions/runs/38666857471) 的 Verify、Build image、Deploy nwaxz 全部成功；公网 smoke 精确核对该 SHA。
+- 发布包含第四章“暖暖水工坊”第 9、10 关。Chrome 应用更新后确认两关入口和解锁限制正常，旧存档的 9 枚泡泡币保留，现为 9/30。
+- 本轮未执行其他生产容器基线比较。
+
+## 0.7.0 发布前候选验收
+
+- `pnpm check` 通过 38 项业务测试和 1 项 PWA 检查。十一关半径 25 模拟路线均全币通关且守恒；组合回归确认仅开风扇或仅挤海绵都不能过第 11 关，配合操作后全币通关。
+- Chrome 精确候选 `index-qqbPie8Z.js`：390 × 844 视口触摸挖土、挤海绵及 `F`/`V`/`E` 控制。第 11 关 3/3 泡泡币、2500 分、02:58；测试时长含自动化等待，不作为玩家时长或性能基准。0.6 的 844 × 390 横屏 HUD 验收记录保留在下文；本轮没有重新做 0.7 横屏验证。
+- 第 11 关暂停期间两次画布摘要均为 `d1b7a6c340554a9115da0ea3e9cfceed676960a7be645f5abe5b107511d178cd`。断网冷重载保留 33/33 泡泡币、前十关成绩与最快用时以及第 11 关 2500 分和 02:58，可离线进入第 11 关并加载全部道具、暂停。无应用控制台错误或手机页面溢出；测试后恢复网络、触摸模拟和视口。
+- 此批仅新增关卡配置测试和文档，生产部署入口未修改。发布前候选已完成本地验收，main 工作流与公网 SHA 需另行核对；本轮未执行其他生产容器审计。
 
 ## 历史发布
 
+- 0.5.0：PR #12 合并提交 `548071e6ba57e368ad8edc50a03964f80e085488`；[run 38650527805](https://github.com/lingyunmo/nwaxz/actions/runs/38650527805) 的 Verify、Build image、Deploy nwaxz 成功，公网 smoke 精确核对 SHA。Chrome 更新后确认原 9/18 泡泡币记录保留并扩展至 9/24。
 - 0.4.0：提交 `3dbd632c4c1a7073d707fd593edc70cca57f2298`；[run 38643628629](https://github.com/lingyunmo/nwaxz/actions/runs/38643628629) 的 Verify、Build image、Deploy nwaxz 全部成功，公网 smoke 精确核对 SHA。Chrome 更新后确认第三章第六关入口、保留旧存档 9 枚泡泡币及正确解锁限制。
 - 0.2.0：提交 `6dbd28b813fb601a15addaab10c44e6436311021`；[run 38639392080](https://github.com/lingyunmo/nwaxz/actions/runs/38639392080) 的 Verify、Build image、Deploy nwaxz 成功，公网 smoke 精确核对提交 SHA。
 - 0.1.0 首发：[run 38606468423](https://github.com/lingyunmo/nwaxz/actions/runs/38606468423)，健康接口修订为 `1180b4fa9b5710d10169147110fc87598688c224`。
@@ -22,7 +30,7 @@
 - Chrome 候选 `index-BEbhUYh2.js`：390 × 844 手机视口，两关实玩均 3/3 泡泡币。第九关 2500 分、01:53；第十关 2500 分、02:15。时长包含自动化观察、操作等待，不作玩家时长或设备性能基准。
 - 真实触摸挖土、开阀与上层海绵挤水；F/V/E 键控制，E 可依次选择两个有库存的海绵。第十关中途关阀后继续接力成功。844 × 390 横屏 HUD 各区域保持在游戏画面内且互不重叠。
 - 第九关暂停两次画布 SHA-256 同为 `33fa4e135c97e8d367a96ab76970851ac793d28ac9722122b5c6d64274996d64`。断网冷重载保留两关最高分、最快用时和 30/30 泡泡币，可离线进入第十关并暂停，绘制工坊和道具正常加载。无应用控制台错误，已恢复网络、触摸模拟和视口。
-- 本地 HTTP smoke 通过 `development` 修订检查。本段记录发布前候选；main 发布工作流与公网精确 SHA 需独立核对。
+- 本地 HTTP smoke 通过 `development` 修订检查。本段只记录发布前候选的本地验证；线上发布以本页 0.6.0 的 main 工作流和公网精确 SHA 记录为准。
 
 ## 浏览器验证边界
 

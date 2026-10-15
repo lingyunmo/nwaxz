@@ -367,7 +367,7 @@ function openSettings(fromPause = false) {
   audio.unlock();
   const toggles: { key: keyof Settings; title: string; description: string }[] =
     [
-      { key: "music", title: "背景音乐", description: "轻轻松松接一缸水" },
+      { key: "music", title: "背景音乐", description: "奶蛙泡泡日 · 柔和钢琴" },
       {
         key: "sound",
         title: "游戏音效",

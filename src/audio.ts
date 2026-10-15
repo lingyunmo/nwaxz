@@ -2,7 +2,7 @@ import { parseSettings, type Settings } from "./settings.ts";
 
 type Effect = "tap" | "coin" | "win" | "dig";
 type Voice = { oscillator: OscillatorNode; gain: GainNode };
-const melody = [523.25, 659.25, 783.99, 659.25, 587.33, 698.46, 783.99, 659.25];
+const musicPath = "/assets/audio/bubble-day-soft-v1.mp3";
 const effectNotes: Record<Effect, { frequencies: number[]; step: number; type: OscillatorType }> = {
   tap: { frequencies: [520], step: .07, type: "sine" },
   coin: { frequencies: [660, 990], step: .09, type: "sine" },
@@ -17,10 +17,12 @@ export class AudioManager {
   private playing = false;
   private disposed = false;
   private lastDigAt = -Infinity;
-  private musicOscillator?: OscillatorNode;
+  private musicSource?: AudioBufferSourceNode;
   private musicGain?: GainNode;
-  private musicTimer?: number;
-  private musicIndex = 0;
+  private musicBuffer?: AudioBuffer;
+  private loadingMusic?: Promise<AudioBuffer | undefined>;
+  private musicOffset = 0;
+  private musicStartedAt = 0;
   private previewTimer?: number;
   private previewingMusic = false;
   private previewGeneration = 0;
@@ -86,6 +88,8 @@ export class AudioManager {
     const generation = this.previewGeneration;
     if (!await this.unlock() || generation !== this.previewGeneration || document.hidden) return false;
     if (kind === "music") {
+      if (!await this.loadMusic() || generation !== this.previewGeneration || this.disposed || document.hidden || this.context?.state !== "running") return false;
+      if (!this.musicSource) this.musicOffset = 0;
       this.previewingMusic = true;
       this.syncMusic();
       this.previewTimer = window.setTimeout(() => {
@@ -153,33 +157,50 @@ export class AudioManager {
     if (((!this.playing || !this.settings.music) && !this.previewingMusic) || !this.context || this.disposed || document.hidden || this.context.state !== "running") {
       this.stopMusic(); return;
     }
-    if (!this.musicOscillator) this.startMusic();
+    if (this.musicSource) return;
+    if (this.musicBuffer) this.startMusic();
+    else void this.loadMusic().then(buffer => { if (buffer) this.syncMusic(); });
+  }
+  private loadMusic(): Promise<AudioBuffer | undefined> {
+    if (this.musicBuffer) return Promise.resolve(this.musicBuffer);
+    if (this.loadingMusic) return this.loadingMusic;
+    const context = this.context;
+    if (!context || this.disposed) return Promise.resolve(undefined);
+    this.loadingMusic = (async () => {
+      try {
+        const response = await fetch(musicPath);
+        if (!response.ok) return undefined;
+        const bytes = await response.arrayBuffer();
+        if (this.disposed || this.context !== context) return undefined;
+        const buffer = await context.decodeAudioData(bytes);
+        if (this.disposed || this.context !== context) return undefined;
+        this.musicBuffer = buffer;
+        return buffer;
+      } catch { return undefined; }
+    })().finally(() => { this.loadingMusic = undefined; });
+    return this.loadingMusic;
   }
   private startMusic(): void {
-    const context = this.context;
-    if (!context || context.state !== "running") return;
-    const oscillator = context.createOscillator(), gain = context.createGain();
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(melody[this.musicIndex], context.currentTime);
+    const context = this.context, buffer = this.musicBuffer;
+    if (!context || context.state !== "running" || !buffer || this.musicSource) return;
+    const source = context.createBufferSource(), gain = context.createGain();
+    source.buffer = buffer;
+    source.loop = true;
     gain.gain.setValueAtTime(.0001, context.currentTime);
-    gain.gain.linearRampToValueAtTime(.05, context.currentTime + .18);
-    oscillator.connect(gain); gain.connect(context.destination); oscillator.start();
-    this.musicOscillator = oscillator; this.musicGain = gain;
-    this.musicTimer = window.setInterval(() => {
-      if (!this.musicOscillator || !this.context) return;
-      this.musicIndex = (this.musicIndex + 1) % melody.length;
-      this.musicOscillator.frequency.setTargetAtTime(melody[this.musicIndex], this.context.currentTime, .09);
-    }, 720);
+    gain.gain.linearRampToValueAtTime(.65, context.currentTime + .18);
+    source.connect(gain); gain.connect(context.destination);
+    this.musicStartedAt = context.currentTime;
+    source.start(context.currentTime, this.musicOffset);
+    this.musicSource = source; this.musicGain = gain;
   }
   private stopMusic(): void {
-    if (this.musicTimer !== undefined) window.clearInterval(this.musicTimer);
-    this.musicTimer = undefined;
-    const oscillator = this.musicOscillator, gain = this.musicGain;
-    this.musicOscillator = undefined; this.musicGain = undefined;
-    if (!oscillator || !gain) return;
-    oscillator.onended = null;
-    try { oscillator.stop(); } catch { /* Already stopped. */ }
-    oscillator.disconnect(); gain.disconnect();
+    const source = this.musicSource, gain = this.musicGain;
+    this.musicSource = undefined; this.musicGain = undefined;
+    if (!source || !gain) return;
+    if (this.context && this.musicBuffer)
+      this.musicOffset = (this.musicOffset + Math.max(0, this.context.currentTime - this.musicStartedAt)) % this.musicBuffer.duration;
+    try { source.stop(); } catch { /* Already stopped. */ }
+    source.disconnect(); gain.disconnect();
   }
   private stopVoices(): void {
     for (const { oscillator, gain } of this.voices) {

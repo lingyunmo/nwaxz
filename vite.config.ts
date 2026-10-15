@@ -34,7 +34,7 @@ export default defineConfig({
       },
       workbox: {
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-        globPatterns: ["**/*.{js,css,html,svg,png,webp,json,woff2}"],
+        globPatterns: ["**/*.{js,css,html,svg,png,webp,json,woff2,mp3}"],
         // Keep editable masters published; gameplay loads their smaller WebPs.
         globIgnores: [
           "assets/character/milk-frog-atlas.png",

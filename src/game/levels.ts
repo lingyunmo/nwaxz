@@ -14,7 +14,9 @@ export type Level = {
   coins: Point[];
   solution: Point[];
   chapter?: number;
-  scene?: "bath" | "workshop";
+  mode?: "horror";
+  scene?: "bath" | "workshop" | "hauntedBath" | "hauntedCorridor" | "hauntedMachine";
+  pumpkins?: Point[];
   initialWater?: number;
   fans?: Fan[];
   valves?: Valve[];
@@ -23,7 +25,7 @@ export type Level = {
   sponges?: Sponge[];
   extraSolutions?: Point[][];
 };
-export const levels: Level[] = [
+const normalLevels: Level[] = [
   {
     id: "first-bath",
     title: "第一缸水",
@@ -212,3 +214,34 @@ export const levels: Level[] = [
     solution: [{ x: 104, y: 198 }, { x: 108, y: 374 }, { x: 170, y: 374 }, { x: 174, y: 300 }, { x: 395, y: 300 }, { x: 397, y: 450 }, { x: 392, y: 592 }],
   },
 ];
+
+const horrorLevels: Level[] = [
+  {
+    id: "haunted-bath", mode: "horror", scene: "hauntedBath",
+    title: "废弃浴室", hint: "循着南瓜灯的微光，绕过石板右端，把水送进管道。",
+    rocks: [{ x: 120, y: 340, w: 240, h: 32 }],
+    coins: [{ x: 155, y: 250 }, { x: 408, y: 397 }, { x: 395, y: 535 }],
+    pumpkins: [{ x: 54, y: 282 }, { x: 422, y: 456 }, { x: 68, y: 711 }],
+    solution: [{ x: 104, y: 198 }, { x: 200, y: 285 }, { x: 405, y: 325 }, { x: 410, y: 408 }, { x: 392, y: 592 }],
+  },
+  {
+    id: "pumpkin-corridor", mode: "horror", scene: "hauntedCorridor",
+    title: "南瓜灯廊", hint: "光束会暂时照亮地图。先绕向右侧，再从第二道石板左侧折回。",
+    rocks: [{ x: 0, y: 310, w: 320, h: 32 }, { x: 184, y: 460, w: 296, h: 32 }],
+    coins: [{ x: 362, y: 284 }, { x: 135, y: 433 }, { x: 280, y: 565 }],
+    pumpkins: [{ x: 432, y: 248 }, { x: 66, y: 402 }, { x: 211, y: 560 }, { x: 62, y: 714 }],
+    solution: [{ x: 104, y: 198 }, { x: 175, y: 235 }, { x: 365, y: 290 }, { x: 368, y: 365 }, { x: 134, y: 437 }, { x: 132, y: 525 }, { x: 392, y: 592 }],
+  },
+  {
+    id: "dark-machine", mode: "horror", scene: "hauntedMachine",
+    title: "暗水机房", hint: "先挖出水路，再开清水阀与风扇，让水越过机房高台。",
+    initialWater: 0,
+    valves: [{ position: { x: 70, y: 150 }, nozzle: { x: 104, y: 178 }, drops: 208, rate: 48 }],
+    fans: [{ position: { x: 48, y: 380 }, zone: { x: 64, y: 256, w: 312, h: 160 }, force: { x: 1800, y: -1000 }, on: false }],
+    rocks: [{ x: 16, y: 416, w: 184, h: 32 }, { x: 200, y: 328, w: 168, h: 120 }],
+    coins: [{ x: 135, y: 372 }, { x: 285, y: 300 }, { x: 397, y: 530 }],
+    pumpkins: [{ x: 80, y: 480 }, { x: 315, y: 248 }, { x: 430, y: 463 }, { x: 66, y: 711 }],
+    solution: [{ x: 104, y: 198 }, { x: 104, y: 374 }, { x: 170, y: 374 }, { x: 174, y: 300 }, { x: 395, y: 300 }, { x: 397, y: 450 }, { x: 392, y: 592 }],
+  },
+];
+export const levels: Level[] = [...normalLevels, ...horrorLevels];

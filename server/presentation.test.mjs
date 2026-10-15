@@ -219,3 +219,41 @@ test("disposing while the recording downloads never decodes or schedules late au
   assert.equal(Context.instances[0].sources.length, 0);
   assert.equal(Context.instances[0].state, "closed");
 });
+
+test("switching modes uses separate recordings, stops haunted voices and restores piano", async t => {
+  const { manager, Context, download } = harness(t, { music: true });
+  manager.setPlaying(true); await manager.unlock(); await settle();
+  const context = Context.instances[0], piano = context.sources[0];
+  context.currentTime = 8;
+  manager.setMode("horror"); await settle();
+  assert.ok(piano.stopped);
+  const ambient = context.sources.at(-1);
+  assert.equal(ambient.offset, 0); assert.equal(ambient.loopEnd, 32);
+  manager.haunt(); await settle();
+  const laugh = context.sources.at(-1);
+  assert.notEqual(laugh, ambient); assert.ok(!laugh.loop);
+  manager.setPlaying(false);
+  assert.ok(laugh.stopped); assert.ok(ambient.stopped);
+  manager.setMode("normal"); manager.setPlaying(true); await settle();
+  assert.equal(context.sources.at(-1).buffer, piano.buffer);
+  assert.equal(download.requests.filter(url => url.includes("bubble-day")).length, 1);
+  assert.ok(download.requests.includes("/assets/audio/haunted-bath-v1.mp3"));
+  assert.ok(download.requests.includes("/assets/audio/haunted-laugh-v1.mp3"));
+});
+
+test("delayed haunted laughter cannot escape pause, mute or a mode change", async t => {
+  const { manager, Context, download } = harness(t, { music: false });
+  manager.setMode("horror"); await manager.unlock();
+  let finish;
+  download.wait = new Promise(resolve => { finish = resolve; });
+  manager.haunt(); await settle();
+  manager.setPlaying(false); finish(); await settle();
+  assert.equal(Context.instances[0].sources.length, 0);
+  manager.haunt(); await settle(); assert.equal(Context.instances[0].sources.length, 1);
+  manager.setSettings({ ...defaultSettings(), sound: false });
+  assert.ok(Context.instances[0].sources[0].stopped);
+  manager.haunt(); await settle(); assert.equal(Context.instances[0].sources.length, 1);
+  manager.setMode("normal");
+  assert.equal(await manager.preview("sound"), true);
+  assert.equal(Context.instances[0].sources.length, 1, "normal preview uses normal synthesized effect");
+});

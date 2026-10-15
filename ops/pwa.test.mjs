@@ -53,6 +53,13 @@ test("built offline worker has one revision per URL and a cached navigation fall
     "assets/props/garden-props-v1.webp",
     "assets/props/bathtub-v1.webp",
     "assets/audio/bubble-day-soft-v1.mp3",
+    "assets/audio/haunted-bath-v1.mp3",
+    "assets/audio/haunted-laugh-v1.mp3",
+    "assets/scenes/haunted-bath-v1.webp",
+    "assets/scenes/haunted-corridor-v1.webp",
+    "assets/scenes/haunted-machine-v1.webp",
+    "assets/character/haunted-frog-v1.webp",
+    "assets/props/pumpkin-v1.webp",
   ]) {
     const entry = manifest.find((entry) => entry.url === url);
     assert.ok(

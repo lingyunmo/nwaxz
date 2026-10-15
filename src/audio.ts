@@ -2,7 +2,12 @@ import { parseSettings, type Settings } from "./settings.ts";
 
 type Effect = "tap" | "coin" | "win" | "dig";
 type Voice = { oscillator: OscillatorNode; gain: GainNode };
-const musicPath = "/assets/audio/bubble-day-soft-v1.mp3";
+type Recording = "normal" | "horror" | "laugh";
+const recordingPaths: Record<Recording, string> = {
+  normal: "/assets/audio/bubble-day-soft-v1.mp3",
+  horror: "/assets/audio/haunted-bath-v1.mp3",
+  laugh: "/assets/audio/haunted-laugh-v1.mp3",
+};
 const effectNotes: Record<Effect, { frequencies: number[]; step: number; type: OscillatorType }> = {
   tap: { frequencies: [520], step: .07, type: "sine" },
   coin: { frequencies: [660, 990], step: .09, type: "sine" },
@@ -19,8 +24,12 @@ export class AudioManager {
   private lastDigAt = -Infinity;
   private musicSource?: AudioBufferSourceNode;
   private musicGain?: GainNode;
-  private musicBuffer?: AudioBuffer;
-  private loadingMusic?: Promise<AudioBuffer | undefined>;
+  private mode: "normal" | "horror" = "normal";
+  private buffers: Partial<Record<Recording, AudioBuffer>> = {};
+  private loading: Partial<Record<Recording, Promise<AudioBuffer | undefined>>> = {};
+  private get musicBuffer() { return this.buffers[this.mode]; }
+  private effectGeneration = 0;
+  private sampledVoices = new Map<AudioBufferSourceNode, GainNode>();
   private musicOffset = 0;
   private musicStartedAt = 0;
   private previewTimer?: number;
@@ -81,7 +90,31 @@ export class AudioManager {
   }
   setPlaying(playing: boolean): void {
     this.playing = playing;
+    if (!playing) this.stopSamples();
     this.syncMusic();
+  }
+  setMode(mode: "normal" | "horror"): void {
+    if (this.mode === mode) return;
+    this.stopPreview();
+    this.stopMusic();
+    this.mode = mode;
+    this.musicOffset = 0;
+    this.syncMusic();
+  }
+  haunt(): void { void this.playHaunt(); }
+  private async playHaunt(preview = false): Promise<boolean> {
+    const generation = this.effectGeneration;
+    if (this.mode !== "horror" || (!preview && !this.settings.sound) || this.disposed || document.hidden) return false;
+    if (!await this.unlock()) return false;
+    const buffer = await this.loadRecording("laugh"), context = this.context;
+    if (!buffer || generation !== this.effectGeneration || (!preview && !this.settings.sound) || this.mode !== "horror" || this.disposed || document.hidden || context?.state !== "running") return false;
+    const source = context.createBufferSource(), gain = context.createGain();
+    source.buffer = buffer; gain.gain.setValueAtTime(.32, context.currentTime);
+    source.connect(gain); gain.connect(context.destination);
+    this.sampledVoices.set(source, gain);
+    source.onended = () => { this.sampledVoices.delete(source); source.disconnect(); gain.disconnect(); };
+    source.start();
+    return true;
   }
   async preview(kind: "music" | "sound"): Promise<boolean> {
     this.stopPreview();
@@ -97,7 +130,8 @@ export class AudioManager {
         this.previewingMusic = false;
         this.syncMusic();
       }, 4000);
-    } else this.playEffect("win");
+    } else if (this.mode === "horror") return this.playHaunt(true);
+    else this.playEffect("win");
     return true;
   }
   stopPreview(): void {
@@ -162,23 +196,26 @@ export class AudioManager {
     else void this.loadMusic().then(buffer => { if (buffer) this.syncMusic(); });
   }
   private loadMusic(): Promise<AudioBuffer | undefined> {
-    if (this.musicBuffer) return Promise.resolve(this.musicBuffer);
-    if (this.loadingMusic) return this.loadingMusic;
+    return this.loadRecording(this.mode);
+  }
+  private loadRecording(key: Recording): Promise<AudioBuffer | undefined> {
+    if (this.buffers[key]) return Promise.resolve(this.buffers[key]);
+    if (this.loading[key]) return this.loading[key];
     const context = this.context;
     if (!context || this.disposed) return Promise.resolve(undefined);
-    this.loadingMusic = (async () => {
+    this.loading[key] = (async () => {
       try {
-        const response = await fetch(musicPath);
+        const response = await fetch(recordingPaths[key]);
         if (!response.ok) return undefined;
         const bytes = await response.arrayBuffer();
         if (this.disposed || this.context !== context) return undefined;
         const buffer = await context.decodeAudioData(bytes);
         if (this.disposed || this.context !== context) return undefined;
-        this.musicBuffer = buffer;
+        this.buffers[key] = buffer;
         return buffer;
       } catch { return undefined; }
-    })().finally(() => { this.loadingMusic = undefined; });
-    return this.loadingMusic;
+    })().finally(() => { delete this.loading[key]; });
+    return this.loading[key];
   }
   private startMusic(): void {
     const context = this.context, buffer = this.musicBuffer;
@@ -186,6 +223,8 @@ export class AudioManager {
     const source = context.createBufferSource(), gain = context.createGain();
     source.buffer = buffer;
     source.loop = true;
+    // Original horror master is exactly 32 seconds; exclude MP3 padding.
+    if (this.mode === "horror") source.loopEnd = Math.min(32, buffer.duration);
     gain.gain.setValueAtTime(.0001, context.currentTime);
     gain.gain.linearRampToValueAtTime(.65, context.currentTime + .18);
     source.connect(gain); gain.connect(context.destination);
@@ -198,11 +237,21 @@ export class AudioManager {
     this.musicSource = undefined; this.musicGain = undefined;
     if (!source || !gain) return;
     if (this.context && this.musicBuffer)
-      this.musicOffset = (this.musicOffset + Math.max(0, this.context.currentTime - this.musicStartedAt)) % this.musicBuffer.duration;
+      this.musicOffset = (this.musicOffset + Math.max(0, this.context.currentTime - this.musicStartedAt)) % (source.loopEnd || this.musicBuffer.duration);
     try { source.stop(); } catch { /* Already stopped. */ }
     source.disconnect(); gain.disconnect();
   }
+  private stopSamples(): void {
+    this.effectGeneration++;
+    for (const [source, gain] of this.sampledVoices) {
+      source.onended = null;
+      try { source.stop(); } catch { /* Already ended. */ }
+      source.disconnect(); gain.disconnect();
+    }
+    this.sampledVoices.clear();
+  }
   private stopVoices(): void {
+    this.stopSamples();
     for (const { oscillator, gain } of this.voices) {
       oscillator.onended = null;
       try { oscillator.stop(); } catch { /* Already ended. */ }

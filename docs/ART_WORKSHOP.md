@@ -23,4 +23,3 @@ Bottom y=628..800 (78.5%..100%): warm ivory, soft terracotta and pale golden cer
 Style/medium: polished friendly casual mobile game environment art, softly sculpted rounded ceramic, subtle hand-painted texture, matte surfaces, gentle ambient occlusion, warm diffuse lighting, straight-on orthographic cutaway. Simple visual hierarchy, rich but restrained earth texture. Keep the three horizontal zones and exact soil boundary positions compatible with reference.
 Constraints: full opaque frame, 3:5 portrait. This is background ONLY. No characters or animals, no frog, no crocodile, no bathtub, no water or droplets or bubbles, no faucet, no pipes, no machinery, no fans, valves, sponges, tools or gameplay props. No furniture, plants, coins, crystals or collectible icons. No solid rock obstacles. No text, labels, numbers, logo, border, watermark, UI or buttons. Do not draw gameplay routes.
 ```
-

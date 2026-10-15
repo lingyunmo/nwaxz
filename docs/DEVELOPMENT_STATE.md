@@ -1,8 +1,16 @@
 # 开发状态与后续计划
 
-## 已发布版本 0.8.1
+## 已发布版本 0.8.2
 
-PR #22 合并提交 `7d7be072cbc30de373900cca780b10a6942d6c62`，发布工作流 [38671701195](https://github.com/lingyunmo/nwaxz/actions/runs/38671701195) 三项作业成功，公网 smoke 精确核对该 SHA。Chrome 提示更新后设置显示 v0.8.1、3/12 关、旧 9 枚泡泡币保留。0.8.2 正在修复胜利庆祝被结算遮挡和声音试听/恢复问题，尚未发布；不扩充关卡或改部署入口。
+PR #24 合并提交 `5cdf387d80a2dc96f149122fc3040155bbfa0145`，发布工作流 [38693652784](https://github.com/lingyunmo/nwaxz/actions/runs/38693652784) 的 Verify、Build image、Deploy nwaxz 均成功，公网 smoke 精确核对该 SHA。Chrome 提示式更新后设置显示 v0.8.2，旧 9 枚泡泡币和 3/12 关进度保留。
+
+## 0.8.3 钢琴配乐候选
+
+Issue #25 用用户选定的 FL Studio 柔和钢琴版《奶蛙泡泡日》替换原单音合成 BGM。录音约 42 秒、92 BPM，采用同源 MP3 + Web Audio 解码循环，暂停续播、后台静音和音乐开关保留，并加入 PWA 预缓存。51 项业务测试及 1 项 PWA 构建检查通过；候选浏览器验收与后续发布状态见 [VERIFICATION.md](VERIFICATION.md)。音效、关卡、经典捧腹大笑与存档格式未调整，配乐来源见 [AUDIO.md](AUDIO.md)。
+
+## 已发布版本 0.8.1（历史）
+
+PR #22 合并提交 `7d7be072cbc30de373900cca780b10a6942d6c62`，发布工作流 [38671701195](https://github.com/lingyunmo/nwaxz/actions/runs/38671701195) 三项作业成功，公网 smoke 精确核对该 SHA。Chrome 提示更新后设置显示 v0.8.1、3/12 关、旧 9 枚泡泡币保留。
 
 ## 0.8.2 发布前候选
 

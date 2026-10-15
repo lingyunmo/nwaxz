@@ -2,6 +2,20 @@
 
 线上游戏：[nwaxz.bzlom.cn](https://nwaxz.bzlom.cn)。记录区分已发布版本与开发中的代码；每次发布应以其对应工作流、提交 SHA 和实际浏览器验收为准。
 
+## 0.9.1 iPhone 声音兼容候选
+
+- Issue #29 针对桌面有声而 iPhone Safari/微信无声：补充 playback 媒体会话、旧 iOS 独立静音媒体桥接、touchend/pointerup/click 重试、2 秒解锁超时、前缀/closed AudioContext 恢复，新增设置“恢复声音”并直接试听。原三段可听录音、游戏机关、美术、经典捧腹动作、设置格式与 v1 存档不变。机制与 WebKit 来源见 [AUDIO.md](AUDIO.md)。
+- `pnpm check` 68 项业务测试 + 1 项 PWA 检查通过。新测试覆盖媒体会话申请/释放、悬挂解锁后的真实手势重试、旧 iOS 复用与清理、受限 setter、下载失败、异步关闭暂停框后续播，以及恐怖音效下载时不能提前释放会话；十五关全币回归仍通过。
+- 最终候选 `index-DkW1BA6C.js`、`index-DQJN6i4c.css`，PWA 38 项、约 3571.46 KiB。浏览器 390×844/320×568 可点击恢复按钮；320×568 的按钮边界 y263..305，无页面横向溢出。设置仍显示原 6/15 关、18 币及原有偏好。
+- 桌面浏览器输出分析器实测音效 RMS 约 .069、钢琴 RMS 约 .05–.074，为输出增益之后的信号，不是仅分析录音文件。模拟 AudioSession API 验证试听时请求 playback，结束/暂停回到 auto，继续关卡后重新请求 playback。模拟旧 iOS API 分支使用真正 HTMLAudioElement，静音兼容文件 readyState=4、loop=true、paused=false；试听结束和暂停为 paused=true。
+- 上述 navigator API 模拟与手机视口不等于 Safari 真机。电脑和内置浏览器能发声已由用户确认；用户对手机单独文件播放的回答后来更正，不能作为手机正常的证据。0.9.1 发布后仍需用户在 iPhone Safari/微信验证实际听感，当前不得声称手机已修复通过。
+- 停止本任务持有的本地 5188 预览服务，API 明确 Failed to fetch 后，最终 bundle 可离线冷启动、打开设置、恢复并试听，兼容文件可从修订缓存加载到 readyState=4。之后恢复本地服务，重载移除 API 注入并恢复视口。未清除存档、未改其他生产环境配置。
+- 本节为发布前验收；合并后的部署结果与公网精确 SHA 证据记录在对应 PR。
+
+## 已发布版本 0.9.0
+
+PR #28 合并提交 `c800bb7ed5da7503372c82b5893cdb80f29d492e`，[run 38736394083](https://github.com/lingyunmo/nwaxz/actions/runs/38736394083) 的 Verify、Build image、Deploy nwaxz 全部成功。公网版本、SHA、前端及八项声画文件与验收构建相同；浏览器提示更新后旧记录和偏好保留。[发布证据](https://github.com/lingyunmo/nwaxz/pull/28#issuecomment-6192377516)。当时未覆盖真实 iPhone 音频输出，后续手机兼容问题由 0.9.1 候选处理。
+
 ## 0.9.0 恐怖模式发布前验收
 
 - Issue #27：普通十二关与独立恐怖三关；绘制素材和完整提示见 [ART_HORROR.md](ART_HORROR.md)，新增音频及可复现脚本见 [AUDIO.md](AUDIO.md)。`pnpm check` 59 项业务测试及 1 项 PWA 构建检查通过，包括十五关全币路线、水量守恒、恐怖机房必须开阀/开风、模式之间的解锁/终点隔离、存档往返、无瞬移奔跑、慢速扫光及声音竞态。

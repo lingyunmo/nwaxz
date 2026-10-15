@@ -1,10 +1,18 @@
 # 开发状态与后续计划
 
-## 0.9.0 恐怖模式候选
+## 0.9.1 iPhone 声音兼容修复候选
+
+Issue #29：桌面可发声而 iPhone Safari/微信无声。优先请求 playback 媒体会话；无此接口或接口受限的 Apple 触控设备使用独立静音 MP3 桥接。pointerup、touchend、click 都会重试解锁，不再等候永不完成的旧 resume；设置新增“恢复声音”并直接试听音效，保留音乐/音效偏好、原配乐和存档。68 项业务测试与 1 项 PWA 检查通过；候选浏览器验证和真实手机的边界见 [VERIFICATION.md](VERIFICATION.md)。
+
+## 最近核对发布：0.9.0
+
+PR #28 合并 SHA `c800bb7ed5da7503372c82b5893cdb80f29d492e`，[发布 run 38736394083](https://github.com/lingyunmo/nwaxz/actions/runs/38736394083) 的 Verify、Build image、Deploy nwaxz 均成功。公网版本、精确 SHA、八项声画文件及前端 bundle 均核对，更新后旧存档和偏好保留。证据见 [PR #28 发布记录](https://github.com/lingyunmo/nwaxz/pull/28#issuecomment-6192377516)。该验收当时未覆盖真实 iPhone 扬声器，用户随后反馈 iPhone 无声；0.9.1 为此补充播放兼容修复。
+
+## 已发布版本 0.9.0
 
 Issue #27 新增独立恐怖模式三关：废弃浴室、南瓜灯廊、暗水机房。普通十二关与恐怖三关分别解锁、计币、显示成绩及终点，使用兼容的 v1 存档。三幅绘制场景、恐怖奶蛙四姿态和南瓜灯见 [ART_HORROR.md](ART_HORROR.md)，阴森循环与怪笑见 [AUDIO.md](AUDIO.md)。经典通关捧腹动作保留；简化动作关闭奔跑与扫光。每关自动全币验证及浏览器实玩通过，其他候选 QA 与发布状态见 [VERIFICATION.md](VERIFICATION.md)。
 
-## 最近核对发布：0.8.3
+## 已发布版本 0.8.3（历史）
 
 PR #26 合并 SHA `f6db8e95f619f95c1b880c3ae82d3f8632f4c638`，[发布 run 38699201929](https://github.com/lingyunmo/nwaxz/actions/runs/38699201929) 的 Verify、Build image、Deploy nwaxz 全部成功。公网 health、精确 SHA、钢琴 MP3 SHA256/MIME 和离线缓存已核对，浏览器更新显示 v0.8.3，旧 36/36 泡泡币和设置保留。
 

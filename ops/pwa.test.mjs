@@ -53,6 +53,7 @@ test("built offline worker has one revision per URL and a cached navigation fall
     "assets/props/garden-props-v1.webp",
     "assets/props/bathtub-v1.webp",
     "assets/audio/bubble-day-soft-v1.mp3",
+    "assets/audio/ios-session-v1.mp3",
     "assets/audio/haunted-bath-v1.mp3",
     "assets/audio/haunted-laugh-v1.mp3",
     "assets/scenes/haunted-bath-v1.webp",

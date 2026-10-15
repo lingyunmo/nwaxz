@@ -387,7 +387,6 @@ function openRestart() {
   };
 }
 function openSettings(fromPause = false) {
-  audio.unlock();
   const toggles: { key: keyof Settings; title: string; description: string }[] =
     [
       { key: "music", title: "背景音乐", description: mode === "horror" ? "午夜浴室 · 阴森氛围" : "奶蛙泡泡日 · 柔和钢琴" },
@@ -419,17 +418,26 @@ function openSettings(fromPause = false) {
   $("#dialog-close").onclick = () => dialog.close();
   const previews = document.createElement("div");
   previews.className = "audio-preview";
-  previews.innerHTML = '<button id="preview-music">试听音乐</button><button id="preview-sound">试听音效</button><p id="audio-feedback" role="status" aria-live="polite">开启音乐后，关卡内会播放背景音乐。</p>';
+  previews.innerHTML = '<button id="preview-music">试听音乐</button><button id="preview-sound">试听音效</button><button id="recover-audio">恢复声音</button><p id="audio-feedback" role="status" aria-live="polite">开启音乐后，关卡内会播放。无声时点“恢复声音”再试听。</p>';
   $(".settings-options").after(previews);
   const previewAudio = async (kind: "music" | "sound") => {
     const ready = await audio.preview(kind);
     if (!dialog.open) return;
     $("#audio-feedback").textContent = ready
-      ? kind === "music" ? "正在试听音乐（4 秒）" : "提示音已播放；若仍无声，请检查设备音量和标签页静音。"
-      : "声音未能开启，请再次点击试听。";
+      ? kind === "music" ? "正在试听音乐（4 秒）" : "正在试听音效；若无声，请点“恢复声音”。"
+      : "浏览器尚未允许播放，请点“恢复声音”后再试听。";
   };
   $("#preview-music").onclick = () => { void previewAudio("music"); };
   $("#preview-sound").onclick = () => { void previewAudio("sound"); };
+  $("#recover-audio").onclick = () => {
+    // Resume synchronously in this click before the preview awaits loading.
+    $("#audio-feedback").textContent = "正在恢复声音…";
+    void audio.recover().then(ready => {
+      if (!dialog.open) return;
+      if (ready) $("#audio-feedback").textContent = "正在试听音效；恢复操作不会更改音乐和音效开关。";
+      else $("#audio-feedback").textContent = "声音还未启用，请再点一次“恢复声音”，并确认媒体音量已打开。";
+    });
+  };
   for (const input of app.querySelectorAll<HTMLInputElement>("[data-setting]"))
     input.onchange = () => {
       settings = { ...settings, [input.dataset.setting!]: input.checked };

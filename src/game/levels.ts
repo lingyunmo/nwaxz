@@ -174,4 +174,21 @@ export const levels: Level[] = [
     coins: [{ x: 130, y: 270 }, { x: 225, y: 420 }, { x: 350, y: 565 }],
     solution: [{ x: 104, y: 198 }, { x: 160, y: 290 }, { x: 160, y: 402 }, { x: 300, y: 430 }, { x: 300, y: 536 }, { x: 392, y: 592 }],
   },
+  {
+    id: "wind-sponge-relay",
+    title: "乘风的海绵水",
+    chapter: 4,
+    scene: "workshop",
+    hint: "先挖水道，开阀让海绵吸水。挤出水后，用风扇送过高台。",
+    initialWater: 0,
+    valves: [{ position: { x: 70, y: 150 }, nozzle: { x: 106, y: 178 }, drops: 208, rate: 40 }],
+    sponges: [{ position: { x: 108, y: 280 }, rect: { x: 76, y: 248, w: 64, h: 64 }, release: { x: 108, y: 326 }, capacity: 128 }],
+    fans: [{ position: { x: 48, y: 380 }, zone: { x: 64, y: 256, w: 312, h: 160 }, force: { x: 1800, y: -1000 }, on: false }],
+    rocks: [
+      { x: 16, y: 272, w: 56, h: 24 }, { x: 144, y: 272, w: 320, h: 24 },
+      { x: 16, y: 416, w: 184, h: 32 }, { x: 200, y: 328, w: 168, h: 120 },
+    ],
+    coins: [{ x: 108, y: 228 }, { x: 285, y: 300 }, { x: 397, y: 530 }],
+    solution: [{ x: 104, y: 198 }, { x: 108, y: 374 }, { x: 170, y: 374 }, { x: 174, y: 300 }, { x: 395, y: 300 }, { x: 397, y: 450 }, { x: 392, y: 592 }],
+  },
 ];

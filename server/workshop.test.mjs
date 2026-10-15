@@ -102,3 +102,32 @@ test("pausing and resuming the relay valve preserves its finite water budget", (
   assert.equal(world.collected, 7);
   assertConserved(world);
 });
+
+test("wind-sponge-relay needs both squeezing and wind, even after the tank empties", () => {
+  const world = prepare(levelById("wind-sponge-relay"));
+  world.toggleValve(0);
+  world.toggleFan(0);
+  for (let i = 0; i < 1200; i++) world.advance(1 / 60);
+  assert.equal(world.emitted, 208);
+  assert.equal(world.spongeContents[0].length, 128);
+  assert.equal(world.delivered, 0, "wind alone must not bypass the sponge gate");
+  assertConserved(world);
+
+  world.toggleFan(0);
+  for (let i = 0; i < 2400; i++) {
+    world.advance(1 / 60);
+    if (i % 60 === 59) world.squeezeSponge(0);
+  }
+  assert.ok(world.delivered < 100, "squeezing alone must not cross the high platform");
+  assertConserved(world);
+
+  world.toggleFan(0);
+  for (let i = 0; i < 3600 && world.delivered < 100; i++) {
+    world.advance(1 / 60);
+    if (i % 60 === 59) world.squeezeSponge(0);
+  }
+  assert.ok(world.delivered >= 100, `combined devices delivered only ${world.delivered}`);
+  assert.equal(world.collected, 7);
+  assert.equal(world.dirtyDelivered, 0);
+  assertConserved(world);
+});

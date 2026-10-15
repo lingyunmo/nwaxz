@@ -4,7 +4,7 @@
 
 ## 当前功能
 
-- 最近核对发布版本为 0.8.0，共十二关；第四章包括 `garden-wind-relay`。发布 SHA 与公网验证见 [发布验证记录](docs/VERIFICATION.md)。
+- 最近核对发布版本为 0.8.1，共十二关；第四章包括 `garden-wind-relay`。发布 SHA 与公网验证见 [发布验证记录](docs/VERIFICATION.md)。
 - 基础清水源包含 208 滴的粒子水流求解器，采用固定 120 Hz 步进和空间分桶；挖掘网格单元为 CELL8，石块不可挖。
 - 第二章加入可交互风扇和限量喷水阀：打开风扇可改变局部水流，阀门按固定流速消耗有限水量。
 - 清污分流：污水池生成 64 滴紫色污水；水滴接触会传播污染，污水不能收集泡泡币或计入清水进度。污水流入浴缸会失败并可重试，失败局不保存成绩。
@@ -18,7 +18,7 @@
 - 透明角色图集 `public/assets/character/milk-frog-atlas.webp`，包含 idle、breath、blink、look、tap、laugh、celebrate 动作。
 - 12 种角色姿态（原有 8 种及新增 4 种），姿态间平滑混合并连续呼吸摆动。
 
-0.8.0 已发布：PR #20 合并提交 `8e564ddb8ebf7a6b21e015c2b35a04b2a71f5e31`，发布工作流三项作业成功，公网 smoke 精确核对该 SHA。Chrome 提示式更新后确认第四章四关入口和锁定规则正常，旧存档从 9 枚泡泡币扩展为 9/36。当前 0.8.1 浴缸绘制候选已完成发布前本地验收，`pnpm check` 通过 41 项业务测试和 1 项 PWA 检查；尚未提交或发布。QA 细节见 [验证记录](docs/VERIFICATION.md)。云端同步尚未实现。
+0.8.1 绘制浴缸已发布，工作流与公网精确 SHA 核对通过，Chrome 更新后旧 9 枚泡泡币保留。当前 0.8.2 正在修复通关庆祝和声音体验；48 项业务测试及 1 项 PWA 检查通过，手机实玩及离线验收已完成，尚未发布。QA 与发布状态见 [验证记录](docs/VERIFICATION.md)。云端同步尚未实现。
 
 线上游戏：[立即游玩](https://nwaxz.bzlom.cn)。版本与 QA 状态见 [DEVELOPMENT_STATE.md](docs/DEVELOPMENT_STATE.md)，玩法说明见 [GAME_DESIGN.md](docs/GAME_DESIGN.md)，已核对的发布证据见 [验证记录](docs/VERIFICATION.md)。绘制资源见 [ART_V2.md](docs/ART_V2.md)、[ART_PROPS.md](docs/ART_PROPS.md)、[ART_WORKSHOP.md](docs/ART_WORKSHOP.md) 和 [ART_BATHROOM.md](docs/ART_BATHROOM.md)。
 

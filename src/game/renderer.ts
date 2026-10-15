@@ -412,11 +412,6 @@ export class BathGame {
     this.world.level.valves?.forEach((valve, index) => {
       const on = this.world.valveOn[index], scale = .2;
       ctx.drawImage(sheet, on ? 512 : 0, 512, 512, 512, valve.nozzle.x - 435 * scale, valve.nozzle.y - 370 * scale, 512 * scale, 512 * scale);
-      ctx.fillStyle = valve.kind === "sewage" ? "#e6b9f4" : "#fff9e8";
-      ctx.font = "bold 11px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(`${valve.kind === "sewage" ? "紫水 " : ""}${this.world.valveRemaining[index]}`, valve.position.x, valve.position.y + 42);
-      ctx.textAlign = "start";
     });
     this.world.level.plants?.forEach((plant, index) => {
       const alive = this.world.plantRemaining[index] > 0, scale = .18;
@@ -427,6 +422,19 @@ export class BathGame {
       ctx.restore();
       ctx.fillStyle = "#fff9e8"; ctx.font = "bold 11px sans-serif";
       ctx.fillText(alive ? String(this.world.plantRemaining[index]) : "枯萎", plant.rect.x + plant.rect.w + 5, plant.rect.y + 20);
+    });
+    // Plant art can overlap a nozzle. Keep source type and budget readable.
+    this.world.level.valves?.forEach((valve, index) => {
+      const dirty = valve.kind === "sewage",
+        label = `${dirty ? "紫水" : "清水"} ${this.world.valveRemaining[index]}`;
+      ctx.save();
+      ctx.font = "bold 11px sans-serif";
+      const width = ctx.measureText(label).width + 12;
+      this.roundRect(valve.position.x - width / 2, valve.position.y + 29, width, 18, 6, dirty ? "#48305aeb" : "#294a47eb");
+      ctx.fillStyle = dirty ? "#f5d8ff" : "#fff9e8";
+      ctx.textAlign = "center";
+      ctx.fillText(label, valve.position.x, valve.position.y + 42);
+      ctx.restore();
     });
   }
   private drawBathroom() {

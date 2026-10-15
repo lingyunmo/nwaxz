@@ -780,6 +780,7 @@ button:disabled {
 .celebration-card .game-button { min-height: 44px; }
 .audio-preview { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .audio-preview button { flex: 1; padding: 10px; border: 1px solid #b7d5c5; border-radius: 12px; background: #edf5e6; color: #345f50; font: inherit; font-weight: 750; cursor: pointer; }
+.audio-preview #recover-audio { flex-basis: 100%; }
 .audio-preview p { width: 100%; margin: 0; font-size: 11px; color: #5a796c; }
 .result-kicker {
   color: #6d9a78;

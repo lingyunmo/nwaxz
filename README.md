@@ -4,7 +4,7 @@
 
 ## 当前功能
 
-- 最近核对发布版本为 0.8.3，普通模式十二关；0.9.0 新增独立恐怖模式三关；第四章包括 `garden-wind-relay`。发布 SHA 与公网验证见 [发布验证记录](docs/VERIFICATION.md)。
+- 最近核对发布版本为 0.9.0，普通模式十二关，独立恐怖模式三关；第四章包括 `garden-wind-relay`。发布 SHA 与公网验证见 [发布验证记录](docs/VERIFICATION.md)。
 - 基础清水源包含 208 滴的粒子水流求解器，采用固定 120 Hz 步进和空间分桶；挖掘网格单元为 CELL8，石块不可挖。
 - 第二章加入可交互风扇和限量喷水阀：打开风扇可改变局部水流，阀门按固定流速消耗有限水量。
 - 清污分流：污水池生成 64 滴紫色污水；水滴接触会传播污染，污水不能收集泡泡币或计入清水进度。污水流入浴缸会失败并可重试，失败局不保存成绩。
@@ -18,7 +18,7 @@
 - 透明角色图集 `public/assets/character/milk-frog-atlas.webp`，包含 idle、breath、blink、look、tap、laugh、celebrate 动作。
 - 12 种角色姿态（原有 8 种及新增 4 种），姿态间平滑混合并连续呼吸摆动。
 
-0.8.3 钢琴配乐已发布并核对公网精确 SHA。当前 0.9.0 恐怖模式为发布前候选：独立入口、独立解锁与成绩、三幅绘制场景、间歇手电扫光、南瓜灯微光与奶蛙奔跑/捧腹诡笑，普通模式及原 v1 存档兼容。QA 与发布状态见 [验证记录](docs/VERIFICATION.md)，美术提示见 [ART_HORROR.md](docs/ART_HORROR.md)。云端同步尚未实现。
+0.9.0 恐怖模式已发布并核对公网精确 SHA：独立入口、独立解锁与成绩、三幅绘制场景、间歇手电扫光、南瓜灯微光与奶蛙奔跑/捧腹诡笑，普通模式及原 v1 存档兼容。QA 与发布状态见 [验证记录](docs/VERIFICATION.md)，美术提示见 [ART_HORROR.md](docs/ART_HORROR.md)。当前 0.9.1 为 iPhone 声音兼容修复候选，加入媒体播放会话、触摸解锁重试与设置中的“恢复声音”，手机实际听感待真机复核。云端同步尚未实现。
 
 线上游戏：[立即游玩](https://nwaxz.bzlom.cn)。版本与 QA 状态见 [DEVELOPMENT_STATE.md](docs/DEVELOPMENT_STATE.md)，玩法说明见 [GAME_DESIGN.md](docs/GAME_DESIGN.md)，已核对的发布证据见 [验证记录](docs/VERIFICATION.md)。绘制资源见 [ART_V2.md](docs/ART_V2.md)、[ART_PROPS.md](docs/ART_PROPS.md)、[ART_WORKSHOP.md](docs/ART_WORKSHOP.md) 和 [ART_BATHROOM.md](docs/ART_BATHROOM.md)。
 

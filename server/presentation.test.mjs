@@ -9,6 +9,9 @@ const settle = async () => { for (let i = 0; i < 24; i++) await Promise.resolve(
 function harness(t, settings = {}) {
   const original = { document: globalThis.document, window: globalThis.window, fetch: globalThis.fetch };
   const document = new EventTarget();
+  const listeners = new Map(), add = document.addEventListener.bind(document), remove = document.removeEventListener.bind(document);
+  document.addEventListener = (name, fn, options) => { listeners.set(name, fn); add(name, fn, options); };
+  document.removeEventListener = (name, fn, options) => { if (listeners.get(name) === fn) listeners.delete(name); remove(name, fn, options); };
   document.hidden = false;
   let nextId = 1;
   const timeouts = new Map();
@@ -75,7 +78,32 @@ function harness(t, settings = {}) {
     clearTimeout(id) { timeouts.delete(id); } };
   const manager = new AudioManager({ ...defaultSettings(), vibration: false, ...settings });
   t.after(() => { manager.dispose(); Object.assign(globalThis, original); });
-  return { manager, Context, document, timeouts, download };
+  return { manager, Context, document, timeouts, download, listeners };
+}
+
+function phoneNavigator(t, extra = {}) {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const nav = { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)", platform: "iPhone", maxTouchPoints: 1, ...extra };
+  Object.defineProperty(globalThis, "navigator", { configurable: true, value: nav });
+  t.after(() => { if (original) Object.defineProperty(globalThis, "navigator", original); else delete globalThis.navigator; });
+  return nav;
+}
+function legacyPlayer() {
+  return class {
+    static instances = [];
+    static reject = false;
+    paused = true; loop = false; plays = 0; loads = 0;
+    constructor(src) { this.src = src; this.constructor.instances.push(this); }
+    setAttribute() {}
+    removeAttribute(name) { if (name === "src") this.src = ""; }
+    play() {
+      this.plays++;
+      if (this.constructor.reject) return Promise.reject(new Error("gesture required"));
+      this.paused = false; return Promise.resolve();
+    }
+    pause() { this.paused = true; }
+    load() { this.loads++; }
+  };
 }
 
 test("victory begins with the preserved belly laugh, including reduced motion", () => {
@@ -256,4 +284,119 @@ test("delayed haunted laughter cannot escape pause, mute or a mode change", asyn
   manager.setMode("normal");
   assert.equal(await manager.preview("sound"), true);
   assert.equal(Context.instances[0].sources.length, 1, "normal preview uses normal synthesized effect");
+});
+
+test("iPhone requests media playback, recovers a stale session, and releases on hide", async t => {
+  const { manager, document } = harness(t), assignments = [];
+  let category = "auto";
+  const session = { get type() { return category; }, set type(value) { assignments.push(value); category = value; } };
+  phoneNavigator(t, { audioSession: session });
+  assert.equal(await manager.preview("sound"), true);
+  assert.equal(category, "playback", "running WebAudio must use the media session instead of ambient/ringer");
+  assignments.length = 0;
+  assert.equal(await manager.recover(), true);
+  assert.ok(assignments.includes("auto")); assert.equal(assignments.at(-1), "playback");
+  document.hidden = true; document.dispatchEvent(new Event("visibilitychange"));
+  assert.equal(category, "auto");
+  document.hidden = false; document.dispatchEvent(new Event("visibilitychange"));
+  await settle(); assert.equal(category, "playback");
+  manager.dispose(); assert.equal(category, "auto");
+});
+
+test("a hung pointerdown resume does not swallow the next trusted touchend or click", async t => {
+  const { manager, Context, listeners, timeouts } = harness(t);
+  const original = Context.prototype.resume;
+  Context.prototype.resume = function() {
+    if (!this.resumes) { this.resumes++; return new Promise(() => {}); }
+    return original.call(this);
+  };
+  const first = manager.unlock(), context = Context.instances[0];
+  listeners.get("touchend")({ isTrusted: true });
+  assert.equal(context.resumes, 2, "retry resume synchronously inside touchend");
+  await settle(); assert.equal(context.state, "running");
+  assert.ok(listeners.has("pointerup") && listeners.has("click"));
+  for (const callback of timeouts.values()) callback();
+  assert.equal(await first, false, "a blocked attempt has a bounded failure instead of hanging the UI");
+  assert.equal(await manager.preview("sound"), true);
+  manager.dispose();
+  for (const event of ["pointerdown", "pointerup", "touchend", "click", "keydown"]) assert.equal(listeners.has(event), false);
+});
+
+test("closed and prefixed WebKit audio contexts can be unlocked again", async t => {
+  const { manager, Context } = harness(t);
+  globalThis.window.webkitAudioContext = Context;
+  delete globalThis.window.AudioContext;
+  assert.equal(await manager.preview("sound"), true);
+  Context.instances[0].state = "closed";
+  assert.equal(await manager.recover(), true);
+  assert.equal(Context.instances.length, 2);
+  assert.equal(Context.instances[1].state, "running");
+});
+
+test("older iOS reuses one silent media bridge and stops it on pause, mute, hide and disposal", async t => {
+  const { manager, document } = harness(t, { music: true });
+  phoneNavigator(t);
+  const Player = legacyPlayer(); globalThis.window.Audio = Player;
+  manager.setPlaying(true); await manager.unlock(); await settle();
+  const media = Player.instances[0];
+  assert.equal(media.src, "/assets/audio/ios-session-v1.mp3");
+  assert.equal(media.loop, true); assert.equal(media.paused, false);
+  await manager.unlock(); assert.equal(Player.instances.length, 1);
+  manager.setPlaying(false); assert.equal(media.paused, true);
+  manager.setPlaying(true); await manager.unlock(); assert.equal(media.paused, false);
+  manager.setSettings({ ...defaultSettings(), music: false, sound: false }); assert.equal(media.paused, true);
+  assert.equal(await manager.preview("sound"), true, "explicit preview remains available with both saved switches off");
+  document.hidden = true; document.dispatchEvent(new Event("visibilitychange")); assert.equal(media.paused, true);
+  manager.dispose(); assert.equal(media.src, ""); assert.equal(media.loads, 1);
+});
+
+test("restricted iOS AudioSession falls back without an unhandled media rejection", async t => {
+  const { manager } = harness(t);
+  phoneNavigator(t, { audioSession: { set type(_) { throw new Error("unsupported"); } } });
+  const Player = legacyPlayer(); globalThis.window.Audio = Player; Player.reject = true;
+  assert.equal(await manager.preview("sound"), true);
+  await settle(); assert.equal(Player.instances[0].paused, true);
+  Player.reject = false;
+  assert.equal(await manager.recover(), true);
+  assert.equal(Player.instances.length, 1); assert.equal(Player.instances[0].paused, false);
+});
+
+test("desktop browsers do not start an unnecessary silent media loop", async t => {
+  const { manager } = harness(t);
+  phoneNavigator(t, { userAgent: "Mozilla/5.0 Windows Chrome", platform: "Win32", maxTouchPoints: 0 });
+  const Player = legacyPlayer(); globalThis.window.Audio = Player;
+  assert.equal(await manager.preview("sound"), true);
+  assert.equal(Player.instances.length, 0);
+});
+
+test("a failed iOS music preview releases the silent bridge instead of looping in a menu", async t => {
+  const { manager, download } = harness(t);
+  phoneNavigator(t); const Player = legacyPlayer(); globalThis.window.Audio = Player;
+  download.reject = true;
+  assert.equal(await manager.preview("music"), false);
+  assert.equal(Player.instances[0].paused, true);
+});
+
+test("music resumed by an asynchronous dialog close reactivates iOS media playback", async t => {
+  const { manager, Context } = harness(t, { music: true }), session = { type: "auto" };
+  phoneNavigator(t, { audioSession: session });
+  manager.setPlaying(true); await manager.unlock(); await settle();
+  assert.equal(session.type, "playback");
+  manager.setPlaying(false); assert.equal(session.type, "auto");
+  // No fresh pointer/touch event here: the queued dialog close resumes play.
+  manager.setPlaying(true);
+  assert.equal(session.type, "playback");
+  assert.equal(Context.instances[0].sources.length, 2);
+});
+
+test("a delayed horror preview keeps the iOS bridge until the laugh has loaded", async t => {
+  const { manager, download } = harness(t);
+  phoneNavigator(t); const Player = legacyPlayer(); globalThis.window.Audio = Player;
+  manager.setMode("horror");
+  let finish; download.wait = new Promise(resolve => { finish = resolve; });
+  const pending = manager.preview("sound"); await settle();
+  assert.equal(Player.instances[0].paused, false, "do not release the media session in an early async finally");
+  finish(); assert.equal(await pending, true);
+  assert.equal(Player.instances[0].paused, false);
+  manager.stopPreview(); assert.equal(Player.instances[0].paused, true);
 });

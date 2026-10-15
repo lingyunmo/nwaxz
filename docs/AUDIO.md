@@ -1,5 +1,23 @@
 # 背景音乐
 
+## iPhone 媒体通道兼容（0.9.1 候选）
+
+iOS 的 WebAudio 默认会话可能使用 ambient 通道，侧边静音开关可将其静音，即使 AudioContext 为 running、分析器有非零样本，也不能据此声称扬声器发声。优先在用户手势中设置 `navigator.audioSession.type = "playback"`；WebKit 参考见 [237322](https://bugs.webkit.org/show_bug.cgi?id=237322)、[251532](https://bugs.webkit.org/show_bug.cgi?id=251532)。这是与用户症状相符的兼容机制，不代表已远程确认手机的物理静音开关或系统内部状态。
+
+没有此 API 或 setter 受限时，仅 Apple 触控设备使用 `ios-session-v1.mp3` 开通媒体通道。它是专用全静音素材（1 秒、44.1 kHz 单声道、32 kbps、4407 字节），用于兼容旧 iOS，不是背景音乐，也不替换任何可听录音。生成命令：
+
+```sh
+ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=mono -t 1 -c:a libmp3lame -b:a 32k public/assets/audio/ios-session-v1.mp3
+```
+
+复用同一原生 audio 元素，在手势内先 play 再等待 WebAudio；预览结束、暂停、静音、后台和销毁时清理。桌面不创建该循环。该资源有内容修订并加入离线预缓存，不需要麦克风权限。
+
+解锁监听 pointerdown、pointerup、touchend、click、keydown；一个未完成的 resume 不阻塞下一次真实手势，每次等待最多 2 秒，失败能再次尝试，兼容 webkitAudioContext。触摸结束后的激活参考 [Chrome Web Audio autoplay](https://developer.chrome.com/blog/web-audio-autoplay)。设置中的“恢复声音”重新请求媒体会话并直接试听音效，不更改已有音乐和音效开关。
+
+当前修复通过自动测试、桌面真实声音链路及模拟 API 分支检查；iPhone Safari/微信的实际听感仍待用户在更新后确认。模拟手机视口或 navigator API 不等于 WebKit 真机验收。
+
+## 普通模式配乐
+
 《奶蛙泡泡日 · 柔和和声版》是本项目原创配乐，经用户试听后选用于替换单音合成 BGM。
 
 - 92 BPM，C 大调，4/4，16 小节，约 41.739 秒。

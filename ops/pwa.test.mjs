@@ -59,6 +59,7 @@ test("built offline worker has one revision per URL and a cached navigation fall
     "assets/scenes/haunted-bath-v1.webp",
     "assets/scenes/haunted-corridor-v1.webp",
     "assets/scenes/haunted-machine-v1.webp",
+    "assets/scenes/haunted-laundry-v1.webp",
     "assets/character/haunted-frog-v1.webp",
     "assets/props/pumpkin-v1.webp",
   ]) {

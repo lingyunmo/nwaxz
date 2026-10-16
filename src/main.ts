@@ -34,6 +34,10 @@ let offlineReady = false,
 const audio = new AudioManager(settings);
 const chapterCount = () => Math.max(...modeIndices(mode).map(index => levels[index].chapter ?? 1));
 const modeName = () => mode === "horror" ? "恐怖模式" : "普通模式";
+const horrorChapters: { [chapter: number]: { title: string; caption: string; art: string } } = {
+  1: { title: "夜幕初临", caption: "灯灭之后，奶蛙还在笑。", art: artworkPaths.hauntedBath },
+  2: { title: "地下回声", caption: "洗衣机停了，地下却还有水声。", art: artworkPaths.hauntedLaundry },
+};
 const chapterNames: { [chapter: number]: string } = { 1: "等水的奶蛙", 2: "风和水的小机关", 3: "清水的守护者", 4: "暖暖水工坊" };
 const channel =
   typeof BroadcastChannel === "undefined"
@@ -103,7 +107,7 @@ function renderHome() {
   document.body.classList.remove("horror-theme");
   screen = "home";
   chrome(
-    `<main class="menu-stage home-screen screen-enter" aria-label="游戏主界面"><img class="cover-art" src="/assets/scenes/bath-cover-v2.webp" alt="奶蛙站在冒泡泡的浴缸旁"/><h1 class="game-logo"><span>奶蛙</span><span>爱洗澡</span></h1><div class="home-top">${buttonIcon("settings", "设置", "settings")}</div><div class="home-actions"><button id="normal" class="game-button gold">普通模式 ${icon("play")}</button><button id="continue" class="game-button glass">继续洗澡</button><button id="horror" class="game-button night"><img src="/assets/props/pumpkin-v1.webp" alt=""/>恐怖模式 <small>夜幕初临 · 3 关</small></button></div><div class="home-status"><span>${totalCoins()} / ${modeIndices(mode).length * 3} 泡泡币</span><button id="update" ${updateAvailable ? "" : "hidden"}>有新版本 ${icon("restart")}</button></div></main>`,
+    `<main class="menu-stage home-screen screen-enter" aria-label="游戏主界面"><img class="cover-art" src="/assets/scenes/bath-cover-v2.webp" alt="奶蛙站在冒泡泡的浴缸旁"/><h1 class="game-logo"><span>奶蛙</span><span>爱洗澡</span></h1><div class="home-top">${buttonIcon("settings", "设置", "settings")}</div><div class="home-actions"><button id="normal" class="game-button gold">普通模式 ${icon("play")}</button><button id="continue" class="game-button glass">继续洗澡</button><button id="horror" class="game-button night"><img src="/assets/props/pumpkin-v1.webp" alt=""/>恐怖模式 <small>双章惊魂 · ${modeIndices("horror").length} 关</small></button></div><div class="home-status"><span>${totalCoins()} / ${modeIndices(mode).length * 3} 泡泡币</span><button id="update" ${updateAvailable ? "" : "hidden"}>有新版本 ${icon("restart")}</button></div></main>`,
   );
   $("#normal").onclick = () => {
     chapter = 1;
@@ -132,7 +136,7 @@ function renderLevels() {
   document.body.classList.toggle("horror-theme", mode === "horror");
   screen = "levels";
   chrome(
-    `<main class="menu-stage chapter-screen screen-enter" aria-label="${modeName()}选关"><img class="cover-art chapter-art" src="${mode === "horror" ? "/assets/scenes/haunted-bath-v1.webp" : "/assets/scenes/bath-cover-v2.webp"}" alt=""/><header class="menu-header">${buttonIcon("back", "返回主界面", "home")}<h1>${modeName()}</h1><span class="coin-badge">${icon("star")}${totalCoins()} / ${modeIndices(mode).length * 3}</span></header><div class="chapter-heading"><div class="chapter-pager"><button id="previous-chapter" aria-label="上一章" ${chapter === 1 ? "disabled" : ""}>‹</button><span>第${["", "一", "二", "三", "四"][chapter] ?? chapter}章</span><button id="next-chapter" aria-label="下一章" ${chapter === chapterCount() ? "disabled" : ""}>›</button></div><h2>${mode === "horror" ? "夜幕初临" : chapterNames[chapter] ?? "新的水路"}</h2>${mode === "horror" ? '<p class="night-caption">灯灭之后，奶蛙还在笑。</p>' : ""}</div><nav class="level-map" aria-label="选择关卡">${levels
+    `<main class="menu-stage chapter-screen screen-enter" aria-label="${modeName()}选关"><img class="cover-art chapter-art" src="${mode === "horror" ? horrorChapters[chapter].art : "/assets/scenes/bath-cover-v2.webp"}" alt=""/><header class="menu-header">${buttonIcon("back", "返回主界面", "home")}<h1>${modeName()}</h1><span class="coin-badge">${icon("star")}${totalCoins()} / ${modeIndices(mode).length * 3}</span></header><div class="chapter-heading"><div class="chapter-pager"><button id="previous-chapter" aria-label="上一章" ${chapter === 1 ? "disabled" : ""}>‹</button><span>第${["", "一", "二", "三", "四"][chapter] ?? chapter}章</span><button id="next-chapter" aria-label="下一章" ${chapter === chapterCount() ? "disabled" : ""}>›</button></div><h2>${mode === "horror" ? horrorChapters[chapter].title : chapterNames[chapter] ?? "新的水路"}</h2>${mode === "horror" ? `<p class="night-caption">${horrorChapters[chapter].caption}</p>` : ""}</div><nav class="level-map" aria-label="选择关卡">${levels
       .map((level, index) => {
         if (modeOf(index) !== mode || (level.chapter ?? 1) !== chapter) return "";
         const number = modeIndices(mode).indexOf(index) + 1;

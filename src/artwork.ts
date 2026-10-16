@@ -5,6 +5,7 @@ export const artworkPaths = {
   hauntedBath: "/assets/scenes/haunted-bath-v1.webp",
   hauntedCorridor: "/assets/scenes/haunted-corridor-v1.webp",
   hauntedMachine: "/assets/scenes/haunted-machine-v1.webp",
+  hauntedLaundry: "/assets/scenes/haunted-laundry-v1.webp",
   hauntedFrog: "/assets/character/haunted-frog-v1.webp",
   pumpkin: "/assets/props/pumpkin-v1.webp",
   frog: "/assets/character/milk-frog-atlas.webp",

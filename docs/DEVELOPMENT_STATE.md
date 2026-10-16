@@ -1,10 +1,18 @@
 # 开发状态与后续计划
 
-## 0.9.1 iPhone 声音兼容修复候选
+## 0.10.0 恐怖模式第二章候选
+
+Issue #31：新增“地下回声”三关（腐根封门、怨水洗衣间、午夜回风），恐怖模式由三关扩为六关。新增地下洗衣间绘制场景，组合水草、有限紫水、双海绵、风扇和污水池；保留普通十二关、原恐怖第一章、声音兼容、经典捧腹大笑与 v1 存档。76 项业务测试与 1 项 PWA 检查通过，浏览器三关实玩全币、暂停、导入导出和离线冷启动已验收，触摸真机未覆盖。详细证据见 [VERIFICATION.md](VERIFICATION.md)；发布证据另记在对应 PR。
+
+## 最近核对发布：0.9.1
+
+PR #30 合并 SHA `2be41c946b95ed973367fa8d7ff95143cfc610d5`，[发布 run 38743106369](https://github.com/lingyunmo/nwaxz/actions/runs/38743106369) 三个作业成功。公网版本、SHA、bundle 与四段 MP3 MIME/内容已核对，浏览器更新保留存档和偏好；[发布证据](https://github.com/lingyunmo/nwaxz/pull/30#issuecomment-6193336224)。真实 iPhone Safari/微信扬声器听感仍待用户确认，不能以桌面验收代替。
+
+## 已发布版本 0.9.1
 
 Issue #29：桌面可发声而 iPhone Safari/微信无声。优先请求 playback 媒体会话；无此接口或接口受限的 Apple 触控设备使用独立静音 MP3 桥接。pointerup、touchend、click 都会重试解锁，不再等候永不完成的旧 resume；设置新增“恢复声音”并直接试听音效，保留音乐/音效偏好、原配乐和存档。68 项业务测试与 1 项 PWA 检查通过；候选浏览器验证和真实手机的边界见 [VERIFICATION.md](VERIFICATION.md)。
 
-## 最近核对发布：0.9.0
+## 已发布版本 0.9.0（发布证据）
 
 PR #28 合并 SHA `c800bb7ed5da7503372c82b5893cdb80f29d492e`，[发布 run 38736394083](https://github.com/lingyunmo/nwaxz/actions/runs/38736394083) 的 Verify、Build image、Deploy nwaxz 均成功。公网版本、精确 SHA、八项声画文件及前端 bundle 均核对，更新后旧存档和偏好保留。证据见 [PR #28 发布记录](https://github.com/lingyunmo/nwaxz/pull/28#issuecomment-6192377516)。该验收当时未覆盖真实 iPhone 扬声器，用户随后反馈 iPhone 无声；0.9.1 为此补充播放兼容修复。
 

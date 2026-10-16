@@ -15,7 +15,7 @@ export type Level = {
   solution: Point[];
   chapter?: number;
   mode?: "horror";
-  scene?: "bath" | "workshop" | "hauntedBath" | "hauntedCorridor" | "hauntedMachine";
+  scene?: "bath" | "workshop" | "hauntedBath" | "hauntedCorridor" | "hauntedMachine" | "hauntedLaundry";
   pumpkins?: Point[];
   initialWater?: number;
   fans?: Fan[];
@@ -242,6 +242,47 @@ const horrorLevels: Level[] = [
     coins: [{ x: 135, y: 372 }, { x: 285, y: 300 }, { x: 397, y: 530 }],
     pumpkins: [{ x: 80, y: 480 }, { x: 315, y: 248 }, { x: 430, y: 463 }, { x: 66, y: 711 }],
     solution: [{ x: 104, y: 198 }, { x: 104, y: 374 }, { x: 170, y: 374 }, { x: 174, y: 300 }, { x: 395, y: 300 }, { x: 397, y: 450 }, { x: 392, y: 592 }],
+  },
+  {
+    id: "rotten-root", mode: "horror", chapter: 2, scene: "hauntedLaundry",
+    title: "腐根封门", hint: "先挖路，开紫水阀喂饱腐根，等它枯萎再开清水阀。别把紫水引进浴缸。",
+    initialWater: 0,
+    plants: [{ position: { x: 160, y: 368 }, rect: { x: 128, y: 304, w: 64, h: 64 }, tolerance: 12 }],
+    valves: [
+      { position: { x: 70, y: 150 }, nozzle: { x: 104, y: 178 }, drops: 208, rate: 40 },
+      { position: { x: 96, y: 276 }, nozzle: { x: 132, y: 304 }, drops: 12, rate: 12, kind: "sewage", spread: 0 },
+    ],
+    rocks: [{ x: 16, y: 328, w: 108, h: 32 }, { x: 196, y: 328, w: 268, h: 32 }, { x: 16, y: 480, w: 248, h: 24 }],
+    coins: [{ x: 135, y: 250 }, { x: 230, y: 425 }, { x: 350, y: 554 }],
+    pumpkins: [{ x: 54, y: 390 }, { x: 318, y: 440 }, { x: 426, y: 562 }, { x: 66, y: 711 }],
+    solution: [{ x: 104, y: 198 }, { x: 160, y: 282 }, { x: 160, y: 386 }, { x: 290, y: 438 }, { x: 302, y: 510 }, { x: 392, y: 592 }],
+  },
+  {
+    id: "haunted-laundry", mode: "horror", chapter: 2, scene: "hauntedLaundry",
+    title: "怨水洗衣间", hint: "挖出右上到左下的折返水路，再开清水阀。先挤右上的海绵，再挤左下的海绵。",
+    initialWater: 0,
+    valves: [{ position: { x: 70, y: 150 }, nozzle: { x: 104, y: 178 }, drops: 208, rate: 40 }],
+    sponges: [
+      { position: { x: 296, y: 320 }, rect: { x: 264, y: 288, w: 64, h: 64 }, release: { x: 296, y: 366 }, capacity: 128 },
+      { position: { x: 144, y: 488 }, rect: { x: 112, y: 456, w: 64, h: 64 }, release: { x: 144, y: 534 }, capacity: 128 },
+    ],
+    rocks: [{ x: 16, y: 312, w: 244, h: 32 }, { x: 332, y: 312, w: 132, h: 32 }, { x: 16, y: 480, w: 92, h: 32 }, { x: 180, y: 480, w: 284, h: 32 }],
+    coins: [{ x: 200, y: 238 }, { x: 230, y: 400 }, { x: 285, y: 565 }],
+    pumpkins: [{ x: 354, y: 270 }, { x: 86, y: 416 }, { x: 238, y: 552 }, { x: 66, y: 711 }],
+    solution: [{ x: 104, y: 198 }, { x: 296, y: 268 }, { x: 296, y: 376 }, { x: 144, y: 426 }, { x: 144, y: 540 }, { x: 392, y: 592 }],
+  },
+  {
+    id: "midnight-draft", mode: "horror", chapter: 2, scene: "hauntedLaundry",
+    title: "午夜回风", hint: "右上的紫水池不要挖。开清水阀给海绵蓄水，挤出水并开风扇，越过高台后从石板左侧折回。",
+    initialWater: 0,
+    valves: [{ position: { x: 70, y: 150 }, nozzle: { x: 104, y: 178 }, drops: 208, rate: 40 }],
+    extraPools: [{ x: 360, y: 136, columns: 8, rows: 8, kind: "sewage" }],
+    sponges: [{ position: { x: 108, y: 280 }, rect: { x: 76, y: 248, w: 64, h: 64 }, release: { x: 108, y: 326 }, capacity: 128 }],
+    fans: [{ position: { x: 48, y: 380 }, zone: { x: 64, y: 256, w: 312, h: 160 }, force: { x: 1800, y: -1000 }, on: false }],
+    rocks: [{ x: 16, y: 272, w: 56, h: 24 }, { x: 144, y: 272, w: 320, h: 24 }, { x: 16, y: 416, w: 184, h: 32 }, { x: 200, y: 328, w: 168, h: 120 }, { x: 264, y: 496, w: 200, h: 24 }],
+    coins: [{ x: 108, y: 228 }, { x: 285, y: 300 }, { x: 235, y: 524 }],
+    pumpkins: [{ x: 430, y: 220 }, { x: 165, y: 345 }, { x: 406, y: 455 }, { x: 66, y: 711 }],
+    solution: [{ x: 104, y: 198 }, { x: 108, y: 374 }, { x: 170, y: 374 }, { x: 174, y: 300 }, { x: 395, y: 300 }, { x: 397, y: 460 }, { x: 235, y: 480 }, { x: 235, y: 540 }, { x: 392, y: 592 }],
   },
 ];
 export const levels: Level[] = [...normalLevels, ...horrorLevels];

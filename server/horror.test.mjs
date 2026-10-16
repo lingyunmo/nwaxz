@@ -8,7 +8,7 @@ import { FluidWorld } from "../src/game/fluid.ts";
 
 test("normal and horror have independent starts, unlocks and endings", () => {
   const normal = modeIndices("normal"), horror = modeIndices("horror"), progress = emptyProgress();
-  assert.equal(normal.length, 12); assert.equal(horror.length, 3);
+  assert.equal(normal.length, 12); assert.equal(horror.length, 6);
   assert.ok(canEnter(normal[0], progress)); assert.ok(canEnter(horror[0], progress));
   assert.equal(canEnter(horror[1], progress), false);
   assert.equal(canEnter(-1, progress), false);
@@ -20,6 +20,90 @@ test("normal and horror have independent starts, unlocks and endings", () => {
   assert.equal(nextLevel(horror[0]), horror[1]);
   assert.deepEqual(parseProgress(JSON.parse(JSON.stringify(progress))), progress);
   assert.deepEqual(mergeProgress(progress, emptyProgress()), progress);
+});
+
+test("the original horror finale unlocks chapter two without changing old records", () => {
+  const horror = modeIndices("horror"), progress = emptyProgress();
+  for (const index of horror.slice(0, 3)) progress.levels[levels[index].id] = {
+    completed: true, collected: 7, bestScore: 3333, bestTimeMs: 12000,
+  };
+  const old = structuredClone(progress);
+  assert.equal(nextLevel(horror[2]), horror[3]);
+  assert.ok(canEnter(horror[3], progress));
+  assert.equal(canEnter(horror[4], progress), false);
+  assert.deepEqual(parseProgress(JSON.parse(JSON.stringify(old))), old);
+  const newer = emptyProgress();
+  newer.levels[levels[horror[3]].id] = { completed: true, collected: 7, bestScore: 3200, bestTimeMs: 30000 };
+  const merged = mergeProgress(old, newer);
+  assert.ok(canEnter(horror[4], merged));
+  assert.equal(canEnter(horror[5], merged), false);
+  for (const [id, record] of Object.entries(old.levels)) assert.deepEqual(merged.levels[id], record);
+  assert.deepEqual(horror.map(i => levels[i].chapter ?? 1), [1, 1, 1, 2, 2, 2]);
+  assert.equal(new Set(levels.map(level => level.id)).size, levels.length);
+});
+
+function prepare(id) {
+  const level = levels.find(level => level.id === id);
+  assert.ok(level);
+  const world = new FluidWorld(level);
+  for (let i = 1; i < level.solution.length; i++) world.digLine(level.solution[i - 1], level.solution[i]);
+  return world;
+}
+function tick(world, frames, squeeze = []) {
+  for (let i = 0; i < frames; i++) {
+    world.advance(1 / 60);
+    if (i % 60 === 59) for (const index of squeeze) world.squeezeSponge(index);
+  }
+  assert.equal(world.particles.length + world.delivered + world.dirtyDelivered + world.storedWater + world.plantAbsorbed, world.emitted);
+}
+
+test("rotten roots stop early clean water until the finite sewage dose is absorbed", () => {
+  const world = prepare("rotten-root");
+  world.toggleValve(0); tick(world, 1200);
+  assert.equal(world.delivered, 0);
+  assert.equal(world.plantRemaining[0], 12);
+  assert.equal(world.emitted, 208);
+  world.toggleValve(1); tick(world, 1800);
+  assert.equal(world.plantRemaining[0], 0);
+  assert.equal(world.plantAbsorbed, 12);
+  assert.equal(world.valveRemaining[1], 0);
+  assert.ok(world.delivered >= 100);
+  assert.equal(world.collected, 7); assert.equal(world.dirtyDelivered, 0);
+});
+
+test("haunted laundry requires both sponges, even after the finite tank empties", () => {
+  const world = prepare("haunted-laundry");
+  world.toggleValve(0); tick(world, 1200);
+  assert.equal(world.spongeContents[0].length, 128);
+  assert.equal(world.delivered, 0);
+  tick(world, 1800, [0]);
+  assert.equal(world.spongeContents[1].length, 128);
+  assert.equal(world.delivered, 0);
+  tick(world, 1800, [0, 1]);
+  assert.ok(world.delivered >= 100);
+  assert.equal(world.collected, 7); assert.equal(world.dirtyDelivered, 0);
+  assert.equal(world.emitted, 208);
+});
+
+test("midnight draft needs squeezing and wind while the untouched dirty pool stays isolated", () => {
+  const world = prepare("midnight-draft");
+  world.toggleValve(0); world.toggleFan(0); tick(world, 1200);
+  assert.equal(world.spongeContents[0].length, 128);
+  assert.equal(world.delivered, 0);
+  world.toggleFan(0); tick(world, 1800, [0]);
+  assert.ok(world.delivered < 100);
+  world.toggleFan(0); tick(world, 2400, [0]);
+  assert.ok(world.delivered >= 100);
+  assert.equal(world.collected, 7); assert.equal(world.dirtyDelivered, 0);
+  assert.equal(world.particles.filter(p => p.kind === "sewage").length, 64);
+});
+
+test("opening the forbidden midnight pool contaminates the route and cannot be treated as clean water", () => {
+  const world = prepare("midnight-draft");
+  world.digLine({ x: 388, y: 198 }, { x: 388, y: 220 });
+  world.digLine({ x: 388, y: 220 }, { x: 108, y: 220 });
+  world.toggleValve(0); world.toggleFan(0); tick(world, 2400, [0]);
+  assert.ok(world.dirtyDelivered > 0, "the pool is a real failure hazard, not decoration");
 });
 
 test("haunted movement is bounded and continuous, with slow intermittent illumination", () => {

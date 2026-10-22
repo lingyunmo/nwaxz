@@ -3,11 +3,13 @@ import type { Scene } from "@babylonjs/core/scene.js";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh.js";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode.js";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder.js";
+import type { Texture } from "@babylonjs/core/Materials/Textures/texture.js";
 import { Vector3, Color3 } from "@babylonjs/core/Maths/math.js";
+import { PaintedFrog } from "./frog.ts";
 import { CELL, colorMaterial } from "./scene.ts";
 import { PROPS, type EscapeWorld } from "./world.ts";
 
-export function installEscapeModels(scene: Scene, props: AssetContainer, frog: AssetContainer) {
+export function installEscapeModels(scene: Scene, props: AssetContainer, textures: { original: Texture; actions: Texture }, reduced = false) {
   const propRoots = new Map<string, TransformNode>();
   const cabinets = new Map<string, { left: TransformNode; right: TransformNode }>();
   let wheel: TransformNode | undefined;
@@ -54,23 +56,14 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, frog: A
     }
     propRoots.set(note.id, root);
   }
-  const actor = frog.instantiateModelsToScene(n => `hunter:${n}`, false, { doNotInstantiate: true });
-  const actorRoot = new TransformNode("solid-hunter", scene);
-  for (const root of actor.rootNodes) root.parent = actorRoot;
-  const actorMeshes = actorRoot.getChildMeshes();
-  for (const mesh of actorMeshes) { mesh.isPickable = false; mesh.receiveShadows = true; }
-  const clips = new Map(actor.animationGroups.map(group => {
-    const name = group.name.replace(/^hunter:/, "");
-    group.stop(); group.enableBlending = true; group.blendingSpeed = .12;
-    return [name, group];
-  }));
-  for (const name of ["idle", "walk", "run", "laugh"]) if (!clips.has(name)) throw new Error(`Missing ${name} animation`);
-  let animation = "", captured = false, stillFor = 0;
+  const actor = new PaintedFrog(scene, textures, reduced);
+  const actorRoot = actor.root, actorMeshes = actor.meshes;
+  let captured = false, stillFor = 1;
   const previous = new Vector3(-100, 0, -100);
-  const environment = scene.meshes.filter(m => !actorMeshes.includes(m));
+  const environment = scene.meshes.filter(m => !actorMeshes.some(actor => actor === m));
   const oldVisibility = new Map<AbstractMesh, boolean>();
   return {
-    actorRoot, actorMeshes, cabinets, propRoots, clips,
+    actorRoot, actorMeshes, cabinets, propRoots, actor,
     animate(world: EscapeWorld, dt: number) {
       const d = world.data, caught = d.phase === "caught" || d.phase === "lost", h = d.hunter;
       if (caught !== captured) {
@@ -81,15 +74,10 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, frog: A
         }
       }
       actorRoot.position.set(h.x * CELL, 0, h.z * CELL);
-      actorRoot.rotation.y = Math.PI / 2 - h.angle;
       stillFor = Vector3.DistanceSquared(actorRoot.position, previous) > .000001 ? 0 : stillFor + dt;
       // A path waypoint may cost one simulation frame. Keep the walking cycle
       // through those brief gaps instead of restarting idle/walk at each tile.
-      const clip = caught ? "laugh" : h.state === "chase" ? "run" : stillFor < .22 ? "walk" : "idle";
-      if (clip !== animation) {
-        for (const c of clips.values()) c.stop();
-        clips.get(clip)!.start(true, 1); animation = clip;
-      }
+      actor.animate(world, dt, stillFor < .22);
       previous.copyFrom(actorRoot.position);
       for (const [id, doors] of cabinets) {
         // Actual ajar doors, not a slit overlay pasted over the camera.
@@ -102,6 +90,6 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, frog: A
       const powerMat = props.materials.find(m => m.name === "fuse_on_green");
       if (powerMat && "emissiveColor" in powerMat) (powerMat.emissiveColor as Color3).set(0, d.power ? .6 : .015, 0);
     },
-    dispose() { actor.dispose(); actorRoot.dispose(); },
+    dispose() { actor.dispose(); },
   };
 }

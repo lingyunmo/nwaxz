@@ -2,7 +2,9 @@
 
 本批原创浴场封面、材质与道具图集构成极限恐怖 v1 的绘制美术来源；旧恐怖奶蛙图集继续作为专用恐怖角色参考，保留经典捧腹大笑造型。普通模式的 Cute turnaround 不用于恐怖角色建模。未复制《恐怖奶奶》的地图、图像或声音。FFmpeg 仅做缩放及 WebP 编码，PNG 母版保留本地生成目录，不进入运行缓存。
 
-已发布的 0.11.0 逃生篇采用 Canvas 2D 光线投射，以绘制纹理和透明道具图集表现立体投影；0.11.0 的准确发布证据见[GitHub记录](https://github.com/lingyunmo/nwaxz/pull/34#issuecomment-6343588123)。0.12.0 的合并前候选将逃生场景升级为 Babylon.js 9.32 / WebGL 真3D，加入可开合的双门衣柜与真实柜内藏身空间、木柜和抽屉 UV 木纹、金属阀门、配电箱、铁网与管道。普通12关和恐怖洗澡6关的美术不变。候选已通过无窗口 Chromium 软件渲染验收，包括桌面与手机尺寸视口、CDP 触控和上下看、暂停冻结、抓捕大笑与下一夜、GLB 缓存及断网冷重载；脚本错误为0。最终发布状态以对应 PR 的 CI 与公网核对为准；真人手机帧率和扬声器听感未验证，低端手机表现待实测。
+已发布的 0.11.0 逃生篇采用 Canvas 2D 光线投射，以绘制纹理和透明道具图集表现立体投影；0.11.0 的准确发布证据见[GitHub记录](https://github.com/lingyunmo/nwaxz/pull/34#issuecomment-6343588123)。0.12.0 已发布 Babylon.js 9.32 / WebGL 真3D场景，加入可开合的双门衣柜与真实柜内藏身空间、木柜和抽屉 UV 木纹、金属阀门、配电箱、铁网与管道。[0.12.0 发布证据及精确 main SHA `f6f4dee296eb280aa387dbfc440b33024b2287a0`](https://github.com/lingyunmo/nwaxz/pull/38#issuecomment-6349588315)。普通12关和恐怖洗澡6关的美术不变。
+
+0.13.0 仍是本地候选、尚未发布。为贴合用户指定的恐怖奶蛙形象，追捕者从原骨骼 GLB 切换为原画二维直立角色：仅绕 Y 轴面向玩家，受场景墙体遮挡。站立和经典捧腹大笑直接取自 `haunted-frog-v1.webp`，新增 `haunted-frog-actions-v2.webp` 的 4×2 八动作（眨眼、左看、右看、搜查、窥探、扑抓、跑步左步、跑步右步），呼吸/笑/步态连续播放并约 120 ms 混合切换。真实3D家具继续使用 GLB。新候选的浏览器和真机表现尚待验收，不在此记录未完成的帧率或听感结论。
 
 | 素材 | 项目路径 | 格式 |
 | --- | --- | --- |
@@ -10,10 +12,13 @@
 | 道具 | `public/assets/props/escape-props-v1.webp` | 768 × 1152，2×3 透明图集 |
 | 封面 | `public/assets/scenes/escape-cover-v1.webp` | 576 × 960 |
 | 出口细节 | `public/assets/props/escape-details-v1.webp` | 768 × 768，2×2 透明图集 |
+| 恐怖奶蛙动作图集 | `public/assets/character/haunted-frog-v1.webp` | 复用站立与经典捧腹大笑原画 |
+| 恐怖奶蛙动作图集 | `public/assets/character/haunted-frog-actions-v2.webp` | 4×2，八个凝视、搜查、扑抓与跑步动作 |
+| 像素地图图集 | `public/assets/ui/escape-map-atlas-v1.webp` | 4×2，石墙、地板、木材、纸张、水、迷雾、铜与危险纹理 |
 | 逃生家具与设施模型 | `public/assets/models/escape-props-v1.glb` | GLB，六组根节点：衣柜、抽屉、配电箱、阀门、铁网、管道 |
-| 恐怖奶蛙模型 | `public/assets/models/extreme-milk-frog-v1.glb` | GLB，18关节 skin，idle、walk、run、laugh 四段动画 |
+| 恐怖奶蛙模型源资产 | `public/assets/models/extreme-milk-frog-v1.glb` | GLB，保留的旧18关节模型；0.13.0 运行时及预缓存不使用 |
 
-两个 GLB 由 `ops/build_escape_props.py` 和 `ops/build_escape_character.py` 生成；已有绘制材质图集 `escape-materials-v1.webp` 的右上旧木门象限裁切后用于模型木材 UV，并作为 PNG 嵌入道具 GLB。恐怖角色以 `.local/modeling/extreme-milk-frog-turnaround-v1.png`、既有 `haunted-frog-v1.webp` 和逃生封面为依据；`milk-frog-turnaround-v1.png`、`normal-milk-frog-turnaround-v1.png` 是普通模式 Cute 角色建模草稿，不作为恐怖版参考。Vite PWA 预缓存配置覆盖 GLB 文件，0.12 候选已通过缓存及断网冷重载验收。候选浏览器脚本为 `ops/escape-browser.mjs`，需要独立安装 Playwright 或配置 `PLAYWRIGHT_MODULE`，可选配置 `CHROMIUM_PATH`，并始终以 headless 软件渲染和独立 profile 运行。
+两个 GLB 源资产由 `ops/build_escape_props.py` 和 `ops/build_escape_character.py` 生成；已有绘制材质图集 `escape-materials-v1.webp` 的右上旧木门象限裁切后用于家具模型木材 UV，并作为 PNG 嵌入道具 GLB。当前角色表现使用恐怖奶蛙原画图集；`milk-frog-turnaround-v1.png`、`normal-milk-frog-turnaround-v1.png` 是普通模式 Cute 角色建模草稿，不作为恐怖版参考。0.13.0 运行时保留家具 GLB，但不加载或预缓存角色 GLB。候选浏览器脚本为 `ops/escape-browser.mjs`，需要独立安装 Playwright 或配置 `PLAYWRIGHT_MODULE`，可选配置 `CHROMIUM_PATH`，并始终以 headless 软件渲染和独立 profile 运行。地图图集用于探索地图的材质采样。
 
 ## 纹理提示
 

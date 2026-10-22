@@ -1,12 +1,16 @@
 # 开发状态与后续计划
 
-## 0.12.0 真3D逃生候选
+## 0.13.0 本地候选，尚未发布
 
-Issue #35：极限恐怖篇使用 Babylon.js 9.32 / WebGL，场景采用固定 UV 的绘制纹理，衣柜、阀门、门和奶蛙均有真实体积；可上下转头，藏身位置在柜内，经典捧腹大笑使用骨骼循环动画。双方共用家具碰撞，原18关、IndexedDB v1、独立逃生备份及声音偏好保留。
+根据用户对角色形象还原的要求，逃生场景沿用 Babylon.js 9.32 / WebGL 真3D和家具几何，追捕者改用恐怖奶蛙原画二维直立图集，仅绕 Y 轴面向玩家并受墙体遮挡。站立和捧腹大笑沿用 `haunted-frog-v1.webp`；`haunted-frog-actions-v2.webp` 的 4×2 八格动作是眨眼、左看、右看、搜查、窥探、扑抓、跑步左步、跑步右步。连续呼吸、笑和步态搭配约 120 ms 动作混合。旧角色 GLB 保留为源资产，运行时和预缓存不再使用；家具 GLB 仍保留。
 
-本地 `pnpm check` 93 项业务测试与 1 项 PWA 检查通过；无窗口 Chromium 软件渲染已覆盖桌面/手机视口、CDP触控、暂停冻结、抓捕/下一夜、柜内进出、备份导入导出和断网冷重载。真实手机性能与扬声器未验证；此处记录合并前验收，最终发布状态见 [VERIFICATION.md](VERIFICATION.md)。
+常驻 HUD 收起任务与教程，改为图标物品栏、紧凑体力/电量、附近交互提示和右上像素探索小地图；暂停地图显示全图和线索。地图图集为 `public/assets/ui/escape-map-atlas-v1.webp`；可选 `explored` 字段兼容无该字段的 v1 旧存档。`pnpm check` 的99项业务测试及1项 PWA 检查通过；无窗口 Chromium 软件渲染在900×650、390×844视口通过键盘俯仰、CDP触控移动/转头、暂停冻结、衣柜进出、原画捧腹大笑、下一夜、备份导入导出及离线冷重载，控制台/页面错误为0。另验桌面隐藏摇杆、HUD无任务长文、手机热栏不重叠；本地标签更新后确认原画大笑显示、IndexedDB进度对象逐字节不变。详细结果见[0.13.0候选验收](VERIFICATION.md#0130-原画动作与探索-hud合并前候选验收2026-10-23)。本地候选尚未合并发布，真实手机帧率与扬声器听感未验收；原18关洗澡玩法不变。
 
-## 最近核对发布：0.11.0
+## 已发布版本 0.12.0：真3D逃生
+
+PR #38 的发布证据记录 main 精确 SHA `f6f4dee296eb280aa387dbfc440b33024b2287a0`：[发布证据](https://github.com/lingyunmo/nwaxz/pull/38#issuecomment-6349588315)。该版本将极限恐怖篇升级为 Babylon.js 9.32 / WebGL 真3D场景，包含上下看、真实柜内藏身与 idle/walk/run/laugh 骨骼动画。历史验收与发布记录见 [VERIFICATION.md](VERIFICATION.md)。
+
+## 历史核对发布：0.11.0
 
 PR #34 合并 SHA `3ce7ed929e3ef9c03e1c5a0c749c5f22e0520ba0`，[run 39796520910](https://github.com/lingyunmo/nwaxz/actions/runs/39796520910) 已成功，公网版本、精确 SHA 和静态资源内容均核对。[发布证据](https://github.com/lingyunmo/nwaxz/pull/34#issuecomment-6343588123)。
 

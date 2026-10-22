@@ -12,9 +12,10 @@ import "@babylonjs/loaders/glTF/2.0/Extensions/KHR_materials_emissive_strength.j
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent.js";
 import { aimCamera, CELL, createEscapeScene } from "./scene.ts";
 import { installEscapeModels } from "./models.ts";
-import { DOORS, MAP, ROOMS, SIZE, type EscapeWorld } from "./world.ts";
+import { DOORS, type EscapeWorld } from "./world.ts";
+import { EscapeMap } from "./minimap.ts";
 
-export type EscapeArt = { materials: HTMLImageElement };
+export type EscapeArt = { materials: HTMLImageElement; map: HTMLImageElement };
 export class EscapeRenderer {
   private engine: Engine;
   private view;
@@ -25,9 +26,11 @@ export class EscapeRenderer {
   private height = 1.65;
   private wasHidden = false;
   private disposed = false;
+  private map: EscapeMap;
   constructor(private canvas: HTMLCanvasElement, art: EscapeArt, private reduced: boolean) {
     this.engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false, powerPreference: "low-power" }, false);
     this.view = createEscapeScene(this.engine);
+    this.map = new EscapeMap(art.map);
     const beam = new DynamicTexture("soft-flashlight-optics", 128, this.view.scene, false);
     const bc = beam.getContext(), gradient = bc.createRadialGradient(64, 64, 0, 64, 64, 64);
     gradient.addColorStop(0, "#ffffff"); gradient.addColorStop(.38, "#eeeeee");
@@ -50,13 +53,15 @@ export class EscapeRenderer {
   }
   async load() {
     try {
-      for (const name of ["escape-props-v1.glb", "extreme-milk-frog-v1.glb"]) {
+      for (const name of ["escape-props-v1.glb"]) {
         const container = await LoadAssetContainerAsync(`/assets/models/${name}`, this.view.scene, { pluginOptions: { gltf: { animationStartMode: 0 } } });
         if (this.disposed) { container.dispose(); return; }
         this.containers.push(container);
       }
-      this.models = installEscapeModels(this.view.scene, this.containers[0], this.containers[1]);
-      for (const mesh of [...this.models.actorMeshes, ...[...this.models.propRoots.values()].flatMap(n => n.getChildMeshes())]) this.shadow.addShadowCaster(mesh, false);
+      const original = new Texture("/assets/character/haunted-frog-v1.webp", this.view.scene);
+      const actions = new Texture("/assets/character/haunted-frog-actions-v2.webp", this.view.scene);
+      this.models = installEscapeModels(this.view.scene, this.containers[0], { original, actions }, this.reduced);
+      for (const mesh of [...this.models.propRoots.values()].flatMap(n => n.getChildMeshes())) this.shadow.addShadowCaster(mesh, false);
       for (const door of this.view.doors.values()) for (const mesh of door.getChildMeshes()) this.shadow.addShadowCaster(mesh, false);
       await this.view.scene.whenReadyAsync();
     } catch (e) { this.dispose(); throw e; }
@@ -96,16 +101,8 @@ export class EscapeRenderer {
     }
     this.engine.beginFrame(); this.view.scene.render(); this.engine.endFrame();
   }
-  drawMap(canvas: HTMLCanvasElement, world: EscapeWorld) {
-    canvas.width = canvas.height = 500; const c = canvas.getContext("2d")!, scale = 20;
-    c.fillStyle = "#151e20"; c.fillRect(0, 0, 500, 500);
-    for (let z = 0; z < SIZE; z++) for (let x = 0; x < SIZE; x++) if (!MAP[z][x]) { c.fillStyle = "#657273"; c.fillRect(x * scale + 1, z * scale + 1, 18, 18); }
-    for (const door of DOORS) { c.fillStyle = world.data.opened.includes(door.id) ? "#9db98a" : "#c99b57"; c.fillRect(door.x * scale + 2, door.z * scale + 6, 16, 8); }
-    c.textAlign = "center"; c.font = "bold 13px sans-serif";
-    for (const room of ROOMS) { c.fillStyle = "#152024"; c.fillText(room.name, (room.x + room.w / 2) * scale, (room.z + room.h / 2) * scale); }
-    c.fillStyle = "#b9dbb4"; c.fillRect(20 * scale, 23 * scale, 20, 13); c.font = "11px sans-serif"; c.fillText("下水道", 20.5 * scale, 24.5 * scale);
-    const p = world.data.player; c.fillStyle = "#ffe29b"; c.beginPath(); c.arc(p.x * scale, p.z * scale, 5, 0, Math.PI * 2); c.fill();
-    c.strokeStyle = "#ffe29b"; c.beginPath(); c.moveTo(p.x * scale, p.z * scale); c.lineTo((p.x + Math.cos(p.angle) * .75) * scale, (p.z + Math.sin(p.angle) * .75) * scale); c.stroke();
+  drawMap(canvas: HTMLCanvasElement, world: EscapeWorld, compact = false) {
+    this.map.draw(canvas, world, compact);
   }
   dispose() {
     if (this.disposed) return;

@@ -1,4 +1,6 @@
 import "./style.css";
+import "./hud.css";
+import { icon } from "./icons.ts";
 import { AudioManager } from "../audio.ts";
 import type { Settings } from "../settings.ts";
 import { EscapeWorld, ITEM_NAMES, type EscapeSnapshot } from "./world.ts";
@@ -34,6 +36,9 @@ export class EscapeGame {
   private saveAt = 0;
   private hudAt = 0;
   private heartbeatAt = 0;
+  private lastNotice = "";
+  private noticeUntil = 0;
+  private inventoryKey = "";
   private phase = "playing";
   private music = true;
   private sound = true;
@@ -48,12 +53,14 @@ export class EscapeGame {
       else this.sound = settings.sound;
     } catch { this.storageWarning = "逃生存档暂时无法读取；原洗澡存档仍保留。可先导出逃生备份。"; }
     this.root.innerHTML = `<main class="escape-shell" aria-label="极限恐怖逃生"><canvas id="escape-view" tabindex="0" aria-label="3D第一人称逃生。WASD移动，拖动上下左右转头，方向键转身，PageUp和PageDown抬头低头，Shift奔跑，C蹲行，F手电，E交互，Q丢石子，Esc暂停。"></canvas>
-      <header class="escape-hud"><button id="escape-pause" aria-label="暂停逃生">Ⅱ</button><div><span id="escape-room">地下浴场</span><strong id="escape-goal">寻找下水道出口</strong></div><button id="escape-map" aria-label="查看地图">地图</button></header>
-      <div class="escape-inventory" id="escape-inventory" aria-label="随身物品"></div><div class="escape-crosshair" aria-hidden="true">＋</div>
-      <div class="escape-danger" id="escape-danger" role="status"></div><div class="escape-notice" id="escape-notice" role="status" aria-live="polite"></div>
-      <div class="escape-search" id="escape-search" hidden><span>搜索中 · 保持靠近</span><progress max="1.15" value="0" aria-label="搜索进度"></progress></div>
-      <div class="escape-bottom"><div class="escape-meters"><label>体力 <meter id="escape-stamina" min="0" max="100" value="100"></meter></label><label>手电 <meter id="escape-battery" min="0" max="100" value="100"></meter></label><span id="escape-night">第1夜 · 00:00</span></div>
-      <div class="escape-controls"><div class="escape-stick" id="escape-stick" aria-label="移动摇杆"><span></span></div><div class="escape-actions"><button id="escape-light" aria-label="开关手电">手电 F</button><button id="escape-crouch" aria-label="切换蹲行">蹲行 C</button><button id="escape-stone">石子 Q · 2</button><button id="escape-sprint" aria-label="按住奔跑">奔跑 ⇧</button></div></div><button class="escape-interact" id="escape-interact">靠近并看向可互动物品 · E</button></div>
+      <header class="escape-hud"><button id="escape-pause" class="escape-round" aria-label="暂停逃生">${icon("pause")}</button><div class="escape-location"><span id="escape-room">地下浴场</span><span id="escape-night">第1夜 · 00:00</span><div id="escape-lives" aria-label="剩余机会"></div></div></header>
+      <button id="escape-map" class="escape-map-button" aria-label="查看地图"><canvas id="escape-minimap" width="208" height="208" aria-hidden="true"></canvas><span>浴场地图 <kbd>M</kbd></span></button>
+      <div class="escape-crosshair" aria-hidden="true"></div><div class="escape-danger" id="escape-danger" role="status"></div><div class="escape-notice" id="escape-notice" role="status" aria-live="polite" hidden></div>
+      <div class="escape-search" id="escape-search" hidden><span>搜索中</span><progress max="1.15" value="0" aria-label="搜索进度"></progress></div>
+      <div class="escape-bottom"><div class="escape-meters"><label title="体力">${icon("run")}<meter id="escape-stamina" aria-label="体力" min="0" max="100" value="100"></meter></label><label title="手电电量">${icon("light")}<meter id="escape-battery" aria-label="手电电量" min="0" max="100" value="100"></meter></label></div>
+      <div class="escape-inventory" id="escape-inventory" aria-label="随身物品"></div>
+      <div class="escape-controls"><div class="escape-stick" id="escape-stick" aria-label="移动摇杆"><span></span></div><div class="escape-actions"><button id="escape-light" aria-label="开关手电" title="手电 F">${icon("light")}<kbd>F</kbd></button><button id="escape-crouch" aria-label="切换蹲行" title="蹲行 C">${icon("crouch")}<kbd>C</kbd></button><button id="escape-stone" aria-label="丢石子" title="石子 Q">${icon("stone")}<b id="escape-stones">2</b><kbd>Q</kbd></button><button id="escape-sprint" aria-label="按住奔跑" title="奔跑 Shift">${icon("run")}<kbd>⇧</kbd></button></div></div>
+      <button class="escape-interact" id="escape-interact" hidden>${icon("hand")}<span></span><kbd>E</kbd></button></div>
       <div id="escape-panel" class="escape-panel" role="dialog" aria-modal="true" aria-label="逃生菜单"></div><input id="escape-import" type="file" accept=".json,application/json" hidden></main>`;
     this.bind(); this.intro();
     this.raf = requestAnimationFrame(this.frame);
@@ -63,7 +70,8 @@ export class EscapeGame {
   private panel(html: string) {
     this.$(".escape-shell").classList.remove("intro-active");
     this.$(".escape-shell").classList.remove("capture-active");
-    this.$("#escape-panel").classList.remove("escape-intro");
+    this.$("#escape-panel").classList.remove("escape-intro", "escape-pause-panel");
+    this.$(".escape-shell").classList.add("menu-active");
     this.$("#escape-panel").hidden = false;
     this.$("#escape-panel").innerHTML = `<section class="escape-card">${html}</section>`;
     this.$("#escape-panel").querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
@@ -86,7 +94,7 @@ export class EscapeGame {
     this.button("escape-intro-import", () => this.$<HTMLInputElement>("#escape-import").click());
   }
   private async loadArt() {
-    const paths = { materials: "/assets/scenes/escape-materials-v1.webp" };
+    const paths = { materials: "/assets/scenes/escape-materials-v1.webp", map: "/assets/ui/escape-map-atlas-v1.webp" };
     return Object.fromEntries(await Promise.all(Object.entries(paths).map(async ([key, path]) => { const img = new Image(); img.src = path; await img.decode(); return [key, img]; }))) as EscapeArt;
   }
   private async start(resume: boolean) {
@@ -94,7 +102,7 @@ export class EscapeGame {
     this.renderer?.dispose(); this.renderer = undefined;
     this.audio.setMode("escape"); this.applySound(); void this.audio.unlock();
     if (!document.fullscreenElement && document.documentElement.requestFullscreen) void document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
-    this.panel('<p class="escape-eyebrow">下水道逃生 · 3D</p><h2>有人在走廊里……</h2><p>正在装载浴场、立体模型与声音</p>');
+    this.panel('<p class="escape-eyebrow">下水道逃生 · 3D</p><h2>有人在走廊里……</h2><p>门后传来一阵脚步声</p>');
     try {
       this.art ??= await this.loadArt();
       if (this.disposed) return;
@@ -116,18 +124,20 @@ export class EscapeGame {
   private resume() {
     this.$(".escape-shell").classList.remove("capture-active");
     this.$("#escape-view").setAttribute("aria-label", "3D第一人称逃生。WASD移动，拖动画面上下左右转头，E交互，PageUp和PageDown抬头低头，Esc暂停。");
-    this.$("#escape-panel").hidden = true; this.paused = false; this.lastFrame = 0; this.clearInput();
+    this.$("#escape-panel").hidden = true; this.$(".escape-shell").classList.remove("menu-active"); this.updateHud(); this.paused = false; this.lastFrame = 0; this.clearInput();
     this.$("#escape-view").focus({ preventScroll: true }); this.audio.setPlaying(true); void this.audio.unlock();
   }
   private clearInput() { this.keys.clear(); this.stick = { x: 0, y: 0 }; this.look = undefined; this.sprinting = false; this.$("#escape-stick span").style.transform = "translate(0,0)"; }
   private pause(map = false) {
     if (!this.started || this.world.data.phase !== "playing") return;
     this.paused = true; this.clearInput(); this.audio.setPlaying(false); this.save();
-    this.panel(`<p class="escape-eyebrow">时间和奶蛙都已暂停</p><h2>${map ? "浴场平面图" : "屏住呼吸"}</h2><p>${safe(this.world.objective)}</p><canvas id="escape-floorplan" aria-label="浴场地图，黄色圆点是你"></canvas>
-      <p class="escape-map-legend">黄色：你 · 棕色：门 · 绿色：已打开<br>北侧寝室／档案室／值班室，南侧洗衣间／配电室／检修室</p>
-      <button id="escape-resume" class="escape-primary">继续逃生</button><div class="escape-setting-row"><label><input id="escape-music" type="checkbox" ${this.music ? "checked" : ""}>恐怖配乐</label><label><input id="escape-sound" type="checkbox" ${this.sound ? "checked" : ""}>笑声与音效</label><button id="escape-audio-recover">恢复声音</button></div>
-      <div class="escape-links"><button id="escape-backup">备份逃生存档</button><button id="escape-help">操作说明</button><button id="escape-restart">重新逃生</button><button id="escape-exit">保存并退出</button></div><p class="escape-storage" id="escape-save-status">${this.storageWarning || "已自动保存至这台设备"}</p>`);
+    this.panel(`<div class="escape-pause-layout"><div class="escape-map-page"><p class="escape-eyebrow">地下浴场 / 探索记录</p><h2>浴场地图</h2><canvas id="escape-floorplan" width="500" height="500" aria-label="浴场地图，箭头是你，暗处尚未探索"></canvas><p class="escape-map-legend"><i class="map-you"></i>你 <i class="map-door"></i>门 <i class="map-hide"></i>衣柜 <i class="map-fog"></i>未探索</p></div>
+      <div class="escape-pause-menu"><p class="escape-eyebrow">时间已暂停</p><h2>屏住呼吸</h2><div class="escape-journal"><small>当前线索</small><p id="escape-goal">${safe(this.world.objective)}</p></div><button id="escape-resume" class="escape-primary">继续逃生</button>
+      <div class="escape-setting-row"><label><input id="escape-music" type="checkbox" ${this.music ? "checked" : ""}>恐怖配乐</label><label><input id="escape-sound" type="checkbox" ${this.sound ? "checked" : ""}>笑声与音效</label><button id="escape-audio-recover">恢复声音</button></div>
+      <div class="escape-links"><button id="escape-backup">备份逃生存档</button><button id="escape-help">操作说明</button><button id="escape-restart">重新逃生</button><button id="escape-exit">保存并退出</button></div><p class="escape-storage" id="escape-save-status">${this.storageWarning || "进度已保存"}</p></div></div>`);
+    this.$("#escape-panel").classList.add("escape-pause-panel");
     this.renderer?.drawMap(this.$("#escape-floorplan"), this.world);
+    if (map) this.$("#escape-resume").focus();
     this.button("escape-resume", () => this.resume()); this.button("escape-help", () => this.help(true)); this.button("escape-restart", () => this.confirmRestart());
     this.button("escape-exit", () => { this.save(); this.exit(); }); this.button("escape-backup", () => this.exportSave());
     this.$<HTMLInputElement>("#escape-music").onchange = e => { this.music = (e.target as HTMLInputElement).checked; this.saveSound(); if (this.music) void this.audio.preview("music"); };
@@ -152,7 +162,7 @@ export class EscapeGame {
     } else {
       this.panel(`<p class="escape-eyebrow">${d.phase === "lost" ? "第三次被抓住" : `第 ${d.captures} 次被抓住`}</p><h2>${d.phase === "lost" ? "笑声留住了你" : "它找到你了"}</h2><p>${d.phase === "lost" ? "三次机会已经用完。记住路线，下次别在它眼前躲藏。" : "你还会在寝室醒来。已找到的物品和开过的锁会保留。"}</p><button id="escape-next" class="escape-primary">${d.phase === "lost" ? "重新逃生" : `醒来 · 第 ${d.captures + 1} 夜`}</button><div class="escape-links"><button id="escape-replay-laugh">再听笑声</button><button id="escape-result-exit">保存并退出</button></div>`);
       this.$(".escape-shell").classList.add("capture-active");
-      this.$("#escape-view").setAttribute("aria-label", "立体奶蛙正张嘴、双手捧腹大笑；游戏进度已暂停");
+      this.$("#escape-view").setAttribute("aria-label", "原画奶蛙正张嘴、双手捧腹大笑；游戏进度已暂停");
       this.button("escape-next", () => { if (d.phase === "lost") void this.start(false); else { this.world.nextNight(); this.phase = "playing"; this.save(); this.resume(); } });
       this.button("escape-result-exit", this.exit);
       this.audio.haunt();
@@ -253,25 +263,45 @@ export class EscapeGame {
       if (now - this.hudAt > 100) { this.hudAt = now; this.updateHud(); }
     }
     // Capture is a cosmetic animation only. Simulation, battery and saves do
-    // not advance while its clearly visible 3D belly laugh loops.
+    // not advance while its clearly visible original-art belly laugh loops.
     if (this.started && this.paused && ["caught", "lost"].includes(this.world.data.phase) && !document.hidden && this.$(".escape-shell").classList.contains("capture-active")) this.renderer?.draw(this.world, dt);
     this.raf = requestAnimationFrame(this.frame);
   };
   private updateHud() {
     const d = this.world.data;
-    this.$("#escape-room").textContent = `${this.world.room} · ${d.hidden ? "柜内" : d.player.crouched ? "蹲行" : "站立"}`;
-    this.$("#escape-goal").textContent = this.world.objective;
-    this.$("#escape-inventory").innerHTML = d.inventory.map(item => `<span>${ITEM_NAMES[item]}</span>`).join("") || '<span class="empty">背包里空空的</span>';
-    this.$("#escape-notice").textContent = this.world.message;
-    const danger = d.hidden ? "柜子里很暗。听清脚步再出去。" : d.hunter.state === "chase" ? "奶蛙正在追你 · 转弯切断视线！" : Math.hypot(d.hunter.x - d.player.x, d.hunter.z - d.player.z) < 4 ? "附近有脚步声……" : "";
+    this.$("#escape-room").textContent = this.world.room;
+    const items = ["brass", "cellar", "fuse", "cutters"] as const;
+    const inventoryKey = d.inventory.join(",") + ":" + d.captures;
+    if (inventoryKey !== this.inventoryKey) {
+      this.inventoryKey = inventoryKey;
+      this.$("#escape-inventory").innerHTML = items.map((item, i) => {
+        const owned = d.inventory.includes(item), glyph = item === "cutters" ? "cutters" : item === "fuse" ? "fuse" : "key";
+        return `<span class="escape-slot ${owned ? "owned" : ""}" title="${owned ? ITEM_NAMES[item] : "未找到物品"}" aria-label="${owned ? ITEM_NAMES[item] : "空物品栏"}"><small>${i+1}</small>${owned ? icon(glyph) : ""}</span>`;
+      }).join("");
+      this.$("#escape-lives").innerHTML = [0,1,2].map(i => `<span class="${i < d.captures ? "lost" : ""}">${icon("heart")}</span>`).join("");
+      this.$("#escape-lives").setAttribute("aria-label", `剩余${3-d.captures}次机会`);
+    }
+    if (this.world.message !== this.lastNotice) { this.lastNotice = this.world.message; this.noticeUntil = performance.now() + 5000; this.$("#escape-notice").textContent = this.world.message; }
+    this.$("#escape-notice").hidden = performance.now() > this.noticeUntil;
+    const danger = d.hidden ? "已藏匿" : d.hunter.state === "chase" ? "被发现了" : Math.hypot(d.hunter.x - d.player.x, d.hunter.z - d.player.z) < 4 ? "脚步正在靠近" : "";
     this.$("#escape-danger").textContent = danger;
+    this.$("#escape-danger").hidden = !danger;
     this.$(".escape-shell").classList.toggle("being-chased", d.hunter.state === "chase");
-    const target = this.world.nearest(); this.$<HTMLButtonElement>("#escape-interact").disabled = !target || !!this.world.pending; this.$("#escape-interact").textContent = target ? `${target.label} · E` : "靠近并看向可互动物品 · E";
-    this.$<HTMLMeterElement>("#escape-stamina").value = d.player.stamina; this.$<HTMLMeterElement>("#escape-battery").value = d.player.battery;
+    this.$(".escape-shell").classList.toggle("in-cabinet", !!d.hidden);
+    const target = this.world.nearest(), interact = this.$<HTMLButtonElement>("#escape-interact");
+    interact.hidden = !target || !!this.world.pending;
+    interact.disabled = !target || !!this.world.pending;
+    interact.querySelector("span")!.textContent = target?.label ?? "";
+    this.$<HTMLMeterElement>("#escape-stamina").value = d.player.stamina;
+    this.$<HTMLMeterElement>("#escape-battery").value = d.player.battery;
     this.$("#escape-night").textContent = `第${Math.min(3, d.captures + 1)}夜 · ${time(d.elapsed)}`;
-    this.$("#escape-crouch").setAttribute("aria-pressed", String(d.player.crouched)); this.$("#escape-light").setAttribute("aria-pressed", String(d.player.light)); this.$("#escape-stone").textContent = `石子 Q · ${d.stones}`;
+    this.$("#escape-crouch").setAttribute("aria-pressed", String(d.player.crouched));
+    this.$("#escape-light").setAttribute("aria-pressed", String(d.player.light));
+    this.$("#escape-stones").textContent = String(d.stones);
+    this.$("#escape-stone").setAttribute("aria-label", `丢石子，剩余${d.stones}颗`);
     this.$("#escape-search").hidden = !this.world.pending;
     this.$<HTMLProgressElement>("#escape-search progress").value = this.world.pending ? 1.15 - this.world.pending.remaining : 0;
+    this.renderer?.drawMap(this.$("#escape-minimap"), this.world, true);
   }
   destroy() {
     if (this.disposed) return; this.save(); this.disposed = true; this.controller.abort(); cancelAnimationFrame(this.raf); this.audio.setPlaying(false); this.audio.stopPreview(); this.renderer?.dispose();

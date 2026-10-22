@@ -4,7 +4,7 @@
 
 0.12.0 已发布，逃生篇升级为 Babylon.js 9.32 / WebGL 真3D：镜头可上下看，衣柜门可动且藏身位置位于真实柜内几何中，奶蛙有 idle、walk、run、laugh 四段骨骼动画；被抓时保留清楚可见的捧腹大笑造型。[发布证据与精确 main SHA `f6f4dee296eb280aa387dbfc440b33024b2287a0`](https://github.com/lingyunmo/nwaxz/pull/38#issuecomment-6349588315)。家具 GLB 为 `public/assets/models/escape-props-v1.glb`；`public/assets/models/extreme-milk-frog-v1.glb` 是保留的源模型，0.13.0 不再由运行时加载或预缓存。生成脚本为 `ops/build_escape_props.py`、`ops/build_escape_character.py`。
 
-0.13.0 是已完成本地验收但尚未发布的候选，仍使用 Babylon.js 9.32 / WebGL 场景与真实几何家具，但奶蛙按用户形象还原要求改为原画二维直立角色：只绕 Y 轴转向玩家，墙体会遮挡角色。站立和捧腹大笑直接沿用 `haunted-frog-v1.webp`；新增 `haunted-frog-actions-v2.webp`，4×2 八格包含眨眼、左看、右看、搜查、窥探、扑抓、跑步左步和跑步右步。呼吸、笑和步态连续播放，动作切换约 120 ms 混合。`pnpm check` 通过99项业务测试和1项 PWA 检查；无窗口 Chromium 软件渲染的900×650与390×844候选验收通过键盘上下看、触控移动/转头、暂停像素冻结、衣柜进出、大笑循环、下一夜、备份导入导出和断网冷重载，脚本/页面错误为0。另验证本地更新显示原画大笑且 IndexedDB 进度字节不变。完整结果见[0.13.0候选验收记录](VERIFICATION.md#0130-原画动作与探索-hud合并前候选验收2026-10-23)。真实手机帧率与扬声器听感未验收；游玩需要浏览器支持 WebGL。原18关洗澡玩法不变。
+0.13.0 已发布并公网核对，仍使用 Babylon.js 9.32 / WebGL 场景与真实几何家具，但奶蛙按用户形象还原要求改为原画二维直立角色：只绕 Y 轴转向玩家，墙体会遮挡角色。站立和捧腹大笑直接沿用 `haunted-frog-v1.webp`；新增 `haunted-frog-actions-v2.webp`，4×2 八格包含眨眼、左看、右看、搜查、窥探、扑抓、跑步左步和跑步右步。呼吸、笑和步态连续播放，动作切换约 120 ms 混合。`pnpm check` 通过99项业务测试和1项 PWA 检查；无窗口 Chromium 软件渲染的900×650与390×844候选验收通过键盘上下看、触控移动/转头、暂停像素冻结、衣柜进出、大笑循环、下一夜、备份导入导出和断网冷重载，脚本/页面错误为0。另验证本地更新显示原画大笑且 IndexedDB 进度字节不变。完整结果见[0.13.0候选验收记录](VERIFICATION.md#0130-原画动作与探索-hud合并前候选验收2026-10-23)。真实手机帧率与扬声器听感未验收；游玩需要浏览器支持 WebGL。原18关洗澡玩法不变。
 
 可复现浏览器候选验收入口为 `ops/escape-browser.mjs`。它需要独立安装 Playwright 或通过 `PLAYWRIGHT_MODULE` 指定模块；`CHROMIUM_PATH` 可选。脚本始终使用 headless Chromium 软件渲染和独立 profile。
 
@@ -43,4 +43,4 @@
 
 逃生会话使用 `nwaxz-escape-session-v1`，最佳纪录使用 `nwaxz-escape-record-v1`，声音偏好使用 `nwaxz-escape-sound-v1`，均为独立 localStorage 项。交互、暂停和退出时自动保存，活动期间每四秒保存一次。可以从本模式菜单导入，从暂停菜单导出独立 JSON；导入检验版本、位置、物品、门状态及目标链一致性，拒绝损坏数据。原洗澡存档导入导出不包含逃生会话，也不会被新模式覆盖。
 
-当前没有联机和云端同步。绘制和音乐等离线资源按 PWA 清单缓存；0.13.0 候选不预缓存角色 GLB，家具 GLB 仍供场景加载。0.13.0 本地候选尚未合并发布；无窗口 Chromium 验收已完成，但不代表真实手机帧率或扬声器听感已验证。候选结果和0.12.0发布证据见 [VERIFICATION.md](VERIFICATION.md)。
+当前没有联机和云端同步。绘制和音乐等离线资源按 PWA 清单缓存；0.13.0 不预缓存角色 GLB，家具 GLB 仍供场景加载。0.13.0 [已发布并核对](https://github.com/lingyunmo/nwaxz/pull/40#issuecomment-6350384629)；无窗口 Chromium 验收已完成，但不代表真实手机帧率或扬声器听感已验证。候选验收历史和发布证据见 [VERIFICATION.md](VERIFICATION.md)。

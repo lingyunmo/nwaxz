@@ -1,7 +1,7 @@
 FROM node:24.15.0-bookworm-slim AS build
 WORKDIR /app
 RUN npm install --global pnpm@11.1.3
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY tsconfig.json vite.config.ts index.html ./
 COPY src ./src

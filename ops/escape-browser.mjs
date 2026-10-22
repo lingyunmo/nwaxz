@@ -113,6 +113,15 @@ try {
   await phone.locator('#escape-panel[hidden]').waitFor({timeout:30000,state:'attached'});
   await phone.locator('#escape-pause').tap();
   await phone.screenshot({path:path.join(output, 'offline.png')});
+  await phone.setViewportSize({width:844,height:390});
+  await phone.locator('#escape-resume').tap();
+  await phone.screenshot({path:path.join(output,'mobile-landscape.png')});
+  await phone.locator('#escape-pause').tap(); await phone.locator('#escape-exit').tap();
+  await phone.evaluate(save=>localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(save)),caught.snapshot());
+  await phone.setViewportSize({width:390,height:844});
+  await phone.reload(); await phone.locator('#extreme').tap(); await phone.locator('#escape-continue').tap();
+  await phone.locator('.capture-active').waitFor({timeout:30000});
+  await phone.screenshot({path:path.join(output,'mobile-laugh.png')});
   await mobile.close();
   await context.close();
   console.log(JSON.stringify({base, errors, pitch:current.player.pitch, nextNight:save.phase, mobileSave, cached, offline:true}));

@@ -9,14 +9,17 @@ import { Color3 } from "@babylonjs/core/Maths/math.color.js";
 import type { Scene } from "@babylonjs/core/scene.js";
 import type { EscapeWorld } from "./world.ts";
 
-export type FrogPose = { sheet: "original" | "actions"; frame: number; motion: "idle" | "walk" | "run" | "search" | "peek" | "lunge" | "laugh" };
+export type FrogPose = { sheet: "original" | "actions"; frame: number; mirror?: boolean; motion: "idle" | "walk" | "run" | "search" | "peek" | "lunge" | "laugh" };
 /** Original standing and belly-laugh frames are never replaced by inferred art. */
 export function frogPose(world: EscapeWorld, clock: number, moving: boolean): FrogPose {
   const d = world.data, h = d.hunter, distance = Math.hypot(h.x - d.player.x, h.z - d.player.z);
   if (d.phase === "caught" || d.phase === "lost") return { sheet: "original", frame: 1, motion: "laugh" };
   if (h.state === "chase" && distance < 1.25) return { sheet: "actions", frame: 5, motion: "lunge" };
   if (d.hidden && h.state === "search" && distance < 3) return { sheet: "actions", frame: 4, motion: "peek" };
-  if (h.state === "chase") return { sheet: "actions", frame: 6 + Math.floor(clock * 5) % 2, motion: "run" };
+  if (h.state === "chase") {
+    const step = Math.floor(clock * 5) % 2;
+    return { sheet: "actions", frame: 6 + step, mirror: step === 1, motion: "run" };
+  }
   if (h.state === "search" || h.state === "investigate" && !moving) return { sheet: "actions", frame: [1, 3, 2, 3][Math.floor(clock / 1.25) % 4], motion: "search" };
   if (moving) return { sheet: "original", frame: 2 + Math.floor(clock * 3.4) % 2, motion: "walk" };
   return clock % 4.7 > 4.54 ? { sheet: "actions", frame: 0, motion: "idle" } : { sheet: "original", frame: 0, motion: "idle" };
@@ -71,6 +74,8 @@ export class PaintedFrog {
     texture.uScale = 1 / columns - .004; texture.vScale = .496;
     texture.uOffset = pose.frame % columns / columns + .002;
     texture.vOffset = 1 - (Math.floor(pose.frame / columns) + 1) / 2 + .002;
+    // Alternate the leading leg, rather than repeating two knee-up poses.
+    if (pose.mirror) { texture.uOffset += texture.uScale; texture.uScale *= -1; }
     l.material.diffuseTexture = texture; l.pose = pose;
   }
   animate(world: EscapeWorld, dt: number, moving: boolean) {

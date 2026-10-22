@@ -2,6 +2,8 @@
 
 使用内置 imagegen，2026-10-23。原站立与捧腹大笑保持 `public/assets/character/haunted-frog-v1.webp` 原文件，不改形象。新增动作图集为 4 列 × 2 行，从左至右、从上至下：眨眼、向左看、向右看、搜查、窥探、扑抓、跑步左步、跑步右步。动作图允许轻微姿势差异，不能代替经典大笑原图。
 
+两幅新跑步姿势的抬膝侧接近，运行时用 UV 水平镜像第二步，使左右腿交替领先；不改写图集文件。
+
 新增文件：`public/assets/character/haunted-frog-actions-v2.webp`（透明背景）；`public/assets/ui/escape-map-atlas-v1.webp`（4×2 材质）。生成后使用 FFmpeg 转码 WebP，保留角色 alpha；不覆盖旧文件。角色在真实 3D 世界中为直立二维图卡，会被墙、柜子遮挡，不声称为新的立体角色模型。旧实验 GLB 保留源文件，不再用于运行时或离线预缓存。
 
 ## 角色提示词

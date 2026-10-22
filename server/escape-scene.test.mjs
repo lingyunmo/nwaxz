@@ -82,6 +82,7 @@ test("frog motion uses original standing/laugh plus distinct search, peek, chase
   w.data.hunter.x += 3;
   assert.equal(frogPose(w, 0, true).frame, 6);
   assert.equal(frogPose(w, .21, true).frame, 7);
+  assert.equal(frogPose(w, .21, true).mirror, true, "alternate stride leads with the opposite leg");
   w.capture();
   assert.deepEqual(frogPose(w, 55, true), {sheet:"original",frame:1,motion:"laugh"});
 });

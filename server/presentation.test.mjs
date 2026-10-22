@@ -278,10 +278,13 @@ test("escape has its own bounded loop and the captured laugh can play after musi
   assert.equal(Math.max(...context.gains[0].gain.values), .42);
   assert.ok(download.requests.includes("/assets/audio/sewer-escape-v1.mp3"));
   manager.setPlaying(false); assert.ok(loop.stopped);
-  assert.equal(await manager.preview("sound"), true);
+  manager.haunt(); await settle();
   assert.ok(download.requests.includes("/assets/audio/haunted-laugh-v1.mp3"));
   assert.equal(context.sources.at(-1).loop, undefined);
-  manager.stopPreview(); assert.ok(context.sources.at(-1).stopped);
+  manager.setSettings({ ...defaultSettings(), music: true, sound: false });
+  assert.ok(context.sources.at(-1).stopped);
+  const sourceCount = context.sources.length; manager.haunt(); await settle();
+  assert.equal(context.sources.length, sourceCount, "automatic captured laughter respects muted effects");
   manager.setMode("normal"); manager.setPlaying(true); await settle();
   assert.ok(download.requests.includes("/assets/audio/bubble-day-soft-v1.mp3"));
 });

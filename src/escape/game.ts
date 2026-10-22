@@ -145,7 +145,7 @@ export class EscapeGame {
       this.panel(`<div class="escape-capture-frog" aria-label="奶蛙正在捧腹大笑"></div><p class="escape-eyebrow">${d.phase === "lost" ? "第三次被抓住" : `第 ${d.captures} 次被抓住`}</p><h2>${d.phase === "lost" ? "笑声留住了你" : "它找到你了"}</h2><p>${d.phase === "lost" ? "三次机会已经用完。记住路线，下次别在它眼前躲藏。" : "你还会在寝室醒来。已找到的物品和开过的锁会保留。"}</p><button id="escape-next" class="escape-primary">${d.phase === "lost" ? "重新逃生" : `醒来 · 第 ${d.captures + 1} 夜`}</button><button id="escape-result-exit" class="escape-secondary">保存并退出</button>`);
       this.button("escape-next", () => { if (d.phase === "lost") void this.start(false); else { this.world.nextNight(); this.phase = "playing"; this.save(); this.resume(); } });
       this.button("escape-result-exit", this.exit);
-      void this.audio.preview("sound");
+      this.audio.haunt();
       // One deliberate click can replay the recognisable laugh, without changing settings.
       this.$(".escape-capture-frog").addEventListener("click", () => void this.audio.preview("sound"), { signal: this.signal });
     }

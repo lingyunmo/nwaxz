@@ -1,90 +1,100 @@
-import { DOORS, MAP, PROPS, ROOMS, SIZE, type EscapeWorld } from "./world.ts";
-export type EscapeArt = { materials: HTMLImageElement; props: HTMLImageElement; frog: HTMLImageElement; details: HTMLImageElement };
+import { Engine } from "@babylonjs/core/Engines/engine.js";
+import { Vector3, Color3 } from "@babylonjs/core/Maths/math.js";
+import { Viewport } from "@babylonjs/core/Maths/math.viewport.js";
+import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture.js";
+import { Texture } from "@babylonjs/core/Materials/Textures/texture.js";
+import { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator.js";
+import { PointLight } from "@babylonjs/core/Lights/pointLight.js";
+import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader.js";
+import type { AssetContainer } from "@babylonjs/core/assetContainer.js";
+import "@babylonjs/loaders/glTF/2.0/glTFLoader.js";
+import "@babylonjs/loaders/glTF/2.0/Extensions/KHR_materials_emissive_strength.js";
+import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent.js";
+import { aimCamera, CELL, createEscapeScene } from "./scene.ts";
+import { installEscapeModels } from "./models.ts";
+import { DOORS, MAP, ROOMS, SIZE, type EscapeWorld } from "./world.ts";
+
+export type EscapeArt = { materials: HTMLImageElement };
 export class EscapeRenderer {
-  private ctx: CanvasRenderingContext2D;
-  private textures: Uint8ClampedArray;
-  private pixels?: ImageData;
-  private depth: number[] = [];
-  constructor(private canvas: HTMLCanvasElement, private art: EscapeArt, private reduced: boolean) {
-    this.ctx = canvas.getContext("2d", { alpha: false })!;
-    const texture = document.createElement("canvas"); texture.width = texture.height = 512;
-    const tc = texture.getContext("2d")!; tc.drawImage(art.materials, 0, 0, 512, 512);
-    this.textures = tc.getImageData(0, 0, 512, 512).data;
+  private engine: Engine;
+  private view;
+  private models?: ReturnType<typeof installEscapeModels>;
+  private containers: AssetContainer[] = [];
+  private shadow: ShadowGenerator;
+  private captureLight: PointLight;
+  private height = 1.65;
+  private wasHidden = false;
+  private disposed = false;
+  constructor(private canvas: HTMLCanvasElement, art: EscapeArt, private reduced: boolean) {
+    this.engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false, powerPreference: "low-power" }, false);
+    this.view = createEscapeScene(this.engine);
+    const beam = new DynamicTexture("soft-flashlight-optics", 128, this.view.scene, false);
+    const bc = beam.getContext(), gradient = bc.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gradient.addColorStop(0, "#ffffff"); gradient.addColorStop(.38, "#eeeeee");
+    gradient.addColorStop(.72, "#777777"); gradient.addColorStop(1, "#000000");
+    bc.fillStyle = gradient; bc.fillRect(0, 0, 128, 128); beam.update(false);
+    this.view.torch.projectionTexture = beam;
+    for (const [name, quadrant] of [["wall", 0], ["wood", 1], ["floor", 2], ["ceiling", 3]] as const) {
+      const tex = new DynamicTexture(`painted-${name}-tile`, 512, this.view.scene, true, Texture.TRILINEAR_SAMPLINGMODE);
+      const s = art.materials.width / 2;
+      tex.getContext().drawImage(art.materials, quadrant % 2 * s, Math.floor(quadrant / 2) * s, s, s, 0, 0, 512, 512);
+      tex.wrapU = tex.wrapV = Texture.WRAP_ADDRESSMODE; tex.anisotropicFilteringLevel = 4; tex.update(false);
+      const material = this.view.scene.getMaterialByName(name === "wall" ? "painted-tile" : name === "wood" ? "painted-door" : `painted-${name}`);
+      if (material && "diffuseTexture" in material) material.diffuseTexture = tex;
+    }
+    this.shadow = new ShadowGenerator(512, this.view.torch);
+    this.shadow.usePoissonSampling = true; this.shadow.bias = .001; this.shadow.normalBias = .02; this.shadow.setDarkness(.42);
+    this.captureLight = new PointLight("capture-laugh-key", Vector3.Zero(), this.view.scene);
+    this.captureLight.diffuse = new Color3(.92, .84, .64); this.captureLight.range = 8; this.captureLight.intensity = 10;
+    this.captureLight.setEnabled(false);
+  }
+  async load() {
+    try {
+      for (const name of ["escape-props-v1.glb", "extreme-milk-frog-v1.glb"]) {
+        const container = await LoadAssetContainerAsync(`/assets/models/${name}`, this.view.scene, { pluginOptions: { gltf: { animationStartMode: 0 } } });
+        if (this.disposed) { container.dispose(); return; }
+        this.containers.push(container);
+      }
+      this.models = installEscapeModels(this.view.scene, this.containers[0], this.containers[1]);
+      for (const mesh of [...this.models.actorMeshes, ...[...this.models.propRoots.values()].flatMap(n => n.getChildMeshes())]) this.shadow.addShadowCaster(mesh, false);
+      for (const door of this.view.doors.values()) for (const mesh of door.getChildMeshes()) this.shadow.addShadowCaster(mesh, false);
+      await this.view.scene.whenReadyAsync();
+    } catch (e) { this.dispose(); throw e; }
   }
   resize(high = false) {
-    const rect = this.canvas.getBoundingClientRect(), ratio = rect.height / Math.max(1, rect.width);
-    const w = Math.round(Math.min(high ? 460 : 320, rect.width, (high ? 800 : 600) / ratio));
-    this.canvas.width = Math.max(160, w); this.canvas.height = Math.max(120, Math.round(w * ratio));
-    this.pixels = this.ctx.createImageData(this.canvas.width, this.canvas.height);
+    if (this.disposed) return;
+    const rect = this.canvas.getBoundingClientRect(), ratio = Math.min(high ? 1.5 : 1, window.devicePixelRatio || 1);
+    const cap = high ? 1600 : 1100, scale = Math.min(ratio, cap / Math.max(1, rect.width, rect.height));
+    this.engine.setSize(Math.max(1, Math.round(rect.width * scale)), Math.max(1, Math.round(rect.height * scale)));
+    this.shadow.getShadowMap()?.resize(high ? 1024 : 512);
   }
-  draw(world: EscapeWorld) {
-    const d = world.data, p = d.player, ctx = this.ctx, w = this.canvas.width, h = this.canvas.height;
-    if (!this.pixels) this.resize();
-    const pixels = this.pixels!, out = pixels.data, tex = this.textures;
-    const focal = h * .68, horizon = h * .47, cos = Math.cos(p.angle), sin = Math.sin(p.angle);
-    const light = (distance: number, side = 0) => Math.min(1, .10 + (d.power ? .04 : 0) + (p.light && !d.hidden ? .95 / (1 + distance * .28) * Math.max(.08, 1 - Math.abs(side) * .38) : 0));
-    // Painted floor / ceiling are projected through the same camera as walls.
-    for (let y = 0; y < h; y++) {
-      const ground = y > horizon, delta = Math.abs(y - horizon) || .1, distance = Math.min(60, (ground ? .75 : .95) * focal / delta);
-      const bright = light(distance) * (ground ? .82 : .52), tile = ground ? 2 : 3;
-      let wx = p.x + cos * distance - sin * (-w / 2 / focal) * distance;
-      let wz = p.z + sin * distance + cos * (-w / 2 / focal) * distance;
-      const stepX = -sin * distance / focal, stepZ = cos * distance / focal;
-      for (let x = 0; x < w; x++, wx += stepX, wz += stepZ) {
-        const tx = ((wx * 256) & 255) + (tile % 2) * 256, tz = ((wz * 256) & 255) + Math.floor(tile / 2) * 256;
-        const at = (tz * 512 + tx) * 4, dest = (y * w + x) * 4;
-        const shade = bright * (1 - Math.min(.45, Math.abs(x / w - .5) * .65));
-        out[dest] = tex[at] * shade; out[dest + 1] = tex[at + 1] * shade; out[dest + 2] = tex[at + 2] * shade; out[dest + 3] = 255;
-      }
+  draw(world: EscapeWorld, dt = 1 / 60) {
+    if (this.disposed || !this.models) return;
+    const d = world.data, caught = d.phase === "caught" || d.phase === "lost";
+    this.models.animate(world, dt);
+    const desired = d.hidden ? 1.65 : d.player.crouched ? 1.02 : 1.65;
+    if (!!d.hidden !== this.wasHidden) this.height = desired;
+    this.wasHidden = !!d.hidden;
+    this.height += (desired - this.height) * (1 - Math.exp(-dt * 12));
+    aimCamera(this.view, world, this.height);
+    for (const door of DOORS) {
+      const hinge = this.view.doors.get(door.id)!, target = d.opened.includes(door.id) ? Math.PI * .5 : 0;
+      hinge.rotation.y += (target - hinge.rotation.y) * (1 - Math.exp(-dt * 12));
     }
-    ctx.putImageData(pixels, 0, 0);
-    const cell = this.art.materials.width / 2;
-    for (let x = 0; x < w; x++) {
-      const camera = (x - w / 2) / focal, rx = cos - sin * camera, rz = sin + cos * camera;
-      let mx = Math.floor(p.x), mz = Math.floor(p.z), side = 0, type = 1;
-      const dx = Math.abs(1 / (rx || 1e-9)), dz = Math.abs(1 / (rz || 1e-9)), sx = rx < 0 ? -1 : 1, sz = rz < 0 ? -1 : 1;
-      let tx = (rx < 0 ? p.x - mx : mx + 1 - p.x) * dx, tz = (rz < 0 ? p.z - mz : mz + 1 - p.z) * dz;
-      for (let i = 0; i < 64; i++) {
-        if (tx < tz) { tx += dx; mx += sx; side = 0; } else { tz += dz; mz += sz; side = 1; }
-        type = world.wall(mx + .5, mz + .5);
-        if (type) break;
-      }
-      const distance = Math.max(.05, side ? tz - dz : tx - dx); this.depth[x] = distance;
-      let u = side ? p.x + distance * rx : p.z + distance * rz; u -= Math.floor(u);
-      if ((!side && rx > 0) || (side && rz < 0)) u = 1 - u;
-      const top = horizon - .95 * focal / distance, height = 1.7 * focal / distance;
-      ctx.drawImage(this.art.materials, (type === 2 ? cell : 0) + Math.min(cell - 1, Math.floor(u * cell)), 0, 1, cell, x, top, 1, height);
-      ctx.fillStyle = `rgba(0,0,0,${1 - light(distance, camera) * (side ? .78 : 1)})`; ctx.fillRect(x, top, 1, height + 1);
-      // Small, readable room signs above closed doorways.
+    this.view.corridorLamp.setEnabled(!caught && d.player.z < 18);
+    this.view.sewerGlow.setEnabled(!caught && d.player.z >= 18);
+    this.view.corridorLamp.intensity = (d.power ? .65 : .30) * (this.reduced ? 1 : .8 + .2 * Math.sin(d.elapsed * 8) ** 14);
+    this.captureLight.setEnabled(caught);
+    this.view.ambient.intensity = caught ? .5 : .26;
+    this.view.camera.viewport = caught ? this.engine.getRenderWidth() / this.engine.getRenderHeight() > 1.3 ? new Viewport(0, 0, .56, 1) : new Viewport(0, .34, 1, .66) : new Viewport(0, 0, 1, 1);
+    if (caught) {
+      const actor = this.models.actorRoot, center = actor.position.add(new Vector3(0, 1.05, 0));
+      this.view.camera.position.copyFrom(center.add(new Vector3(0, .08, 3.05)));
+      this.view.camera.setTarget(center); actor.rotation.y = 0;
+      this.view.torch.intensity = 0;
+      this.captureLight.position.copyFrom(center.add(new Vector3(-1.2, 1.8, 2)));
     }
-    type Sprite = { x: number; z: number; height: number; frame: number; enemy?: boolean; detail?: boolean };
-    const sprites: Sprite[] = PROPS.map(o => ({ x: o.x, z: o.z, height: o.kind === "wardrobe" ? 1.45 : o.kind === "drawer" ? .7 : o.kind === "note" ? .22 : .8, detail: ["valve", "exit", "note"].includes(o.kind), frame: o.kind === "wardrobe" ? d.hidden === o.id ? 1 : 0 : o.kind === "drawer" ? 2 : o.kind === "power" ? 3 : o.kind === "exit" ? 0 : o.kind === "valve" ? 1 : 2 }));
-    sprites.push({ x: d.hunter.x, z: d.hunter.z, height: 1.5, frame: d.hunter.state === "chase" ? 2 + Math.floor(d.elapsed * 5) % 2 : 0, enemy: true });
-    sprites.sort((a, b) => Math.hypot(b.x - p.x, b.z - p.z) - Math.hypot(a.x - p.x, a.z - p.z));
-    for (const sprite of sprites) {
-      const dx = sprite.x - p.x, dz = sprite.z - p.z, depth = dx * cos + dz * sin;
-      if (depth < .16) continue;
-      const center = w / 2 + (-dx * sin + dz * cos) * focal / depth;
-      const sh = sprite.height * focal / depth, sw = sh * (sprite.enemy ? .9 : .85);
-      const bob = !this.reduced && sprite.enemy ? Math.sin(d.elapsed * (d.hunter.state === "chase" ? 12 : 5)) * sh * .012 : 0;
-      const top = horizon + .75 * focal / depth - sh + bob, left = center - sw / 2;
-      const img = sprite.enemy ? this.art.frog : sprite.detail ? this.art.details : this.art.props, columns = 2, rows = sprite.enemy || sprite.detail ? 2 : 3;
-      const cw = img.width / columns, ch = img.height / rows, fx = sprite.frame % columns * cw, fy = Math.floor(sprite.frame / columns) * ch;
-      ctx.globalAlpha = Math.min(1, light(depth) + (sprite.enemy ? .08 : .02));
-      for (let x = Math.max(0, Math.floor(left)); x < Math.min(w, left + sw); x++) {
-        if (depth > this.depth[x]) continue;
-        const column = Math.min(cw - 1, Math.max(0, (x - left) / sw * cw));
-        ctx.drawImage(img, fx + column, fy, 1, ch, x, top, 1, sh);
-      }
-      ctx.globalAlpha = 1;
-    }
-    // Soft vignette and slit vision are interaction effects over painted art.
-    const vignette = ctx.createRadialGradient(w / 2, h / 2, w * .15, w / 2, h / 2, Math.max(w, h) * .67);
-    vignette.addColorStop(0, "transparent"); vignette.addColorStop(1, "rgba(0,0,0,.8)"); ctx.fillStyle = vignette; ctx.fillRect(0, 0, w, h);
-    if (d.hidden) {
-      ctx.fillStyle = "rgba(9,5,3,.96)"; ctx.fillRect(0, 0, w * .42, h); ctx.fillRect(w * .58, 0, w, h);
-      ctx.fillRect(0, 0, w, h * .17); ctx.fillRect(0, h * .83, w, h);
-    }
+    this.engine.beginFrame(); this.view.scene.render(); this.engine.endFrame();
   }
   drawMap(canvas: HTMLCanvasElement, world: EscapeWorld) {
     canvas.width = canvas.height = 500; const c = canvas.getContext("2d")!, scale = 20;
@@ -96,5 +106,11 @@ export class EscapeRenderer {
     c.fillStyle = "#b9dbb4"; c.fillRect(20 * scale, 23 * scale, 20, 13); c.font = "11px sans-serif"; c.fillText("下水道", 20.5 * scale, 24.5 * scale);
     const p = world.data.player; c.fillStyle = "#ffe29b"; c.beginPath(); c.arc(p.x * scale, p.z * scale, 5, 0, Math.PI * 2); c.fill();
     c.strokeStyle = "#ffe29b"; c.beginPath(); c.moveTo(p.x * scale, p.z * scale); c.lineTo((p.x + Math.cos(p.angle) * .75) * scale, (p.z + Math.sin(p.angle) * .75) * scale); c.stroke();
+  }
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true; this.models?.dispose(); this.shadow.dispose();
+    for (const container of this.containers) container.dispose();
+    this.view.scene.dispose(); this.engine.dispose();
   }
 }

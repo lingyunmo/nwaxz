@@ -68,7 +68,15 @@
 .escape-help li { margin-bottom:9px; }
 .escape-result-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:22px 0; font-size:10px; color:#92aaa3; }
 .escape-result-stats strong { display:block; color:#f2d99f; font-size:22px; margin-top:8px; }
-.escape-capture-frog { width:min(100%,240px); aspect-ratio:1; margin:-10px auto 10px; background:url('/assets/character/haunted-frog-v1.webp') 100% 0 / 200% 200% no-repeat; filter:drop-shadow(0 0 30px #843c1b77); }
+.capture-active>.escape-hud,.capture-active>.escape-inventory,.capture-active>.escape-crosshair,.capture-active>.escape-danger,.capture-active>.escape-notice,.capture-active>.escape-bottom { visibility:hidden; }
+.capture-active .escape-panel { background:transparent; backdrop-filter:none; align-items:flex-end; padding:8px 14px max(8px,env(safe-area-inset-bottom)); pointer-events:none; }
+.capture-active .escape-card { width:min(100%,500px); max-height:34%; padding:12px 20px; background:linear-gradient(#10191ce8,#080d11); pointer-events:auto; }
+.capture-active .escape-card h2 { margin:4px 0; font-size:22px; }
+.capture-active .escape-card p { margin:4px 0; line-height:1.5; }
+@media(min-aspect-ratio:13/10) {
+  .capture-active .escape-panel { left:56%; align-items:center; }
+  .capture-active .escape-card { max-height:95%; }
+}
 @media(orientation:landscape) and (max-height:540px) {
   .escape-hud { padding:8px 12px; }
   .escape-hud strong { max-width:500px; font-size:11px; }

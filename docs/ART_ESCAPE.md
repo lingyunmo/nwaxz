@@ -1,8 +1,8 @@
 # 极限恐怖：原创逃生美术
 
-本批使用内置 imagegen 生成原创浴场封面、材质与道具。旧恐怖奶蛙图集仅作为角色参考并继续用于追捕和经典捧腹大笑；未复制《恐怖奶奶》的地图、图像或声音。FFmpeg 仅做缩放及 WebP 编码，PNG 母版保留本地生成目录，不进入运行缓存。
+本批原创浴场封面、材质与道具图集构成极限恐怖 v1 的绘制美术来源；旧恐怖奶蛙图集继续作为专用恐怖角色参考，保留经典捧腹大笑造型。普通模式的 Cute turnaround 不用于恐怖角色建模。未复制《恐怖奶奶》的地图、图像或声音。FFmpeg 仅做缩放及 WebP 编码，PNG 母版保留本地生成目录，不进入运行缓存。
 
-第一人称画面采用 Canvas 2D 光线投射，墙面、地板、天花板和木门采样绘制纹理，立体投影、遮挡、手电和柜子门缝由代码完成；交互道具是透明绘制图集。原18关的美术不变。
+已发布的 0.11.0 逃生篇采用 Canvas 2D 光线投射，以绘制纹理和透明道具图集表现立体投影；0.11.0 的准确发布证据见[GitHub记录](https://github.com/lingyunmo/nwaxz/pull/34#issuecomment-6343588123)。0.12.0 的合并前候选将逃生场景升级为 Babylon.js 9.32 / WebGL 真3D，加入可开合的双门衣柜与真实柜内藏身空间、木柜和抽屉 UV 木纹、金属阀门、配电箱、铁网与管道。普通12关和恐怖洗澡6关的美术不变。候选已通过无窗口 Chromium 软件渲染验收，包括桌面与手机尺寸视口、CDP 触控和上下看、暂停冻结、抓捕大笑与下一夜、GLB 缓存及断网冷重载；脚本错误为0。最终发布状态以对应 PR 的 CI 与公网核对为准；真人手机帧率和扬声器听感未验证，低端手机表现待实测。
 
 | 素材 | 项目路径 | 格式 |
 | --- | --- | --- |
@@ -10,11 +10,15 @@
 | 道具 | `public/assets/props/escape-props-v1.webp` | 768 × 1152，2×3 透明图集 |
 | 封面 | `public/assets/scenes/escape-cover-v1.webp` | 576 × 960 |
 | 出口细节 | `public/assets/props/escape-details-v1.webp` | 768 × 768，2×2 透明图集 |
+| 逃生家具与设施模型 | `public/assets/models/escape-props-v1.glb` | GLB，六组根节点：衣柜、抽屉、配电箱、阀门、铁网、管道 |
+| 恐怖奶蛙模型 | `public/assets/models/extreme-milk-frog-v1.glb` | GLB，18关节 skin，idle、walk、run、laugh 四段动画 |
+
+两个 GLB 由 `ops/build_escape_props.py` 和 `ops/build_escape_character.py` 生成；已有绘制材质图集 `escape-materials-v1.webp` 的右上旧木门象限裁切后用于模型木材 UV，并作为 PNG 嵌入道具 GLB。恐怖角色以 `.local/modeling/extreme-milk-frog-turnaround-v1.png`、既有 `haunted-frog-v1.webp` 和逃生封面为依据；`milk-frog-turnaround-v1.png`、`normal-milk-frog-turnaround-v1.png` 是普通模式 Cute 角色建模草稿，不作为恐怖版参考。Vite PWA 预缓存配置覆盖 GLB 文件，0.12 候选已通过缓存及断网冷重载验收。候选浏览器脚本为 `ops/escape-browser.mjs`，需要独立安装 Playwright 或配置 `PLAYWRIGHT_MODULE`，可选配置 `CHROMIUM_PATH`，并始终以 headless 软件渲染和独立 profile 运行。
 
 ## 纹理提示
 
 ```text
-Use case: stylized-concept. Create a production texture atlas for an ORIGINAL first-person horror game inside an abandoned bathhouse, art is painterly realistic premium atmospheric horror. Exactly square 2x2 grid of FOUR equal square material tiles, no gutters, no frames, straight orthographic surface view, evenly lit with no dramatic shadows so the game can relight them. TOP LEFT: cracked grimy dark teal ceramic wall tiles with subtle mildew, aging plaster and small scratches, tactile unsettling detail. TOP RIGHT: full-width closed old dark brown vertical plank door surface with rust stains, no handle and no perspective. BOTTOM LEFT: dirty small gray-green stone floor tiles, worn, scuffed, a few cracks, seamless surface. BOTTOM RIGHT: damp pale gray concrete ceiling surface with sparse mold and fine cracks, seamless surface. Surfaces cover their entire square; no architecture, windows, furniture, creatures, large objects, text, blood, UI, no logos. Individual textures will be sampled by a code raycaster. All four tile boundaries must be at precisely x=50% and y=50%. High quality hand-painted horror environment materials with legible medium-value texture, not solid black.
+Use case: stylized-concept. Create a production texture atlas for an ORIGINAL first-person horror game inside an abandoned bathhouse, art is painterly realistic premium atmospheric horror. Exactly square 2x2 grid of FOUR equal square material tiles, no gutters, no frames, straight orthographic surface view, evenly lit with no dramatic shadows so the game can relight them. TOP LEFT: cracked grimy dark teal ceramic wall tiles with subtle mildew, aging plaster and small scratches, tactile unsettling detail. TOP RIGHT: full-width closed old dark brown vertical plank door surface with rust stains, no handle and no perspective. BOTTOM LEFT: dirty small gray-green stone floor tiles, worn, scuffed, a few cracks, seamless surface. BOTTOM RIGHT: damp pale gray concrete ceiling surface with sparse mold and fine cracks, seamless surface. Surfaces cover their entire square; no architecture, windows, furniture, creatures, large objects, text, blood, UI, no logos. Individual textures will be sampled by the game's surface and prop materials. All four tile boundaries must be at precisely x=50% and y=50%. High quality hand-painted horror environment materials with legible medium-value texture, not solid black.
 ```
 
 ## 道具提示

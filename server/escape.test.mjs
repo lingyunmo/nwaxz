@@ -63,14 +63,85 @@ test("patrol recomputes its route at each stop and actually enters multiple room
 test("hiding unseen is safe, hiding in plain sight is remembered across save/resume", () => {
   const w = new EscapeWorld(); w.data.elapsed = 30;
   placeFor(w, "bed-hide"); Object.assign(w.data.hunter, { x: 12.5, z: 9.5, angle: 0 });
+  const cabinet = PROPS.find(p => p.id === "bed-hide");
   w.interact(); assert.equal(w.data.hidden, "bed-hide"); assert.equal(w.seesPlayer(), false);
+  assert.equal(w.data.player.x, cabinet.x); assert.equal(w.data.player.z, cabinet.z + .08,
+    "hiding places the player inside the wardrobe footprint");
+  const hiddenRestore = EscapeWorld.restore(w.snapshot());
+  assert.equal(hiddenRestore.data.hidden, "bed-hide");
+  assert.equal(hiddenRestore.data.player.x, cabinet.x); assert.equal(hiddenRestore.data.player.z, cabinet.z + .08,
+    "restoring a hidden save keeps the player inside the wardrobe");
   frames(w, 5); assert.equal(w.data.phase, "playing");
   w.interact(); assert.equal(w.data.hidden, undefined);
+  assert.equal(w.data.player.x, cabinet.x); assert.equal(w.data.player.z, cabinet.z + 1,
+    "leaving the wardrobe returns the player one meter in front of its opening");
   placeFor(w, "bed-hide");
   Object.assign(w.data.hunter, { x: 5.5, z: 5.5, angle: -Math.PI / 2 });
   w.interact(); assert.equal(w.data.hidden, "bed-hide");
   const resumed = EscapeWorld.restore(w.snapshot());
   frames(resumed, 6); assert.equal(resumed.data.phase, "caught");
+});
+
+test("look pitch is backward-compatible, clamped, and independent of yaw", () => {
+  const original = new EscapeWorld().snapshot();
+  delete original.player.pitch;
+  const restored = EscapeWorld.restore(original);
+  assert.equal(restored.data.player.pitch, 0, "legacy v1 saves default missing pitch to level");
+
+  for (const pitch of [1.3001, -1.3001, NaN]) {
+    const invalid = new EscapeWorld().snapshot();
+    invalid.player.pitch = pitch;
+    assert.throws(() => EscapeWorld.restore(invalid), "invalid pitch is rejected");
+  }
+
+  const w = new EscapeWorld(), yaw = 2.1;
+  w.data.player.angle = yaw;
+  frames(w, 2, { look: 1 });
+  assert.equal(w.data.player.pitch, 1.3, "looking up clamps at the upper pitch limit");
+  assert.ok(Math.abs(w.data.player.angle - yaw) < 1e-12, "looking up leaves yaw unchanged");
+  frames(w, 2, { look: -1 });
+  assert.equal(w.data.player.pitch, -1.3, "looking down clamps at the lower pitch limit");
+  assert.ok(Math.abs(w.data.player.angle - yaw) < 1e-12, "looking down leaves yaw unchanged");
+});
+
+test("hunter routes around drawers and wardrobes and can investigate furniture sounds", () => {
+  const furniture = PROPS.filter(p => p.kind === "drawer" || p.kind === "wardrobe");
+  const blocked = (point, radius = .23) => furniture.some(prop => {
+    const half = prop.kind === "wardrobe" ? [.4, .29] : [.34, .25];
+    return Math.abs(prop.x - point.x) < half[0] + radius
+      && Math.abs(prop.z - point.z) < half[1] + radius;
+  });
+
+  for (const id of ["bed-drawer", "bed-hide"]) {
+    const w = new EscapeWorld(), obstacle = PROPS.find(p => p.id === id);
+    Object.assign(w.data.hunter, { x: 3.5, z: 5.5 });
+    const route = w.route(w.data.hunter, obstacle, true);
+    assert.ok(route.length, `hunter can route to an interaction point at ${id}`);
+    assert.ok(route.every(point => !blocked(point)), `hunter route stays clear of ${id} and other furniture`);
+    assert.ok(Math.hypot(route.at(-1).x - obstacle.x, route.at(-1).z - obstacle.z) < 1.7,
+      `hunter route ends within reach of ${id}`);
+  }
+
+  const w = new EscapeWorld(), wardrobe = PROPS.find(p => p.id === "bed-hide");
+  w.data.elapsed = 20;
+  Object.assign(w.data.player, { x: 20.5, z: 20.5, light: false });
+  Object.assign(w.data.hunter, { x: 3.5, z: 5.5, state: "patrol" });
+  w.noise(wardrobe, 10);
+  assert.equal(w.data.hunter.state, "investigate");
+  const target = { ...w.target };
+  assert.ok(!blocked(target), "furniture noise resolves to a reachable point outside the wardrobe");
+  assert.ok(target.z > wardrobe.z && target.z - wardrobe.z < 1.7,
+    "wardrobe sound is investigated from in front of its opening");
+  assert.ok(w.route(w.data.hunter, target, true).length, "furniture sound has a traversable route");
+  const startDistance = Math.hypot(w.data.hunter.x - target.x, w.data.hunter.z - target.z);
+  for (let i = 0; i < 180; i++) {
+    w.advance(1 / 60);
+    assert.ok(!blocked(w.data.hunter), "hunter collision stays clear of furniture along the route");
+  }
+  const endDistance = Math.hypot(w.data.hunter.x - target.x, w.data.hunter.z - target.z);
+  assert.ok(endDistance < .5 && endDistance < startDistance,
+    "hunter reaches the sound point in front of the cabinet without getting stuck");
+  assert.ok(!blocked(w.data.hunter), "hunter collision keeps it out of furniture while investigating");
 });
 
 test("capture preserves objective items, resets position, and ends on the third capture", () => {

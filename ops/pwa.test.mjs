@@ -57,6 +57,8 @@ test("built offline worker has one revision per URL and a cached navigation fall
     "assets/audio/sewer-escape-v1.mp3",
     "assets/scenes/escape-cover-v1.webp",
     "assets/scenes/escape-materials-v1.webp",
+    "assets/models/escape-props-v1.glb",
+    "assets/models/extreme-milk-frog-v1.glb",
     "assets/props/escape-props-v1.webp",
     "assets/props/escape-details-v1.webp",
     "assets/audio/haunted-bath-v1.mp3",

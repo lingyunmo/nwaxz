@@ -39,6 +39,10 @@ test("release readiness, UTF-8, asset caching, and private-file isolation", asyn
   assert.match(await page.text(), /奶娃爱洗澡/);
   assert.match(page.headers.get("content-type"), /charset=utf-8/i);
   assert.equal(page.headers.get("cache-control"), "no-cache");
+  const policy = page.headers.get("content-security-policy");
+  assert.match(policy, /img-src 'self' data: blob:/, "embedded GLB textures can use browser blob image URLs");
+  assert.match(policy, /script-src 'self';/);
+  assert.ok(!policy.includes("unsafe-eval") && !policy.includes("unsafe-inline"));
   assert.match(
     (await request("/assets/app-1234abcd.js")).headers.get("cache-control"),
     /immutable/,

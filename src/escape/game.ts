@@ -47,7 +47,7 @@ export class EscapeGame {
       if (sound && typeof sound.music === "boolean" && typeof sound.sound === "boolean") { this.music = sound.music; this.sound = sound.sound; }
       else this.sound = settings.sound;
     } catch { this.storageWarning = "逃生存档暂时无法读取；原洗澡存档仍保留。可先导出逃生备份。"; }
-    this.root.innerHTML = `<main class="escape-shell" aria-label="极限恐怖逃生"><canvas id="escape-view" tabindex="0" aria-label="第一人称逃生场景。WASD移动，左右方向键转身，Shift奔跑，C蹲行，F手电，E交互，Q丢石子，Esc暂停。"></canvas>
+    this.root.innerHTML = `<main class="escape-shell" aria-label="极限恐怖逃生"><canvas id="escape-view" tabindex="0" aria-label="3D第一人称逃生。WASD移动，拖动上下左右转头，方向键转身，PageUp和PageDown抬头低头，Shift奔跑，C蹲行，F手电，E交互，Q丢石子，Esc暂停。"></canvas>
       <header class="escape-hud"><button id="escape-pause" aria-label="暂停逃生">Ⅱ</button><div><span id="escape-room">地下浴场</span><strong id="escape-goal">寻找下水道出口</strong></div><button id="escape-map" aria-label="查看地图">地图</button></header>
       <div class="escape-inventory" id="escape-inventory" aria-label="随身物品"></div><div class="escape-crosshair" aria-hidden="true">＋</div>
       <div class="escape-danger" id="escape-danger" role="status"></div><div class="escape-notice" id="escape-notice" role="status" aria-live="polite"></div>
@@ -62,6 +62,7 @@ export class EscapeGame {
   private button(id: string, fn: () => void) { this.$(`#${id}`).addEventListener("click", fn, { signal: this.signal }); }
   private panel(html: string) {
     this.$(".escape-shell").classList.remove("intro-active");
+    this.$(".escape-shell").classList.remove("capture-active");
     this.$("#escape-panel").classList.remove("escape-intro");
     this.$("#escape-panel").hidden = false;
     this.$("#escape-panel").innerHTML = `<section class="escape-card">${html}</section>`;
@@ -70,8 +71,8 @@ export class EscapeGame {
   private intro() {
     this.paused = true; this.audio.setPlaying(false);
     const canResume = this.saved && ["playing", "caught"].includes(this.saved.phase);
-    this.panel(`<p class="escape-eyebrow">极限恐怖 · 完整逃生篇</p><h1>奶蛙<br><em>下水道逃生</em></h1><p>浴场锁门了。走廊深处，它还在笑。</p><p class="escape-story">搜索钥匙，恢复电源，剪开铁网。你只有三次机会。躲进柜子前，先确保它没有看见你。</p>
-      <div class="escape-intro-controls"><span>WASD 移动 · 拖动视角</span><span>E 交互 · Shift 奔跑 · C 蹲行</span><span>手机：左摇杆移动，右侧滑动转身</span></div>
+    this.panel(`<p class="escape-eyebrow">极限恐怖 · 3D 逃生篇</p><h1>奶蛙<br><em>下水道逃生</em></h1><p>浴场锁门了。走廊深处，它还在笑。</p><p class="escape-story">搜索钥匙，恢复电源，剪开铁网。你只有三次机会。躲进柜子前，先确保它没有看见你。</p>
+      <div class="escape-intro-controls"><span>WASD 移动 · 拖动上下左右转头</span><span>E 交互 · Shift 奔跑 · C 蹲行</span><span>手机：左摇杆移动，右侧滑动看四周</span></div>
       <label class="escape-check"><input id="escape-intro-music" type="checkbox" ${this.music ? "checked" : ""}>启用本模式恐怖配乐（可随时关闭）</label>
       ${canResume ? '<button id="escape-continue" class="escape-primary">继续逃生</button>' : ""}<button id="escape-new" class="${canResume ? "escape-secondary" : "escape-primary"}">${canResume ? "重新开始" : "进入浴场"}</button>
       <div class="escape-links"><button id="escape-intro-help">逃生须知</button><button id="escape-intro-import">导入逃生存档</button><button id="escape-intro-exit">返回主界面</button></div>
@@ -85,29 +86,36 @@ export class EscapeGame {
     this.button("escape-intro-import", () => this.$<HTMLInputElement>("#escape-import").click());
   }
   private async loadArt() {
-    const paths = { materials: "/assets/scenes/escape-materials-v1.webp", props: "/assets/props/escape-props-v1.webp", frog: "/assets/character/haunted-frog-v1.webp", details: "/assets/props/escape-details-v1.webp" };
+    const paths = { materials: "/assets/scenes/escape-materials-v1.webp" };
     return Object.fromEntries(await Promise.all(Object.entries(paths).map(async ([key, path]) => { const img = new Image(); img.src = path; await img.decode(); return [key, img]; }))) as EscapeArt;
   }
   private async start(resume: boolean) {
+    this.save(); this.started = false; this.paused = true;
+    this.renderer?.dispose(); this.renderer = undefined;
     this.audio.setMode("escape"); this.applySound(); void this.audio.unlock();
     if (!document.fullscreenElement && document.documentElement.requestFullscreen) void document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
-    this.panel('<p class="escape-eyebrow">下水道逃生</p><h2>有人在走廊里……</h2><p>正在准备浴场与声音</p>');
+    this.panel('<p class="escape-eyebrow">下水道逃生 · 3D</p><h2>有人在走廊里……</h2><p>正在装载浴场、立体模型与声音</p>');
     try {
       this.art ??= await this.loadArt();
       if (this.disposed) return;
       this.world = resume && this.saved ? EscapeWorld.restore(this.saved) : new EscapeWorld();
       this.renderer = new EscapeRenderer(this.$("#escape-view"), this.art, this.settings.reducedMotion);
+      await this.renderer.load();
+      if (this.disposed) return;
       this.renderer.resize(this.settings.quality === "high"); this.started = true; this.phase = this.world.data.phase;
       this.saveAt = this.world.data.elapsed; this.save();
       if (this.world.data.phase === "caught") this.result(); else this.resume();
     } catch {
-      this.panel('<h2>场景还未准备好</h2><p>检查网络后重试；已有存档仍保留。</p><button id="escape-load-back" class="escape-primary">回到逃生菜单</button>');
+      this.renderer?.dispose(); this.renderer = undefined;
+      this.panel('<h2>3D 场景未能打开</h2><p>请确认浏览器支持 WebGL，并允许下载场景模型。检查网络后重试；已有存档仍保留。</p><button id="escape-load-back" class="escape-primary">回到逃生菜单</button>');
       this.button("escape-load-back", () => this.intro());
     }
   }
   private applySound() { this.audio.setSettings({ ...this.settings, music: this.music, sound: this.sound }); }
   private saveSound() { try { localStorage.setItem(SOUND, JSON.stringify({ music: this.music, sound: this.sound })); } catch { /* Audio still works without storage. */ } this.applySound(); }
   private resume() {
+    this.$(".escape-shell").classList.remove("capture-active");
+    this.$("#escape-view").setAttribute("aria-label", "3D第一人称逃生。WASD移动，拖动画面上下左右转头，E交互，PageUp和PageDown抬头低头，Esc暂停。");
     this.$("#escape-panel").hidden = true; this.paused = false; this.lastFrame = 0; this.clearInput();
     this.$("#escape-view").focus({ preventScroll: true }); this.audio.setPlaying(true); void this.audio.unlock();
   }
@@ -142,12 +150,14 @@ export class EscapeGame {
       this.panel(`<p class="escape-eyebrow">你逃进了下水道</p><h1>别回头</h1><p>铁网断开的那一刻，冷风终于吹到了脸上。奶蛙的笑声，被你留在了上面。</p><div class="escape-result-stats"><span>逃生用时<strong>${time(d.elapsed)}</strong></span><span>被抓次数<strong>${d.captures} / 3</strong></span><span>找到纸条<strong>${d.notes.length} / 3</strong></span></div><p class="escape-record">本机最快 ${time((this.record?.bestTimeMs ?? d.elapsed * 1000) / 1000)}</p><button id="escape-again" class="escape-primary">再逃一次</button><button id="escape-result-exit" class="escape-secondary">返回主界面</button>`);
       this.button("escape-again", () => void this.start(false)); this.button("escape-result-exit", this.exit);
     } else {
-      this.panel(`<div class="escape-capture-frog" aria-label="奶蛙正在捧腹大笑"></div><p class="escape-eyebrow">${d.phase === "lost" ? "第三次被抓住" : `第 ${d.captures} 次被抓住`}</p><h2>${d.phase === "lost" ? "笑声留住了你" : "它找到你了"}</h2><p>${d.phase === "lost" ? "三次机会已经用完。记住路线，下次别在它眼前躲藏。" : "你还会在寝室醒来。已找到的物品和开过的锁会保留。"}</p><button id="escape-next" class="escape-primary">${d.phase === "lost" ? "重新逃生" : `醒来 · 第 ${d.captures + 1} 夜`}</button><button id="escape-result-exit" class="escape-secondary">保存并退出</button>`);
+      this.panel(`<p class="escape-eyebrow">${d.phase === "lost" ? "第三次被抓住" : `第 ${d.captures} 次被抓住`}</p><h2>${d.phase === "lost" ? "笑声留住了你" : "它找到你了"}</h2><p>${d.phase === "lost" ? "三次机会已经用完。记住路线，下次别在它眼前躲藏。" : "你还会在寝室醒来。已找到的物品和开过的锁会保留。"}</p><button id="escape-next" class="escape-primary">${d.phase === "lost" ? "重新逃生" : `醒来 · 第 ${d.captures + 1} 夜`}</button><div class="escape-links"><button id="escape-replay-laugh">再听笑声</button><button id="escape-result-exit">保存并退出</button></div>`);
+      this.$(".escape-shell").classList.add("capture-active");
+      this.$("#escape-view").setAttribute("aria-label", "立体奶蛙正张嘴、双手捧腹大笑；游戏进度已暂停");
       this.button("escape-next", () => { if (d.phase === "lost") void this.start(false); else { this.world.nextNight(); this.phase = "playing"; this.save(); this.resume(); } });
       this.button("escape-result-exit", this.exit);
       this.audio.haunt();
       // One deliberate click can replay the recognisable laugh, without changing settings.
-      this.$(".escape-capture-frog").addEventListener("click", () => void this.audio.preview("sound"), { signal: this.signal });
+      this.button("escape-replay-laugh", () => void this.audio.preview("sound"));
     }
   }
   private save() {
@@ -179,7 +189,8 @@ export class EscapeGame {
     for (const event of ["pointerup", "pointercancel", "lostpointercapture"]) stick.addEventListener(event, () => { stickId = undefined; this.stick = { x: 0, y: 0 }; stick.querySelector<HTMLElement>("span")!.style.transform = "translate(0,0)"; }, { signal: this.signal });
     const view = this.$("#escape-view");
     view.addEventListener("pointerdown", e => { if (this.paused) return; e.preventDefault(); view.setPointerCapture(e.pointerId); this.look = { id: e.pointerId, x: e.clientX, y: e.clientY }; view.focus({ preventScroll: true }); }, { signal: this.signal });
-    view.addEventListener("pointermove", e => { if (!this.look || this.look.id !== e.pointerId || this.paused || this.world.data.hidden) return; this.world.data.player.angle = Math.atan2(Math.sin(this.world.data.player.angle + (e.clientX - this.look.x) * .005), Math.cos(this.world.data.player.angle + (e.clientX - this.look.x) * .005)); this.look.x = e.clientX; this.look.y = e.clientY; }, { signal: this.signal });
+    view.addEventListener("pointermove", e => { if (!this.look || this.look.id !== e.pointerId || this.paused || this.world.data.hidden) return; this.world.data.player.angle = Math.atan2(Math.sin(this.world.data.player.angle + (e.clientX - this.look.x) * .005), Math.cos(this.world.data.player.angle + (e.clientX - this.look.x) * .005)); this.world.data.player.pitch = Math.max(-1.3, Math.min(1.3, (this.world.data.player.pitch ?? 0) - (e.clientY - this.look.y) * .004)); this.look.x = e.clientX; this.look.y = e.clientY; }, { signal: this.signal });
+    view.addEventListener("webglcontextlost", e => { e.preventDefault(); if (this.started && !this.paused) this.pause(); }, { signal: this.signal });
     for (const event of ["pointerup", "pointercancel", "lostpointercapture"]) view.addEventListener(event, () => { this.look = undefined; }, { signal: this.signal });
     const sprint = this.$("#escape-sprint");
     sprint.addEventListener("pointerdown", e => { if (this.paused) return; e.preventDefault(); sprint.setPointerCapture(e.pointerId); this.sprinting = true; }, { signal: this.signal });
@@ -194,7 +205,7 @@ export class EscapeGame {
         return;
       }
       const key = e.key.toLowerCase();
-      if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", "shift", "e", "q", "c", "f", "m", "escape", "tab", " "].includes(key)) e.preventDefault(); else return;
+      if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", "pageup", "pagedown", "shift", "e", "q", "c", "f", "m", "escape", "tab", " "].includes(key)) e.preventDefault(); else return;
       this.keys.add(key);
       if (e.repeat) return;
       if (["escape", "m", "tab"].includes(key)) this.pause(key !== "escape");
@@ -227,8 +238,8 @@ export class EscapeGame {
     const dt = this.lastFrame ? Math.min(.1, (now - this.lastFrame) / 1000) : 0; this.lastFrame = now;
     if (this.started && !this.paused && !document.hidden) {
       const down = (key: string) => this.keys.has(key) ? 1 : 0;
-      this.world.advance(dt, { forward: down("w") + down("arrowup") - down("s") - down("arrowdown") - this.stick.y, strafe: down("d") - down("a") + this.stick.x, turn: down("arrowright") - down("arrowleft"), sprint: this.keys.has("shift") || this.sprinting });
-      this.renderer?.draw(this.world);
+      this.world.advance(dt, { forward: down("w") + down("arrowup") - down("s") - down("arrowdown") - this.stick.y, strafe: down("d") - down("a") + this.stick.x, turn: down("arrowright") - down("arrowleft"), look: down("pageup") - down("pagedown"), sprint: this.keys.has("shift") || this.sprinting });
+      this.renderer?.draw(this.world, dt);
       const d = this.world.data;
       for (const event of this.world.drainEvents()) {
         if (event.type === "laugh") this.audio.haunt();
@@ -241,6 +252,9 @@ export class EscapeGame {
       if (d.phase !== this.phase) { this.phase = d.phase; if (d.phase === "won") this.recordWin(); this.result(); }
       if (now - this.hudAt > 100) { this.hudAt = now; this.updateHud(); }
     }
+    // Capture is a cosmetic animation only. Simulation, battery and saves do
+    // not advance while its clearly visible 3D belly laugh loops.
+    if (this.started && this.paused && ["caught", "lost"].includes(this.world.data.phase) && !document.hidden && this.$(".escape-shell").classList.contains("capture-active")) this.renderer?.draw(this.world, dt);
     this.raf = requestAnimationFrame(this.frame);
   };
   private updateHud() {
@@ -260,6 +274,6 @@ export class EscapeGame {
     this.$<HTMLProgressElement>("#escape-search progress").value = this.world.pending ? 1.15 - this.world.pending.remaining : 0;
   }
   destroy() {
-    if (this.disposed) return; this.save(); this.disposed = true; this.controller.abort(); cancelAnimationFrame(this.raf); this.audio.setPlaying(false); this.audio.stopPreview();
+    if (this.disposed) return; this.save(); this.disposed = true; this.controller.abort(); cancelAnimationFrame(this.raf); this.audio.setPlaying(false); this.audio.stopPreview(); this.renderer?.dispose();
   }
 }

@@ -1,6 +1,6 @@
 export type Vec = { x: number; z: number };
 export type Item = "brass" | "cellar" | "fuse" | "cutters";
-export type EscapeInput = { forward?: number; strafe?: number; turn?: number; sprint?: boolean };
+export type EscapeInput = { forward?: number; strafe?: number; turn?: number; look?: number; sprint?: boolean };
 export type Prop = Vec & { id: string; kind: "wardrobe" | "drawer" | "power" | "valve" | "exit" | "note"; name: string; loot?: Item; text?: string; battery?: boolean };
 export const SIZE = 25;
 const grid = Array.from({ length: SIZE }, () => Array<number>(SIZE).fill(1));
@@ -48,7 +48,7 @@ export const ROOMS = [
 type HunterState = "patrol" | "investigate" | "chase" | "search";
 export type Phase = "playing" | "caught" | "lost" | "won";
 export type EscapeSnapshot = {
-  version: 1; player: Vec & { angle: number; stamina: number; battery: number; light: boolean; crouched: boolean };
+  version: 1; player: Vec & { angle: number; pitch?: number; stamina: number; battery: number; light: boolean; crouched: boolean };
   hunter: Vec & { angle: number; state: HunterState }; elapsed: number; captures: number;
   phase: Phase; inventory: Item[]; searched: string[]; opened: string[]; unlocked: string[];
   notes: string[]; hidden?: string; power: boolean; drained: boolean; stones: number;
@@ -61,7 +61,7 @@ const initialOpen = ["bedroom", "infirmary", "laundry", "workshop"];
 const patrol: Vec[] = [{ x: 12.5, z: 9.5 }, { x: 20.5, z: 9.5 }, { x: 19.5, z: 3.5 }, { x: 12.5, z: 9.5 }, { x: 4.5, z: 9.5 }, { x: 4.5, z: 14.5 }];
 export class EscapeWorld {
   data: EscapeSnapshot = {
-    version: 1, player: { x: 3.5, z: 5.5, angle: -Math.PI / 2, stamina: 100, battery: 100, light: true, crouched: false },
+    version: 1, player: { x: 3.5, z: 5.5, angle: -Math.PI / 2, pitch: 0, stamina: 100, battery: 100, light: true, crouched: false },
     hunter: { x: 12.5, z: 9.5, angle: 0, state: "patrol" }, elapsed: 0, captures: 0, phase: "playing",
     inventory: [], searched: [], opened: [...initialOpen], unlocked: [...initialOpen], notes: [], power: false, drained: false, stones: 2,
   };
@@ -114,7 +114,21 @@ export class EscapeWorld {
     const range = h.state === "chase" ? 13 : p.light ? 9 : p.crouched ? 3.8 : 6;
     return dist(p, h) < range && (h.state === "chase" || Math.abs(angleDelta(Math.atan2(p.z - h.z, p.x - h.x), h.angle)) < 1.05) && this.lineOfSight(h, p);
   }
+  /** Model footprints in map units, shared by player and pursuer collision. */
+  private furniture(x: number, z: number, radius = 0) {
+    return PROPS.some(o => {
+      const half = o.kind === "wardrobe" ? [.4, .29] : o.kind === "drawer" ? [.34, .25] : o.kind === "power" ? [.2, .13] : undefined;
+      return half && Math.abs(o.x - x) < half[0] + radius && Math.abs(o.z - z) < half[1] + radius;
+    });
+  }
+  private reachableTarget(point: Vec): Vec {
+    if (!this.furniture(point.x, point.z, .23)) return { ...point };
+    return [[0, 1], [1, 0], [0, -1], [-1, 0]].map(([x, z]) => ({ x: Math.floor(point.x) + .5 + x, z: Math.floor(point.z) + .5 + z }))
+      .filter(p => !this.wall(p.x, p.z, true) && !this.furniture(p.x, p.z, .23))
+      .sort((a, b) => dist(a, this.data.hunter) - dist(b, this.data.hunter))[0] ?? { ...point };
+  }
   route(a: Vec, b: Vec, hunter = false): Vec[] {
+    if (hunter) b = this.reachableTarget(b);
     const start = Math.floor(a.z) * SIZE + Math.floor(a.x), end = Math.floor(b.z) * SIZE + Math.floor(b.x);
     const queue = [start], came = new Map<number, number>([[start, -1]]);
     for (let i = 0; i < queue.length && !came.has(end); i++) {
@@ -122,7 +136,7 @@ export class EscapeWorld {
       for (const [dx, dz] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
         const xx = x + dx, zz = z + dz, key = zz * SIZE + xx;
         if (xx < 0 || xx >= SIZE || zz < 0 || zz >= SIZE || came.has(key) || this.wall(xx + .5, zz + .5, hunter)
-          || !hunter && PROPS.some(o => ["wardrobe", "drawer", "power"].includes(o.kind) && Math.floor(o.x) === xx && Math.floor(o.z) === zz)) continue;
+          || this.furniture(xx + .5, zz + .5, hunter ? .23 : .18)) continue;
         came.set(key, at); queue.push(key);
       }
     }
@@ -132,8 +146,9 @@ export class EscapeWorld {
     return result;
   }
   private move(body: Vec, dx: number, dz: number, hunter = false) {
-    const blocked = (x: number, z: number) => [[-.18, -.18], [.18, -.18], [-.18, .18], [.18, .18]].some(([ox, oz]) => this.wall(x + ox, z + oz, hunter))
-      || !hunter && PROPS.some(o => ["wardrobe", "drawer", "power"].includes(o.kind) && Math.hypot(o.x - x, o.z - z) < .42);
+    const radius = hunter ? .23 : .18;
+    const blocked = (x: number, z: number) => [[-radius, -radius], [radius, -radius], [-radius, radius], [radius, radius]].some(([ox, oz]) => this.wall(x + ox, z + oz, hunter))
+      || this.furniture(x, z, radius);
     if (!blocked(body.x + dx, body.z)) body.x += dx;
     if (!blocked(body.x, body.z + dz)) body.z += dz;
   }
@@ -146,6 +161,7 @@ export class EscapeWorld {
     const d = this.data, p = d.player;
     d.elapsed += dt;
     p.angle = angleDelta(p.angle + (input.turn ?? 0) * dt * 2, 0);
+    p.pitch = Math.max(-1.3, Math.min(1.3, (p.pitch ?? 0) + (input.look ?? 0) * dt * 1.5));
     const forward = Math.max(-1, Math.min(1, input.forward ?? 0)), side = Math.max(-1, Math.min(1, input.strafe ?? 0));
     const moving = !d.hidden && Math.hypot(forward, side) > .05;
     const running = moving && input.sprint && !p.crouched && p.stamina > 2;
@@ -183,10 +199,11 @@ export class EscapeWorld {
     }
     if (d.hidden && this.seenHide) {
       const cabinet = PROPS.find(p => p.id === this.seenHide)!;
-      this.target = { x: cabinet.x, z: cabinet.z }; h.state = "search";
+      this.target = { x: cabinet.x, z: cabinet.z + .65 }; h.state = "search";
       if (dist(h, cabinet) < 1.2) { this.capture(); return; }
     } else if (!d.hidden && dist(h, d.player) < .55 && this.lineOfSight(h, d.player)) { this.capture(); return; }
-    if (dist(h, this.target) < .35) {
+    const destination = this.reachableTarget(this.target);
+    if (dist(h, destination) < .35) {
       if (h.state === "patrol") {
         this.wait += dt;
         if (this.wait < 1.8) return;
@@ -207,11 +224,12 @@ export class EscapeWorld {
     const distance = dist(h, next);
     if (distance < .08) { this.path.shift(); return; }
     const speed = h.state === "chase" ? 1.95 : h.state === "patrol" ? .9 : 1.25;
-    h.angle = Math.atan2(next.z - h.z, next.x - h.x);
+    const desired = Math.atan2(next.z - h.z, next.x - h.x);
+    h.angle = angleDelta(h.angle + Math.max(-dt * 4, Math.min(dt * 4, angleDelta(desired, h.angle))), 0);
     const door = DOORS.find(o => o.x === Math.floor(next.x) && o.z === Math.floor(next.z));
     if (door && !d.opened.includes(door.id) && d.unlocked.includes(door.id) && dist(h, { x: door.x + .5, z: door.z + .5 }) < 1) { d.opened.push(door.id); this.events.push({ type: "door" }); }
     const step = Math.min(distance, speed * dt);
-    this.move(h, Math.cos(h.angle) * step, Math.sin(h.angle) * step, true);
+    this.move(h, Math.cos(desired) * step, Math.sin(desired) * step, true);
     this.hunterStep += step;
     if (this.hunterStep > .8) {
       this.hunterStep = 0;
@@ -222,7 +240,7 @@ export class EscapeWorld {
   noise(at: Vec, range: number) {
     const h = this.data.hunter;
     if (this.data.elapsed < 18 || h.state === "chase" || dist(h, at) > range) return;
-    h.state = "investigate"; this.target = { ...at }; this.wait = 4; this.pathTimer = 0;
+    h.state = "investigate"; this.target = this.reachableTarget(at); this.wait = 4; this.pathTimer = 0;
   }
   throwStone() {
     if (this.data.hidden || this.data.phase !== "playing") return;
@@ -239,7 +257,7 @@ export class EscapeWorld {
       ...PROPS.map(o => ({ id: o.id, position: o, label: o.kind === "drawer" ? this.data.searched.includes(o.id) ? `已搜过：${o.name}` : `搜索${o.name}` : o.kind === "wardrobe" ? `躲进${o.name}` : o.kind === "note" ? `阅读${o.name}` : o.name })),
       ...DOORS.map(o => ({ id: o.id, position: { x: o.x + .5, z: o.z + .5 }, label: `${this.data.opened.includes(o.id) ? "关闭" : "打开"}${o.name}` })),
     ];
-    return objects.filter(o => dist(p, o.position) < 1.7 && Math.abs(angleDelta(Math.atan2(o.position.z - p.z, o.position.x - p.x), p.angle)) < .8 && this.lineOfSight(p, o.position, DOORS.some(d => d.id === o.id)))
+    return objects.filter(o => dist(p, o.position) < 1.7 && Math.abs(p.pitch ?? 0) < 1.05 && Math.abs(angleDelta(Math.atan2(o.position.z - p.z, o.position.x - p.x), p.angle)) < .8 && this.lineOfSight(p, o.position, DOORS.some(d => d.id === o.id)))
       .sort((a, b) => dist(p, a.position) - dist(p, b.position))[0];
   }
   interact() {
@@ -247,7 +265,11 @@ export class EscapeWorld {
     const target = this.nearest();
     if (!target) { this.say("靠近目标，并看向它。"); return; }
     const d = this.data;
-    if (target.id === "leave-hide") { d.hidden = undefined; d.player.crouched = true; this.say("你悄悄离开了柜子。"); return; }
+    if (target.id === "leave-hide") {
+      const cabinet = PROPS.find(p => p.id === d.hidden)!;
+      Object.assign(d.player, { x: cabinet.x, z: cabinet.z + 1, angle: Math.PI / 2, pitch: 0, crouched: true });
+      d.hidden = undefined; this.say("你悄悄离开了柜子。"); return;
+    }
     const door = DOORS.find(o => o.id === target.id);
     if (door) {
       if (!d.unlocked.includes(door.id)) {
@@ -269,7 +291,8 @@ export class EscapeWorld {
     }
     if (object.kind === "wardrobe") {
       if (this.seesPlayer() || d.hunter.state === "chase" && this.lineOfSight(d.hunter, d.player)) this.seenHide = object.id;
-      d.hidden = object.id; d.player.angle = angleDelta(d.player.angle + Math.PI, 0);
+      d.hidden = object.id;
+      Object.assign(d.player, { x: object.x, z: object.z + .08, angle: Math.PI / 2, pitch: 0 });
       this.say(this.seenHide ? "它看见你进柜子了，快离开这里！" : "屏住呼吸，听脚步。确认它离开后再出去。"); return;
     }
     if (object.kind === "note") { if (!d.notes.includes(object.id)) d.notes.push(object.id); this.say(object.text!); return; }
@@ -304,7 +327,7 @@ export class EscapeWorld {
   }
   nextNight() {
     if (this.data.phase !== "caught") return;
-    const d = this.data; Object.assign(d.player, { x: 3.5, z: 5.5, angle: -Math.PI / 2, stamina: 100, battery: Math.max(35, d.player.battery) });
+    const d = this.data; Object.assign(d.player, { x: 3.5, z: 5.5, angle: -Math.PI / 2, pitch: 0, stamina: 100, battery: Math.max(35, d.player.battery) });
     Object.assign(d.hunter, { x: 12.5, z: 9.5, angle: 0, state: "patrol" });
     d.hidden = undefined; d.phase = "playing"; this.seenHide = undefined; this.unseen = 0; this.path = []; this.pathTimer = 0;
     this.patrolIndex = 0; this.target = { ...patrol[0] }; this.wait = -8; this.say("你在寝室醒来。找到的物品还在，别再被抓住。");
@@ -325,6 +348,7 @@ export class EscapeWorld {
       || !ids(d.notes, PROPS.filter(o => o.kind === "note").map(o => o.id)) || !Number.isInteger(d.stones) || !number(d.stones, 0, 3)
       || typeof d.power !== "boolean" || typeof d.drained !== "boolean" || typeof d.player.light !== "boolean" || typeof d.player.crouched !== "boolean"
       || !number(d.player.stamina, 0, 100) || !number(d.player.battery, 0, 100) || !number(d.player.angle, -Math.PI, Math.PI) || !number(d.hunter.angle, -Math.PI, Math.PI)
+      || d.player.pitch !== undefined && !number(d.player.pitch, -1.3, 1.3)
       || d.hidden !== undefined && !PROPS.some(o => o.id === d.hidden && o.kind === "wardrobe")) throw new Error("逃生存档格式不正确");
     if ((d.phase === "lost") !== (d.captures === 3) || d.phase === "caught" && d.captures === 0
       || d.power && !d.inventory.includes("fuse") || d.drained && !d.power
@@ -334,6 +358,11 @@ export class EscapeWorld {
     const world = new EscapeWorld(); world.data = JSON.parse(JSON.stringify(d));
     for (const p of [d.player, d.hunter]) if (!number(p.x, .2, SIZE - .2) || !number(p.z, .2, SIZE - .2) || world.wall(p.x, p.z)) throw new Error("逃生存档位置不正确");
     if (d.hidden && dist(d.player, PROPS.find(o => o.id === d.hidden)!) > 1.9) throw new Error("逃生存档藏匿位置不正确");
+    world.data.player.pitch ??= 0;
+    if (d.hidden) {
+      const cabinet = PROPS.find(o => o.id === d.hidden)!;
+      Object.assign(world.data.player, { x: cabinet.x, z: cabinet.z + .08, angle: Math.PI / 2, pitch: 0 });
+    }
     if (d.pursuit) {
       const m = d.pursuit;
       if (!m.target || !number(m.target.x, .2, SIZE - .2) || !number(m.target.z, .2, SIZE - .2) || !number(m.unseen, 0, 86400) || !number(m.wait, -10, 86400)

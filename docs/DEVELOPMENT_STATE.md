@@ -1,10 +1,20 @@
 # 开发状态与后续计划
 
+## 0.12.0 真3D逃生候选
+
+Issue #35：极限恐怖篇使用 Babylon.js 9.32 / WebGL，场景采用固定 UV 的绘制纹理，衣柜、阀门、门和奶蛙均有真实体积；可上下转头，藏身位置在柜内，经典捧腹大笑使用骨骼循环动画。双方共用家具碰撞，原18关、IndexedDB v1、独立逃生备份及声音偏好保留。
+
+本地 `pnpm check` 93 项业务测试与 1 项 PWA 检查通过；无窗口 Chromium 软件渲染已覆盖桌面/手机视口、CDP触控、暂停冻结、抓捕/下一夜、柜内进出、备份导入导出和断网冷重载。真实手机性能与扬声器未验证；此处记录合并前验收，最终发布状态见 [VERIFICATION.md](VERIFICATION.md)。
+
+## 最近核对发布：0.11.0
+
+PR #34 合并 SHA `3ce7ed929e3ef9c03e1c5a0c749c5f22e0520ba0`，[run 39796520910](https://github.com/lingyunmo/nwaxz/actions/runs/39796520910) 已成功，公网版本、精确 SHA 和静态资源内容均核对。[发布证据](https://github.com/lingyunmo/nwaxz/pull/34#issuecomment-6343588123)。
+
 ## 0.11.0 极限恐怖逃生候选
 
 Issue #33：新增原创第一人称“下水道逃生”。从寝室搜索黄铜钥匙开始，经档案钥匙、保险丝、通电、地下工具柜、排水阀至剪网逃生，包含有视线/听觉的奶蛙、门锁碰撞、柜内藏身与被目击后的搜查、三夜机会、独立存档和最佳纪录。绘制封面、材质及透明道具图集，原创 48 秒氛围循环；被抓保留捧腹诡笑。原十八个洗澡关卡与 v1 存档继续使用。完整说明见 [ESCAPE_GAME.md](ESCAPE_GAME.md)，具体候选验收见 [VERIFICATION.md](VERIFICATION.md)。线上状态以合并后发布证据为准。
 
-## 最近核对发布：0.10.0
+## 历史核对发布：0.10.0
 
 PR #32 合并 SHA `6fbcd38f4e0a5dee8e9a63140d3227b7d664dde9`，[run 38862352356](https://github.com/lingyunmo/nwaxz/actions/runs/38862352356) 三个作业成功。公网版本、精确 SHA 及资源核对见 [发布证据](https://github.com/lingyunmo/nwaxz/pull/32#issuecomment-6209720452)。
 

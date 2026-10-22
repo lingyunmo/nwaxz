@@ -9,9 +9,13 @@
 
 Canvas 2D 游戏包含十二个关卡：第一章 `first-bath`（第一缸水）、`detour`（绕个小弯）、`last-drop`（曲曲折折）；第二章 `fan-crossing`、`valve-timing`；第三章 `clean-water-only`、`garden-gate`、`sponge-transfer`；第四章 `valve-wind-relay`、`sponge-relay`、`wind-sponge-relay`、`garden-wind-relay`。水流使用 208 粒子求解器，固定 120 Hz 步进并用空间分桶；可挖网格为 CELL8，石块不可挖。接到 100 滴清水即可获胜，泡泡币为额外收集目标。
 
+普通12关与恐怖洗澡6关合计原18关，0.12.0 候选不改变它们。逃生篇在 0.11.0 已发布版本中使用 Canvas 2D 光线投射；0.12.0 的合并前候选将独立逃生渲染升级为 Babylon.js 9.32 / WebGL 真3D，主场景和角色模型由 `src/escape/renderer.ts`、`scene.ts`、`models.ts` 装配。玩家视角含上下 pitch；衣柜使用可开合门和可藏身的真实内腔；奶蛙有 idle、walk、run、laugh 四段骨骼动画，捧腹大笑保留为可见的核心动作。候选已通过无窗口 Chromium 软件渲染验收：900×650 和 390×844 视口、CDP 触控移动及上下转头、暂停时画面冻结、抓捕时3D大笑和下一夜、GLB 缓存及断网冷重载；脚本错误为0。此结果不代表真人手机帧率或扬声器听感已验证，低端手机性能和真机听感待测。0.12.0 的最终发布状态以对应 PR 的 CI 与公网核对为准。0.11.0 精确发布证据见[GitHub记录](https://github.com/lingyunmo/nwaxz/pull/34#issuecomment-6343588123)，发布记录另见 [VERIFICATION.md](VERIFICATION.md)。
+
+0.12.0 本地候选使用 `public/assets/models/escape-props-v1.glb` 和 `public/assets/models/extreme-milk-frog-v1.glb`，由 `ops/build_escape_props.py` 与 `ops/build_escape_character.py` 生成。`public/assets/scenes/escape-materials-v1.webp` 等现有绘制纹理仍用于浴场表面和木材 UV；恐怖角色依据专用恐怖角色参考，不使用普通模式的 Cute turnaround。Vite PWA 预缓存 glob 包含 `.glb`，候选已通过 GLB 缓存和断网冷重载验收。浏览器验收入口是 `ops/escape-browser.mjs`：需独立安装 Playwright 或设置 `PLAYWRIGHT_MODULE`，`CHROMIUM_PATH` 可选；脚本固定以 headless 软件渲染和独立 profile 运行。
+
 游戏包含主界面、普通模式章节选关、暂停、重来确认、结算和设置等完整流程。原生全屏只在浏览器支持时请求；不支持时游戏仍以全视口显示。计时在首次有效挖掘或操作机关时开始，暂停及页面进入后台时停止计时。得分公式为 `1000 + 500 × 泡泡币数 + max(0, 1000 - floor(elapsedMs / 100))`，最高 3500 分；最高分与最快时间分别合并。
 
-进度保存在浏览器 IndexedDB，支持手动导入/导出，并通过 BroadcastChannel 合并同源标签页的存档。版本 1 旧存档仍可读取，缺失的成绩字段保持缺失，不推算旧分数。PWA 缓存静态资源并在更新可用时提示用户；每个 URL 仅登记一次，固定名称角色素材使用内容修订，只有 Vite 内容哈希文件长期缓存。预缓存清单排除三个已知 PNG 母版，但这些文件仍保留在 `public/` 并随站点构建到 `dist/`；运行时使用的 WebP 场景资源和暂停用的 `wait.webp` 仍会缓存。更新缓存不会清空 IndexedDB。角色动画将原有 8 种和新增 4 种姿态平滑混合，并持续做呼吸摆动。美术素材见 [ART_V2.md](ART_V2.md)。
+进度保存在浏览器 IndexedDB，支持手动导入/导出，并通过 BroadcastChannel 合并同源标签页的存档。版本 1 旧存档仍可读取，缺失的成绩字段保持缺失，不推算旧分数。PWA 缓存静态资源并在更新可用时提示用户；每个 URL 仅登记一次，固定名称角色素材使用内容修订，只有 Vite 内容哈希文件长期缓存。预缓存清单排除三个已知 PNG 母版，但这些文件仍保留在 `public/` 并随站点构建到 `dist/`；运行时使用的 WebP 场景资源、两个逃生 GLB 和暂停用的 `wait.webp` 位于静态资源预缓存范围。更新缓存不会清空 IndexedDB。角色动画将原有 8 种和新增 4 种姿态平滑混合，并持续做呼吸摆动。美术素材见 [ART_V2.md](ART_V2.md)。
 
 音乐与音效由 Web Audio 合成，音乐默认关闭；设置还包括震动、简化动作和画质选项。云端同步尚未实现。
 

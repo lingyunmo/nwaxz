@@ -1,11 +1,13 @@
 # 奶蛙爱洗澡（nwaxz）
 
-面向手机浏览器的 H5 游戏。普通模式挖水解谜；极限恐怖模式在第一人称浴场里躲避奶蛙，寻找工具逃入下水道。
+面向手机浏览器的 H5 游戏。原18关洗澡玩法（普通模式12关、恐怖洗澡模式6关）保持不变；另有第一人称浴场逃生篇。
 
 ## 当前功能
 
-- 最近核对发布版本为 0.10.0，普通模式十二关、恐怖洗澡模式六关。0.11.0 候选新增独立第一人称逃生篇；发布 SHA 与公网验证见 [发布验证记录](docs/VERIFICATION.md)。
-- 极限恐怖“下水道逃生”：七个区域、钥匙与电源目标链、巡逻/听声/追逐 AI、柜内藏身、三次机会、体力与手电、石子诱敌、纸条和逃生纪录。使用独立本地会话及备份，不覆盖原洗澡存档。[完整玩法](docs/ESCAPE_GAME.md)、[绘制素材与提示](docs/ART_ESCAPE.md)、[恐怖配乐](docs/AUDIO_ESCAPE.md)。
+- 0.11.0 已发布并公网核对；[精确发布证据](https://github.com/lingyunmo/nwaxz/pull/34#issuecomment-6343588123)，历史验证见 [发布验证记录](docs/VERIFICATION.md)。
+- 0.12.0 的合并前候选：逃生篇升级为 Babylon.js 9.32 真3D，支持上下看、柜内真实几何和 idle/walk/run/laugh 四段骨骼动画。已通过无窗口 Chromium 软件渲染候选验收（桌面和手机视口、触控、暂停冻结、抓捕笑动画、GLB 缓存及断网冷重载）；真实手机帧率和扬声器听感仍未验证。普通12关和恐怖洗澡6关不变。
+- 极限恐怖“下水道逃生”包含七个区域、钥匙与电源目标链、巡逻/听声/追逐 AI、柜内藏身、三次机会、体力与手电、石子诱敌、纸条和逃生纪录。使用独立本地会话及备份，不覆盖原洗澡存档。[完整玩法](docs/ESCAPE_GAME.md)、[绘制素材与提示](docs/ART_ESCAPE.md)、[恐怖配乐](docs/AUDIO_ESCAPE.md)。
+- 逃生3D模型为 `public/assets/models/escape-props-v1.glb` 和 `public/assets/models/extreme-milk-frog-v1.glb`；可复现建模脚本为 `ops/build_escape_props.py` 和 `ops/build_escape_character.py`。浏览器候选验收脚本为 `ops/escape-browser.mjs`，使用独立 Playwright 安装或 `PLAYWRIGHT_MODULE`，可选配置 `CHROMIUM_PATH`；脚本始终以 headless 软件渲染和独立 profile 运行。
 - 基础清水源包含 208 滴的粒子水流求解器，采用固定 120 Hz 步进和空间分桶；挖掘网格单元为 CELL8，石块不可挖。
 - 第二章加入可交互风扇和限量喷水阀：打开风扇可改变局部水流，阀门按固定流速消耗有限水量。
 - 清污分流：污水池生成 64 滴紫色污水；水滴接触会传播污染，污水不能收集泡泡币或计入清水进度。污水流入浴缸会失败并可重试，失败局不保存成绩。
@@ -19,13 +21,13 @@
 - 透明角色图集 `public/assets/character/milk-frog-atlas.webp`，包含 idle、breath、blink、look、tap、laugh、celebrate 动作。
 - 12 种角色姿态（原有 8 种及新增 4 种），姿态间平滑混合并连续呼吸摆动。
 
-0.10.0 已发布第二章“地下回声”，恐怖洗澡模式共六关，按章解锁并保留旧纪录。既有恐怖美术见 [ART_HORROR.md](docs/ART_HORROR.md)。0.9.1 的 iPhone 声音兼容代码保留，真实 iPhone Safari/微信听感仍待真机复核。0.11.0 新增完整逃生目标链，属于另一种独立玩法；准确验收与发布状态见 [验证记录](docs/VERIFICATION.md)。云端同步尚未实现。
+0.11.0 已发布第二章“地下回声”和独立逃生篇；恐怖洗澡模式共六关，按章解锁并保留旧纪录。既有恐怖美术见 [ART_HORROR.md](docs/ART_HORROR.md)。0.12.0 本地候选已完成 headless Chromium 软件渲染验收，仍未发布；真实手机帧率、触摸体验和扬声器听感仍待真机复核。0.9.1 的 iPhone 声音兼容代码保留。云端同步尚未实现。
 
 线上游戏：[立即游玩](https://nwaxz.bzlom.cn)。版本与 QA 状态见 [DEVELOPMENT_STATE.md](docs/DEVELOPMENT_STATE.md)，玩法说明见 [GAME_DESIGN.md](docs/GAME_DESIGN.md)，已核对的发布证据见 [验证记录](docs/VERIFICATION.md)。绘制资源见 [ART_V2.md](docs/ART_V2.md)、[ART_PROPS.md](docs/ART_PROPS.md)、[ART_WORKSHOP.md](docs/ART_WORKSHOP.md) 和 [ART_BATHROOM.md](docs/ART_BATHROOM.md)。
 
 ## 技术栈
 
-前端使用 TypeScript、Vite、Canvas 2D；服务端使用 Node.js 24 和 Express 5；包管理器为 pnpm 11.1.3。
+前端使用 TypeScript、Vite；洗澡模式使用 Canvas 2D，0.12.0 本地候选的逃生篇使用 Babylon.js 9.32 和 WebGL。服务端使用 Node.js 24 和 Express 5；包管理器为 pnpm 11.1.3。
 
 ## 本地开发
 

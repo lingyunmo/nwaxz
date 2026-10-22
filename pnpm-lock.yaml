@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@babylonjs/core':
+        specifier: 9.32.0
+        version: 9.32.0
+      '@babylonjs/loaders':
+        specifier: 9.32.0
+        version: 9.32.0(@babylonjs/core@9.32.0)(babylonjs-gltf2interface@9.31.2)
       express:
         specifier: 5.3.0
         version: 5.3.0
@@ -537,6 +543,15 @@ packages:
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
 
+  '@babylonjs/core@9.32.0':
+    resolution: {integrity: sha512-mHBsyKJuQHbs97Rb/1qxMRg6Ru79+0BjLhGLTa34s6U/fkBCtOh+xKTQDqFpFtPqgBw9TLFcIEvFHy01vnJxwA==}
+
+  '@babylonjs/loaders@9.32.0':
+    resolution: {integrity: sha512-pHWbOaR34riRNxX0rffPpVcbaAoEXmjtS00A4RO43zoz4EPVg4mESX0EqzaA8yl7FbVk+aYWwyj30uR1OWrl1Q==}
+    peerDependencies:
+      '@babylonjs/core': ^9.0.0
+      babylonjs-gltf2interface: ^9.0.0
+
   '@isaacs/cliui@9.0.0':
     resolution: {integrity: sha512-AokJm4tuBHillT+FpMtxQ60n8ObyXBatq7jD2/JA9dxbDDokKQm8KMht5ibGzLVU9IJDIKK4TPKgMHEYMn3lMg==}
     engines: {node: '>=18'}
@@ -1041,6 +1056,9 @@ packages:
     resolution: {integrity: sha512-M762rNHfSF1EV3SLtnCJXFoQbbIIz0OyRwnCmV0KPC7qosSfCO0QLTSuJX3ayAebubhE6oYBAYPrBA5ljowaZg==}
     peerDependencies:
       '@babel/core': ^7.4.0 || ^8.0.0-0 <8.0.0
+
+  babylonjs-gltf2interface@9.31.2:
+    resolution: {integrity: sha512-RxIxirKjZoZh6gRl1haAQe4S46eOma64oTHXhFyifLrjAuuXW5/TLMbMtYPhZ83E979xYFb5l1KVToAH9fpBdA==}
 
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
@@ -2838,6 +2856,13 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
+  '@babylonjs/core@9.32.0': {}
+
+  '@babylonjs/loaders@9.32.0(@babylonjs/core@9.32.0)(babylonjs-gltf2interface@9.31.2)':
+    dependencies:
+      '@babylonjs/core': 9.32.0
+      babylonjs-gltf2interface: 9.31.2
+
   '@isaacs/cliui@9.0.0': {}
 
   '@jridgewell/gen-mapping@0.3.13':
@@ -3173,6 +3198,8 @@ snapshots:
       '@babel/helper-define-polyfill-provider': 0.6.8(@babel/core@7.29.7)
     transitivePeerDependencies:
       - supports-color
+
+  babylonjs-gltf2interface@9.31.2: {}
 
   balanced-match@1.0.2: {}
 

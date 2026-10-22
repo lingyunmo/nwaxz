@@ -38,6 +38,7 @@ export default defineConfig({
         // Keep editable masters published; gameplay loads their smaller WebPs.
         globIgnores: [
           "assets/character/milk-frog-atlas.png",
+          "assets/models/extreme-milk-frog-v1.glb",
           "assets/props/bath-props-v1.png",
           "assets/props/garden-props-v1.png",
         ],

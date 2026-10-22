@@ -2,7 +2,9 @@
 
 0.11.0 发布了独立的原创第一人称逃生篇，属于同一 H5 游戏的另一种玩法。该发布版采用 Canvas 2D 光线投射；原洗澡玩法18关（普通12关、恐怖洗澡6关）与 IndexedDB v1 存档保留。0.11.0 精确发布证据见[GitHub记录](https://github.com/lingyunmo/nwaxz/pull/34#issuecomment-6343588123)，历史验收摘要见 [VERIFICATION.md](VERIFICATION.md)。玩法借鉴潜行恐怖游戏常见机制，不复制其他商业游戏的地图、角色、音频或美术。
 
-0.12.0 的合并前候选把逃生篇升级为 Babylon.js 9.32 / WebGL 真3D：镜头可上下看，衣柜门可动且角色藏在真实柜内几何中，奶蛙使用 idle、walk、run、laugh 四段骨骼动画；被抓时保留清楚可见的捧腹大笑造型。两份模型资源为 `public/assets/models/escape-props-v1.glb` 和 `public/assets/models/extreme-milk-frog-v1.glb`，建模脚本为 `ops/build_escape_props.py`、`ops/build_escape_character.py`。本地 PWA 预缓存配置覆盖 GLB，候选已完成无窗口 Chromium 软件渲染验收：900×650、390×844 两种视口，CDP 触控移动和上下转头，暂停画面冻结，抓捕时3D大笑与下一夜，以及 GLB 缓存和断网冷重载均通过，脚本错误为0。最终发布状态以对应 PR 的 CI 与公网核对为准；真人手机帧率和扬声器听感未验证，低端手机表现待测。游玩要求浏览器支持 WebGL。此候选不改变原18关洗澡玩法。
+0.12.0 已发布，逃生篇升级为 Babylon.js 9.32 / WebGL 真3D：镜头可上下看，衣柜门可动且藏身位置位于真实柜内几何中，奶蛙有 idle、walk、run、laugh 四段骨骼动画；被抓时保留清楚可见的捧腹大笑造型。[发布证据与精确 main SHA `f6f4dee296eb280aa387dbfc440b33024b2287a0`](https://github.com/lingyunmo/nwaxz/pull/38#issuecomment-6349588315)。家具 GLB 为 `public/assets/models/escape-props-v1.glb`；`public/assets/models/extreme-milk-frog-v1.glb` 是保留的源模型，0.13.0 不再由运行时加载或预缓存。生成脚本为 `ops/build_escape_props.py`、`ops/build_escape_character.py`。
+
+0.13.0 是已完成本地验收但尚未发布的候选，仍使用 Babylon.js 9.32 / WebGL 场景与真实几何家具，但奶蛙按用户形象还原要求改为原画二维直立角色：只绕 Y 轴转向玩家，墙体会遮挡角色。站立和捧腹大笑直接沿用 `haunted-frog-v1.webp`；新增 `haunted-frog-actions-v2.webp`，4×2 八格包含眨眼、左看、右看、搜查、窥探、扑抓、跑步左步和跑步右步。呼吸、笑和步态连续播放，动作切换约 120 ms 混合。`pnpm check` 通过99项业务测试和1项 PWA 检查；无窗口 Chromium 软件渲染的900×650与390×844候选验收通过键盘上下看、触控移动/转头、暂停像素冻结、衣柜进出、大笑循环、下一夜、备份导入导出和断网冷重载，脚本/页面错误为0。另验证本地更新显示原画大笑且 IndexedDB 进度字节不变。完整结果见[0.13.0候选验收记录](VERIFICATION.md#0130-原画动作与探索-hud合并前候选验收2026-10-23)。真实手机帧率与扬声器听感未验收；游玩需要浏览器支持 WebGL。原18关洗澡玩法不变。
 
 可复现浏览器候选验收入口为 `ops/escape-browser.mjs`。它需要独立安装 Playwright 或通过 `PLAYWRIGHT_MODULE` 指定模块；`CHROMIUM_PATH` 可选。脚本始终使用 headless Chromium 软件渲染和独立 profile。
 
@@ -31,14 +33,14 @@
 
 配乐为独立原创 48 秒循环，默认在进入本模式前由明确的配乐勾选框启用，可暂停关闭；不会改写原洗澡模式音乐偏好。笑声复用原恐怖奶蛙录音，脚步、门响、心跳和石子落地为合成提示音。沿用 iOS 用户手势解锁和恢复声音入口。实际手机扬声器听感需要真机验证，分析器非零不等同于真机发声。来源见 [AUDIO_ESCAPE.md](AUDIO_ESCAPE.md) 和 [AUDIO.md](AUDIO.md)。
 
-浴场墙壁、地板、天花板和木质表面使用原创绘制纹理；0.12 候选以低模立体衣柜、抽屉、配电箱、阀门、铁网和管道取代逃生场景中的道具图集投影，并以带骨骼动作的恐怖奶蛙模型作为追捕者。现有绘制纹理图集和专用恐怖角色参考属于极限恐怖 v1 的美术来源；普通模式使用的 Cute turnaround 不作为恐怖角色造型依据。详见 [ART_ESCAPE.md](ART_ESCAPE.md)。
+浴场墙壁、地板、天花板和木质表面使用原创绘制纹理；真实3D家具为衣柜、抽屉、配电箱、阀门、铁网和管道。0.13.0 的追捕者使用恐怖奶蛙原画二维直立图集，普通模式使用的 Cute turnaround 不作为恐怖角色造型依据。详见 [ART_ESCAPE.md](ART_ESCAPE.md)。
 
 - 桌面：WASD / 上下键移动，左右键转向，拖动画面看方向；Shift 奔跑，C 蹲行，F 手电，E/空格交互，Q 丢石子，M/Tab 地图，Esc 暂停。
 - 手机：左侧摇杆移动，画面区域拖动看方向；屏幕按钮完成交互、蹲行、手电、石子和按住奔跑。横竖屏均适配。
-- 暂停地图显示房间、门及玩家位置；暂停、失焦、后台时清空持续输入并停止模拟和声音。支持时请求浏览器全屏，不支持时保持全视口布局。
+- 常驻 HUD 收起任务和教程，显示图标物品栏、紧凑体力/电量与附近交互提示；右上角像素小地图跟随玩家，只显示探索及近周边暗格。地图纹理由 `public/assets/ui/escape-map-atlas-v1.webp` 提供；目标和物件标记只在探索后出现，不显示敌人透视。暂停地图显示全图与线索。`explored` 是可选会话字段，缺少该字段的 v1 旧存档仍可读取。暂停、失焦、后台时清空持续输入并停止模拟和声音。支持时请求浏览器全屏，不支持时保持全视口布局。
 
 ## 独立存档与边界
 
 逃生会话使用 `nwaxz-escape-session-v1`，最佳纪录使用 `nwaxz-escape-record-v1`，声音偏好使用 `nwaxz-escape-sound-v1`，均为独立 localStorage 项。交互、暂停和退出时自动保存，活动期间每四秒保存一次。可以从本模式菜单导入，从暂停菜单导出独立 JSON；导入检验版本、位置、物品、门状态及目标链一致性，拒绝损坏数据。原洗澡存档导入导出不包含逃生会话，也不会被新模式覆盖。
 
-当前没有联机和云端同步。绘制、音乐和 GLB 在 PWA 中带内容修订预缓存，代码按需加载。无窗口 Chromium 验收通过不代表所有手机型号的帧率、触控或扬声器听感均已验收；真人设备验证仍待完成。发布状态和 0.11 历史验收见 [VERIFICATION.md](VERIFICATION.md)。
+当前没有联机和云端同步。绘制和音乐等离线资源按 PWA 清单缓存；0.13.0 候选不预缓存角色 GLB，家具 GLB 仍供场景加载。0.13.0 本地候选尚未合并发布；无窗口 Chromium 验收已完成，但不代表真实手机帧率或扬声器听感已验证。候选结果和0.12.0发布证据见 [VERIFICATION.md](VERIFICATION.md)。

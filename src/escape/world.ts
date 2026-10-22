@@ -52,6 +52,7 @@ export type EscapeSnapshot = {
   hunter: Vec & { angle: number; state: HunterState }; elapsed: number; captures: number;
   phase: Phase; inventory: Item[]; searched: string[]; opened: string[]; unlocked: string[];
   notes: string[]; hidden?: string; power: boolean; drained: boolean; stones: number;
+  explored?: number[];
   pursuit?: { target: Vec; seenHide?: string; unseen: number; wait: number; patrolIndex: number };
 };
 export type EscapeEvent = { type: "message" | "step" | "door" | "item" | "laugh" | "caught" | "won" | "noise"; text?: string };
@@ -76,8 +77,22 @@ export class EscapeWorld {
   private hunterStep = 0;
   private laughAt = 0;
   private seenHide?: string;
+  private mapPosition = "";
+  constructor() { this.revealMap(); }
+  /** Persist only tiles actually seen, including the wall that ends a sightline. */
+  revealMap() {
+    const p = this.data.player, cx = Math.floor(p.x), cz = Math.floor(p.z);
+    const key = `${cx},${cz}:${this.data.opened.join(",")}`;
+    if (key === this.mapPosition) return;
+    this.mapPosition = key;
+    const explored = new Set(this.data.explored ?? []);
+    for (let z = Math.max(0, cz - 4); z <= Math.min(SIZE - 1, cz + 4); z++) for (let x = Math.max(0, cx - 4); x <= Math.min(SIZE - 1, cx + 4); x++) {
+      if (Math.hypot(x - cx, z - cz) <= 4.5 && this.lineOfSight(p, { x: x + .5, z: z + .5 }, true)) explored.add(z * SIZE + x);
+    }
+    this.data.explored = [...explored].sort((a, b) => a - b);
+  }
   pending?: { id: string; remaining: number };
-  message = "先搜床头抽屉。WASD / 左侧摇杆移动，拖动右侧看向目标。";
+  message = "床头抽屉里，也许有钥匙。";
   get room() { return ROOMS.find(r => this.data.player.x >= r.x && this.data.player.x < r.x + r.w && this.data.player.z >= r.z && this.data.player.z < r.z + r.h)?.name ?? "门口"; }
   get objective(): string {
     const d = this.data;
@@ -156,6 +171,7 @@ export class EscapeWorld {
     if (this.data.phase !== "playing") return;
     let left = Math.min(.15, Math.max(0, seconds));
     while (left > .0001) { const dt = Math.min(left, 1 / 60); this.tick(dt, input); left -= dt; if (this.data.phase !== "playing") break; }
+    this.revealMap();
   }
   private tick(dt: number, input: EscapeInput) {
     const d = this.data, p = d.player;
@@ -340,7 +356,8 @@ export class EscapeWorld {
     const d = raw as EscapeSnapshot;
     const number = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
     const ids = (a: unknown, allowed: string[]) => Array.isArray(a) && new Set(a).size === a.length && a.every(id => typeof id === "string" && allowed.includes(id));
-    if (Object.keys(d).some(k => !["version", "player", "hunter", "elapsed", "captures", "phase", "inventory", "searched", "opened", "unlocked", "notes", "hidden", "power", "drained", "stones", "pursuit"].includes(k))
+    if (Object.keys(d).some(k => !["version", "player", "hunter", "elapsed", "captures", "phase", "inventory", "searched", "opened", "unlocked", "notes", "hidden", "power", "drained", "stones", "pursuit", "explored"].includes(k))
+      || d.explored !== undefined && (!Array.isArray(d.explored) || d.explored.length > SIZE * SIZE || new Set(d.explored).size !== d.explored.length || !d.explored.every(v => Number.isInteger(v) && v >= 0 && v < SIZE * SIZE))
       || d.version !== 1 || !d.player || !d.hunter || !number(d.elapsed, 0, 86400) || !Number.isInteger(d.captures) || !number(d.captures, 0, 3)
       || !["playing", "caught", "lost", "won"].includes(d.phase) || !["patrol", "investigate", "chase", "search"].includes(d.hunter.state)
       || !ids(d.inventory, Object.keys(ITEM_NAMES)) || !ids(d.searched, PROPS.filter(o => o.kind === "drawer").map(o => o.id))
@@ -369,6 +386,8 @@ export class EscapeWorld {
         || !Number.isInteger(m.patrolIndex) || !number(m.patrolIndex, 0, patrol.length - 1) || m.seenHide !== undefined && !PROPS.some(o => o.id === m.seenHide && o.kind === "wardrobe")) throw new Error("逃生存档追逐状态不正确");
       world.target = { ...m.target }; world.seenHide = m.seenHide; world.unseen = m.unseen; world.wait = m.wait; world.patrolIndex = m.patrolIndex;
     }
+    world.mapPosition = "";
+    if (!d.explored) world.revealMap();
     return world;
   }
 }

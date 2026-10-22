@@ -1,8 +1,24 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EscapeWorld, PROPS, DOORS, MAP } from "../src/escape/world.ts";
+import { EscapeWorld, PROPS, DOORS, MAP, SIZE } from "../src/escape/world.ts";
 
 const frames = (w, seconds, input = {}) => { for (let i = 0; i < Math.ceil(seconds * 60); i++) w.advance(1 / 60, input); };
+test("exploration respects closed doors, persists visited tiles and accepts legacy v1 saves", () => {
+  const w = new EscapeWorld(), tile = (x, z) => z * SIZE + x;
+  const original = [...w.data.explored];
+  assert.ok(original.includes(tile(3, 5)));
+  assert.ok(!original.includes(tile(12, 2)), "another room is not revealed through walls");
+  Object.assign(w.data.player, { x: 11.5, z: 8.5, angle: -Math.PI / 2 });
+  w.revealMap(); assert.ok(!w.data.explored.includes(tile(11, 5)), "locked door blocks map sight");
+  w.data.inventory.push("brass"); w.interact(); w.revealMap();
+  assert.ok(w.data.explored.includes(tile(11, 5)), "opening a door reveals sightlines without moving cells");
+  for (const id of original) assert.ok(w.data.explored.includes(id));
+  const saved = w.snapshot(); assert.deepEqual(EscapeWorld.restore(saved).snapshot(), saved);
+  const legacy = structuredClone(saved); delete legacy.explored;
+  const restored = EscapeWorld.restore(legacy);
+  assert.deepEqual(restored.data.inventory, ["brass"]); assert.ok(restored.data.explored.length > 0);
+  for (const explored of [[-1], [SIZE * SIZE], [2, 2], [1.5], "all"]) assert.throws(() => EscapeWorld.restore({ ...saved, explored }));
+});
 function face(w, point) { w.data.player.angle = Math.atan2(point.z - w.data.player.z, point.x - w.data.player.x); }
 function placeFor(w, id) {
   const obj = PROPS.find(p => p.id === id) ?? DOORS.find(d => d.id === id);

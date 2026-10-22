@@ -1,0 +1,81 @@
+.escape-shell { --ink:#d7c39a; color:#e6dcc2; }
+.escape-shell * { box-sizing:border-box; }
+.escape-shell button { border-radius:3px; font-weight:400; color:var(--ink); background:#111715df; border-color:#b7a07769; }
+.escape-shell [hidden] { display:none!important; }
+.escape-shell svg { display:block; width:24px; height:24px; flex-shrink:0; }
+.escape-shell kbd { font:10px ui-monospace,monospace; color:#aca68f; }
+.escape-shell::after { content:''; position:absolute; inset:0; pointer-events:none; box-shadow:inset 0 0 12vw 2vw #0005; }
+.escape-shell.being-chased::after { box-shadow:inset 0 0 12vw 2vw #6c17184d; }
+.escape-hud { top:max(18px,env(safe-area-inset-top)); left:max(18px,env(safe-area-inset-left)); right:auto; padding:0; gap:16px; background:none; text-shadow:0 2px 6px #000; }
+.escape-shell .escape-round { display:grid; place-items:center; width:42px; height:42px; padding:10px; border-radius:50%; background:#0c100e88; border-color:#d4c3a443; }
+.escape-round svg { width:19px; height:19px; }
+.escape-location { padding-top:2px; }
+.escape-hud #escape-room { margin:0; font-family:Georgia,'SimSun',serif; letter-spacing:4px; font-size:16px; color:#ded5bb; }
+.escape-hud #escape-night { font:10px ui-monospace,monospace; letter-spacing:1px; color:#a39d89; margin:5px 0 0; }
+#escape-lives { display:flex; gap:5px; margin-top:9px; }
+#escape-lives span { margin:0; }#escape-lives svg { width:12px; height:12px; stroke:#a18166; fill:#88675066; }
+#escape-lives .lost svg { stroke:#736d5d44; fill:none; }
+.escape-shell .escape-map-button { position:absolute; top:max(16px,env(safe-area-inset-top)); right:max(16px,env(safe-area-inset-right)); width:154px; padding:0; border:0; background:none; filter:drop-shadow(0 3px 8px #000b); }
+#escape-minimap { display:block; width:100%; height:auto; image-rendering:pixelated; }
+.escape-map-button>span { display:flex; justify-content:center; gap:10px; font-size:9px; letter-spacing:2px; margin-top:5px; color:#c9b993; }
+.escape-crosshair { top:50%; width:4px; height:4px; border-radius:50%; background:#e9e1bd99; box-shadow:0 0 4px #000; }
+.escape-danger { top:13%; left:50%; width:auto; transform:translateX(-50%); font-size:11px; letter-spacing:4px; color:#d6ad8a; font-weight:400; }
+.escape-notice { top:auto; bottom:26%; width:min(78%,440px); padding:9px 16px; font-size:11px; color:#e1d7ba; background:linear-gradient(90deg,transparent,#070a08c9 15%,#070a08c9 85%,transparent); animation:escape-notice-in .25s ease-out; }
+@keyframes escape-notice-in { from { opacity:0; translate:0 6px; } to { opacity:1; translate:0; } }
+.escape-bottom { bottom:max(24px,env(safe-area-inset-bottom)); left:24px; right:24px; }
+.escape-meters { position:absolute; bottom:4px; left:0; display:grid; gap:10px; margin:0; width:auto; transform:none; color:#a69e83; }
+.escape-meters label { gap:8px; }.escape-meters svg { width:17px; height:17px; }
+.escape-meters meter { width:85px; height:5px; border:0; background:#1d2219; accent-color:#a9ae7c; }
+.escape-meters meter::-webkit-meter-bar { height:5px; background:#23291ed9; border:0; border-radius:0; }
+.escape-meters meter::-webkit-meter-optimum-value { background:#abb28c; }#escape-battery::-webkit-meter-optimum-value { background:#b9a16c; }
+.escape-inventory { position:static; display:flex; justify-content:center; flex-wrap:nowrap; gap:6px; max-width:none; }
+.escape-inventory .escape-slot { display:grid; position:relative; place-items:center; width:47px; height:47px; padding:0; border:1px solid #8f80613d; border-radius:0; background:#080c09a3; box-shadow:inset 0 0 0 2px #0709077a; }
+.escape-slot small { position:absolute; top:4px; left:5px; font:9px ui-monospace,monospace; color:#857b6259; }
+.escape-inventory .escape-slot.owned { border-color:#c4a572a8; background:#282619b3; }
+.escape-slot.owned svg { color:#d3b276; width:23px; height:23px; filter:drop-shadow(0 1px 2px #000); }.escape-slot[title='检修门钥匙'] svg { color:#b3bab3; }
+.escape-controls { position:absolute; inset:auto 0 0; margin:0; pointer-events:none; align-items:flex-end; }
+.escape-stick { display:none; width:110px; height:110px; border-color:#dbcf9a35; background:#12171133; box-shadow:none; }
+.escape-stick::before { content:''; inset:17px; width:auto; border:1px solid #cfc59e14; border-radius:50%; }
+.escape-stick span { left:35px; top:35px; background:#b4ad8c3d; border-color:#ddd1a54d; }
+.escape-actions { display:flex; gap:9px; width:auto; margin-left:auto; }
+.escape-actions button { position:relative; display:grid; place-items:center; width:40px; height:40px; min-height:40px; padding:9px; border-color:#a39a6e38; background:#0b100bbb; border-radius:50%; }
+.escape-actions svg { width:21px; height:21px; }.escape-actions kbd { position:absolute; bottom:-15px; left:0; right:0; font-size:8px; text-align:center; }
+.escape-actions b { position:absolute; top:-3px; right:-2px; font:9px ui-monospace,monospace; color:#d9be8b; background:#10140c; padding:2px 3px; border-radius:4px; }
+.escape-actions [aria-pressed=true] { color:#e2c992; border-color:#c5b27f8c; background:#35332391; }.escape-actions #escape-sprint { display:none; }
+.escape-shell .escape-interact { position:absolute; bottom:75px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:12px; width:auto; padding:11px 18px; min-height:44px!important; border:0; border-bottom:1px solid #baa5758c!important; border-radius:0; color:#e1d3b0; background:linear-gradient(90deg,#10150d11,#10150ddb 18%,#10150ddb 82%,#10150d11)!important; white-space:nowrap; font-weight:400; }
+.escape-interact svg { width:20px; height:20px; }.escape-interact kbd { border:1px solid #ccbc8966; padding:3px 5px; color:#ddcba4; }
+.escape-search { top:56%; width:130px; font-size:10px; letter-spacing:3px; }.escape-search progress { height:3px; }
+.escape-panel { background:#030706bc; backdrop-filter:blur(5px); }
+.menu-active>.escape-hud,.menu-active>.escape-map-button,.menu-active>.escape-crosshair,.menu-active>.escape-danger,.menu-active>.escape-notice,.menu-active>.escape-search,.menu-active>.escape-bottom { visibility:hidden; }
+.escape-card { border-radius:2px; background:linear-gradient(135deg,#141b15f2,#0a100bf2); }
+.escape-card h1,.escape-card h2 { font-family:Georgia,'SimSun',serif; letter-spacing:5px; color:#d6c39c; }.escape-card p { color:#a8ae9a; }
+.escape-card .escape-primary { background:linear-gradient(100deg,#9d8255,#b39b6b,#9d8255); color:#151a12; border-color:#c5af7e; box-shadow:0 3px 0 #443a24; letter-spacing:3px; }
+.escape-card .escape-secondary { background:#141d13; }.escape-card .escape-storage { color:#758571; }
+.escape-eyebrow { color:#a38d63!important; font-size:9px!important; letter-spacing:4px; }.escape-setting-row input { accent-color:#aa9569; }
+.escape-pause-panel .escape-card { width:min(100%,880px); padding:30px; }
+.escape-pause-layout { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(230px,1fr); align-items:center; gap:38px; }
+.escape-map-page h2 { font-size:21px; margin-bottom:14px; }#escape-floorplan { display:block; width:100%; height:auto; margin:0 auto; image-rendering:pixelated; border:0; border-radius:0; }
+.escape-map-page .escape-map-legend { display:flex; align-items:center; justify-content:center; gap:5px; margin:14px 0 0; font-size:9px; color:#9e9e84; }
+.escape-map-legend i { width:7px; height:7px; margin-left:6px; }.map-you { background:#f1d299; clip-path:polygon(50% 0,100% 100%,50% 75%,0 100%); }.map-door { background:#ae7950; }.map-hide { background:#694530; }.map-fog { background:#111918; border:1px solid #5b685333; }
+.escape-journal { text-align:left; border-left:2px solid #9f89505c; padding:2px 0 2px 14px; margin:25px 0; }.escape-journal small { font-size:9px; color:#958361; letter-spacing:3px; }.escape-journal p { font-size:12px; margin:8px 0; color:#cac1a4; }
+.capture-active .escape-card { background:linear-gradient(#101910e8,#080d09); }
+@media (pointer:coarse) {
+  .escape-shell .escape-map-button { width:120px; top:max(12px,env(safe-area-inset-top)); right:12px; }.escape-hud { top:max(16px,env(safe-area-inset-top)); left:16px; gap:12px; }
+  .escape-stick { display:block; }.escape-actions { display:grid; grid-template-columns:repeat(2,52px); gap:12px; }.escape-actions #escape-sprint { display:grid; }.escape-actions button { width:52px; height:52px; padding:13px; background:#0c120b8c; }.escape-actions svg { width:24px; height:24px; }.escape-actions kbd,.escape-interact kbd { display:none; }
+  .escape-bottom { bottom:max(28px,env(safe-area-inset-bottom)); left:22px; right:22px; }.escape-inventory { position:absolute; top:auto; bottom:0; left:50%; transform:translateX(-50%); gap:4px; }.escape-inventory .escape-slot { width:31px; height:34px; }.escape-slot small { display:none; }.escape-slot.owned svg { width:20px; height:20px; }
+  .escape-meters { left:50%; bottom:45px; transform:translateX(-50%); display:flex; gap:10px; }.escape-meters meter { width:43px; }.escape-meters svg { width:13px; height:13px; }.escape-shell .escape-interact { bottom:90px; font-size:12px; padding:12px 14px; }.escape-danger { top:20%; font-size:10px; }.escape-notice { bottom:29%; }.escape-map-button>span { font-size:8px; }.escape-map-button kbd { display:none; }
+}
+@media (max-width:620px) {
+  .escape-pause-panel .escape-card { padding:20px; width:min(100%,440px); }.escape-pause-layout { grid-template-columns:1fr; gap:20px; }.escape-map-page h2,.escape-map-page .escape-eyebrow { display:none; }#escape-floorplan { width:min(100%,270px); }.escape-pause-menu h2 { font-size:24px; margin:0; }.escape-pause-menu>.escape-eyebrow { display:none; }.escape-journal { margin:12px 0 16px; }.escape-setting-row { margin-top:18px; }.escape-links { gap:4px 14px; margin-top:12px; }.escape-card .escape-storage { margin-bottom:0; }
+}
+@media (max-height:540px) and (min-aspect-ratio:13/10) {
+  .escape-hud { top:10px; left:14px; }#escape-lives { margin-top:5px; }.escape-shell .escape-map-button { top:8px; width:110px; }.escape-bottom { bottom:18px; }.escape-notice { bottom:36%; }.escape-pause-panel .escape-card { padding:20px; }.escape-pause-layout { grid-template-columns:1fr 1fr; gap:26px; }.escape-map-page .escape-eyebrow,.escape-map-page h2 { display:none; }#escape-floorplan { max-width:290px; }
+}
+@media (prefers-reduced-motion:reduce) { .escape-notice { animation:none; } }
+@media (pointer:coarse) {
+  .escape-inventory { display:grid; grid-template-columns:repeat(2,28px); gap:3px; left:calc(50% - 6px); }
+  .escape-inventory .escape-slot { width:28px; height:28px; }
+  .escape-meters { bottom:80px; gap:6px; left:calc(50% - 6px); }
+  .escape-meters label { gap:4px; }.escape-meters meter { width:26px; }
+  .escape-shell .escape-interact { bottom:125px; }
+}

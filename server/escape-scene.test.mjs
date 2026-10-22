@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector.js";
+import { Mesh } from "@babylonjs/core/Meshes/mesh.js";
+import { Texture } from "@babylonjs/core/Materials/Textures/texture.js";
+import { frogPose } from "../src/escape/frog.ts";
 import "@babylonjs/core/Culling/ray.js";
 import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader.js";
 import "@babylonjs/loaders/glTF/2.0/glTFLoader.js";
@@ -33,44 +35,54 @@ test("real 3D camera can look up/down while world UVs and geometry stay fixed", 
   } finally { view.scene.dispose(); engine.dispose(); }
 });
 
-test("GLBs load into Babylon, instantiate real cabinets, and play skinned belly laugh", async () => {
-  const engine = new NullEngine(), view = createEscapeScene(engine), containers = [];
-  let models;
+test("solid cabinets coexist with upright original-art frog and the canonical belly laugh", async () => {
+  const engine = new NullEngine(), view = createEscapeScene(engine);
+  let props, models;
   try {
-    for (const name of ["escape-props-v1.glb", "extreme-milk-frog-v1.glb"]) {
-      const bytes = await fs.readFile(new URL(`../public/assets/models/${name}`, import.meta.url));
-      containers.push(await LoadAssetContainerAsync(bytes, view.scene, { pluginExtension: ".glb", pluginOptions: { gltf: { skipMaterials: true, animationStartMode: 0 } } }));
-    }
-    models = installEscapeModels(view.scene, ...containers);
+    const bytes = await fs.readFile(new URL("../public/assets/models/escape-props-v1.glb", import.meta.url));
+    props = await LoadAssetContainerAsync(bytes, view.scene, { pluginExtension: ".glb", pluginOptions: { gltf: { skipMaterials: true, animationStartMode: 0 } } });
+    models = installEscapeModels(view.scene, props, { original: new Texture(null, view.scene), actions: new Texture(null, view.scene) });
     assert.equal(models.cabinets.size, 5);
-    assert.ok(models.actorMeshes.some(m => m.skeleton?.bones.length === 18));
-    for (const m of models.actorMeshes) assert.equal(m.billboardMode, 0);
-    const w = new EscapeWorld(); models.animate(w, 1/60);
-    assert.equal(models.clips.get("walk").isPlaying, true);
-    models.animate(w, 1/60); assert.equal(models.clips.get("walk").isPlaying, true, "one waypoint frame must not restart the gait");
-    models.animate(w, .25); assert.equal(models.clips.get("idle").isPlaying, true);
-    w.data.hunter.state = "chase"; models.animate(w, 1/60);
-    assert.equal(models.clips.get("run").isPlaying, true);
-    w.capture(); const before = w.snapshot(); models.animate(w, 1/60);
-    const laugh = models.clips.get("laugh");
-    assert.equal(laugh.isPlaying, true); assert.equal(laugh.loopAnimation, true);
-    const jaw = laugh.targetedAnimations.find(a => a.target.name.endsWith(":jaw"));
-    assert.ok(jaw, "jaw is animated, not a frozen picture");
-    laugh.goToFrame(12); view.scene.render();
-    laugh.stop(); laugh.enableBlending = false; laugh.start(true); laugh.goToFrame(24); view.scene.render();
-    for (const suffix of ["L", "R"]) {
-      const hand = laugh.targetedAnimations.find(a => a.target.name.endsWith(`:hand.${suffix}`)).target;
-      hand.computeWorldMatrix(true);
-      const point = Vector3.TransformCoordinates(hand.getAbsolutePosition(), models.actorRoot.getWorldMatrix().clone().invert());
-      assert.ok(Math.abs(point.x) < .35 && point.y > .7 && point.y < 1.3 && point.z > .3, `laugh hand ${suffix} cradles the belly: ${point}`);
+    const w = new EscapeWorld(); models.animate(w, .3);
+    assert.equal(models.actorRoot.position.x, w.data.hunter.x * CELL);
+    for (const mesh of models.actorMeshes) {
+      assert.equal(mesh.billboardMode, Mesh.BILLBOARDMODE_Y, "camera pitch never tips the character");
+      assert.ok(mesh.getTotalVertices() > 100, "deformable artwork supports continuous breathing/laughter");
     }
-    assert.ok(models.actorMeshes.some(m => m.getTotalVertices() > 500));
-    assert.deepEqual(w.snapshot(), before, "cosmetic capture animation does not advance gameplay or save state");
+    w.data.hunter.state = "chase"; models.animate(w, 1/60);
+    assert.equal(models.actor.pose.motion, "run");
+    w.capture(); const before = w.snapshot(); models.animate(w, 1/60);
+    assert.deepEqual(models.actor.pose, { sheet: "original", frame: 1, motion: "laugh" });
+    const positions = [...models.actorMeshes[0].getVerticesData("position")];
+    models.animate(w, .08);
+    assert.notDeepEqual(models.actorMeshes[0].getVerticesData("position"), positions, "belly laugh keeps moving while game is frozen");
+    assert.deepEqual(w.snapshot(), before, "cosmetic laughter never advances simulation or saves");
     assert.equal(view.scene.getMeshByName("solid-tile-walls").isVisible, false);
     w.nextNight(); models.animate(w, 1/60);
     assert.equal(view.scene.getMeshByName("solid-tile-walls").isVisible, true);
-    assert.equal(models.clips.get("laugh").isPlaying, false);
-    assert.ok(view.scene.meshes.filter(m => m.isEnabled()).length < 240, "bounded mobile scene mesh count");
-  } finally { models?.dispose(); for (const c of containers) c.dispose(); view.scene.dispose(); engine.dispose(); }
-  assert.equal(engine.scenes.length, 0, "scene resources released");
+    assert.notEqual(models.actor.pose.motion, "laugh");
+    assert.ok(view.scene.meshes.filter(m => m.isEnabled()).length < 240);
+  } finally { models?.dispose(); props?.dispose(); view.scene.dispose(); engine.dispose(); }
+  assert.equal(engine.scenes.length, 0);
+});
+
+test("frog motion uses original standing/laugh plus distinct search, peek, chase and lunge poses", () => {
+  const w = new EscapeWorld();
+  assert.deepEqual(frogPose(w, 0, false), {sheet:"original",frame:0,motion:"idle"});
+  assert.equal(frogPose(w, 4.6, false).frame, 0);
+  assert.equal(frogPose(w, 4.6, false).sheet, "actions");
+  w.data.hunter.state = "search";
+  assert.equal(frogPose(w, 0, false).frame, 1);
+  assert.equal(frogPose(w, 1.5, false).frame, 3);
+  assert.equal(frogPose(w, 2.6, false).frame, 2);
+  w.data.hidden = "bed-hide"; Object.assign(w.data.hunter, w.data.player);
+  assert.equal(frogPose(w, 0, false).motion, "peek");
+  w.data.hidden = undefined; w.data.hunter.state = "chase";
+  assert.equal(frogPose(w, 0, true).motion, "lunge");
+  w.data.hunter.x += 3;
+  assert.equal(frogPose(w, 0, true).frame, 6);
+  assert.equal(frogPose(w, .21, true).frame, 7);
+  assert.equal(frogPose(w, .21, true).mirror, true, "alternate stride leads with the opposite leg");
+  w.capture();
+  assert.deepEqual(frogPose(w, 55, true), {sheet:"original",frame:1,motion:"laugh"});
 });

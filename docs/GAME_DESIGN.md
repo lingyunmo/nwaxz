@@ -2,6 +2,8 @@
 
 ## 核心体验
 
+0.11.0 新增独立第一人称“极限恐怖 · 下水道逃生”，有搜索钥匙、供电、开锁、藏柜、诱敌和剪网逃生的完整目标链，规则与本地会话独立于洗澡模式。玩法、控制、AI 和存档边界见 [ESCAPE_GAME.md](ESCAPE_GAME.md)。以下章节继续说明原有十八关洗澡玩法。
+
 玩家在浴室场景中挖开泥土，引导清水进入浴缸。普通关接到 100 滴清水即可获胜；收集最多 3 枚泡泡币是额外目标，不是通关条件。石块不能挖穿，需要绕路。第一章三关是 `first-bath`、`detour` 和 `last-drop`；第二章为 `fan-crossing` 和 `valve-timing`；第三章包含 `clean-water-only`、`garden-gate`、`sponge-transfer`；第四章包含 `valve-wind-relay`、`sponge-relay`、`wind-sponge-relay`、`garden-wind-relay`。普通模式选关分页按关卡配置动态生成，扩章时保留既有关卡和进度。
 
 ## 游戏流程

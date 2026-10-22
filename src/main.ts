@@ -1,4 +1,5 @@
 import "./style.css";
+import type { EscapeGame } from "./escape/game.ts";
 import { version } from "../package.json";
 import { registerSW } from "virtual:pwa-register";
 import { levels } from "./game/levels";
@@ -24,10 +25,11 @@ let progress: Progress = emptyProgress(),
   settings = loadSettings(),
   art: Artwork;
 let mode: GameMode = "normal";
+let escapeGame: EscapeGame | undefined;
 let game: BathGame | undefined,
   selected = 0,
   chapter = 1,
-  screen: "loading" | "home" | "levels" | "play" = "loading";
+  screen: "loading" | "home" | "levels" | "play" | "escape" = "loading";
 let offlineReady = false,
   updateAvailable = false,
   toastTimer = 0;
@@ -94,6 +96,9 @@ function toast(message: string) {
   }, 4000);
 }
 function leaveGame() {
+  escapeGame?.destroy(); escapeGame = undefined;
+  document.body.classList.remove("escape-theme");
+  audio.setSettings(settings);
   game?.destroy();
   game = undefined;
   audio.setPlaying(false);
@@ -107,7 +112,7 @@ function renderHome() {
   document.body.classList.remove("horror-theme");
   screen = "home";
   chrome(
-    `<main class="menu-stage home-screen screen-enter" aria-label="游戏主界面"><img class="cover-art" src="/assets/scenes/bath-cover-v2.webp" alt="奶蛙站在冒泡泡的浴缸旁"/><h1 class="game-logo"><span>奶蛙</span><span>爱洗澡</span></h1><div class="home-top">${buttonIcon("settings", "设置", "settings")}</div><div class="home-actions"><button id="normal" class="game-button gold">普通模式 ${icon("play")}</button><button id="continue" class="game-button glass">继续洗澡</button><button id="horror" class="game-button night"><img src="/assets/props/pumpkin-v1.webp" alt=""/>恐怖模式 <small>双章惊魂 · ${modeIndices("horror").length} 关</small></button></div><div class="home-status"><span>${totalCoins()} / ${modeIndices(mode).length * 3} 泡泡币</span><button id="update" ${updateAvailable ? "" : "hidden"}>有新版本 ${icon("restart")}</button></div></main>`,
+    `<main class="menu-stage home-screen screen-enter" aria-label="游戏主界面"><img class="cover-art" src="/assets/scenes/bath-cover-v2.webp" alt="奶蛙站在冒泡泡的浴缸旁"/><h1 class="game-logo"><span>奶蛙</span><span>爱洗澡</span></h1><div class="home-top">${buttonIcon("settings", "设置", "settings")}</div><div class="home-actions"><button id="normal" class="game-button gold">普通模式 ${icon("play")}</button><button id="continue" class="game-button glass">继续洗澡</button><button id="horror" class="game-button night"><img src="/assets/props/pumpkin-v1.webp" alt=""/>恐怖模式 <small>双章惊魂 · ${modeIndices("horror").length} 关</small></button><button id="extreme" class="game-button night escape-entry"><span>极限恐怖</span><small>下水道逃生</small></button></div><div class="home-status"><span>${totalCoins()} / ${modeIndices(mode).length * 3} 泡泡币</span><button id="update" ${updateAvailable ? "" : "hidden"}>有新版本 ${icon("restart")}</button></div></main>`,
   );
   $("#normal").onclick = () => {
     chapter = 1;
@@ -128,8 +133,22 @@ function renderHome() {
     );
     enterLevel(first < 0 ? modeOf(selected) === "normal" ? selected : 0 : first);
   };
+  $("#extreme").onclick = () => void enterEscape();
   $("#settings").onclick = () => openSettings();
   $("#update").onclick = applyUpdate;
+}
+async function enterEscape() {
+  leaveGame(); screen = "escape";
+  document.body.classList.add("horror-theme", "escape-theme");
+  chrome('<main class="menu-stage"><p class="escape-loading">正在打开地下浴场…</p></main>');
+  try {
+    const { EscapeGame } = await import("./escape/game.ts");
+    if (screen !== "escape") return;
+    escapeGame = new EscapeGame(app, audio, settings, renderHome);
+  } catch {
+    chrome('<main class="menu-stage"><p class="escape-loading">逃生场景尚未准备好，请联网重试。</p><button id="escape-load-return" class="game-button">返回主界面</button></main>');
+    $("#escape-load-return").onclick = renderHome;
+  }
 }
 function renderLevels() {
   leaveGame();

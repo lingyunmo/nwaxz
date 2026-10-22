@@ -1,0 +1,95 @@
+.escape-theme::before { background-image: url('/assets/scenes/escape-cover-v1.webp'); }
+.escape-entry { background: linear-gradient(125deg,#301a20,#101b21)!important; border-color:#a46e60!important; color:#f4d8c6!important; }
+.escape-entry small { color:#c7ada3; font-size:11px; }
+.escape-shell { position:fixed; inset:0; z-index:6; overflow:hidden; color-scheme:dark; color:#ede6d4; background:#05090b url('/assets/scenes/escape-cover-v1.webp') center/cover; font-family:system-ui,'Microsoft YaHei',sans-serif; touch-action:none; }
+.escape-shell button { color:#eee1c8; border:1px solid #8e8171; border-radius:10px; background:#152125e8; cursor:pointer; min-height:42px; padding:8px 12px; font-weight:700; touch-action:none; }
+.escape-shell button:focus-visible { outline:2px solid #f5d29b; outline-offset:3px; }
+.escape-shell button:disabled { opacity:.5; cursor:default; }
+#escape-view { position:absolute; inset:0; width:100%; height:100%; outline:none; touch-action:none; }
+.escape-hud { position:absolute; top:0; left:0; right:0; display:flex; align-items:flex-start; gap:10px; padding:max(12px,env(safe-area-inset-top)) 12px 25px; background:linear-gradient(#030709e8,transparent); pointer-events:none; }
+.escape-hud button { pointer-events:auto; flex-shrink:0; min-width:43px; }
+.escape-hud>div { flex:1; min-width:0; }
+.escape-hud span { display:block; color:#b5c7c2; font-size:11px; letter-spacing:2px; margin:2px 0 6px; }
+.escape-hud strong { display:block; font-size:13px; font-weight:650; line-height:1.55; text-shadow:0 2px 4px #000; }
+.escape-inventory { position:absolute; top:108px; left:14px; display:flex; flex-wrap:wrap; max-width:80%; gap:5px; pointer-events:none; }
+.escape-inventory span { border:1px solid #a69a7855; background:#080d10c7; border-radius:5px; padding:5px 7px; font-size:10px; color:#e6d1a7; }
+.escape-inventory .empty { border:0; color:#9aaba9; padding:0; background:none; }
+.escape-crosshair { position:absolute; left:50%; top:47%; transform:translate(-50%,-50%); font-size:20px; color:#e9debd88; pointer-events:none; }
+.escape-notice { position:absolute; top:25%; left:50%; width:min(90%,520px); transform:translateX(-50%); text-align:center; font-size:12px; line-height:1.7; color:#ded8c6; text-shadow:0 2px 5px #000,0 0 16px #000; pointer-events:none; }
+.escape-danger { position:absolute; top:19%; width:100%; text-align:center; color:#dec29e; font-size:12px; font-weight:700; text-shadow:0 2px 6px #000; pointer-events:none; }
+.being-chased::after { position:absolute; inset:0; content:''; box-shadow:inset 0 0 90px 20px #70252566; pointer-events:none; }
+.escape-bottom { position:absolute; bottom:max(12px,env(safe-area-inset-bottom)); left:14px; right:14px; pointer-events:none; }
+.escape-meters { display:flex; justify-content:center; flex-wrap:wrap; gap:6px 14px; font-size:10px; color:#c2c8bc; text-shadow:0 2px 4px #000; margin-bottom:12px; }
+.escape-meters label { display:flex; gap:6px; align-items:center; }
+.escape-meters meter { width:62px; height:8px; accent-color:#b6c58c; }
+.escape-controls { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.escape-stick { position:relative; width:116px; height:116px; border:1px solid #d9cc9d66; border-radius:50%; background:#0b141652; box-shadow:inset 0 0 25px #13212466; pointer-events:auto; touch-action:none; flex-shrink:0; }
+.escape-stick::before { content:'移动'; position:absolute; top:8px; left:0; width:100%; text-align:center; color:#cfccaf77; font-size:10px; }
+.escape-stick span { position:absolute; left:38px; top:38px; width:40px; height:40px; border-radius:50%; background:#b5b09577; border:1px solid #e7dfb977; pointer-events:none; }
+.escape-actions { display:grid; grid-template-columns:repeat(2,minmax(65px,1fr)); gap:8px; width:min(48%,220px); pointer-events:auto; }
+.escape-actions button { padding:8px 5px; background:#10191cc4; font-size:11px; }
+.escape-actions [aria-pressed=true] { border-color:#d5c58a; color:#f4d29b; background:#3e3925c9; }
+.escape-interact { display:block; width:min(100%,520px); margin:auto; min-height:46px!important; pointer-events:auto; font-size:12px; border-color:#bca981!important; background:#182329e0!important; }
+.escape-search { position:absolute; top:58%; left:50%; transform:translateX(-50%); width:170px; color:#efdbac; text-align:center; font-size:11px; pointer-events:none; }
+.escape-search progress { display:block; margin-top:8px; width:100%; height:8px; accent-color:#d4b97b; }
+.escape-panel { position:absolute; inset:0; z-index:10; display:flex; align-items:center; justify-content:center; padding:max(14px,env(safe-area-inset-top)) 14px max(14px,env(safe-area-inset-bottom)); background:#03070bb5; backdrop-filter:blur(4px); touch-action:pan-y; }
+.escape-panel[hidden] { display:none; }
+.intro-active #escape-view,.intro-active>.escape-hud,.intro-active>.escape-inventory,.intro-active>.escape-crosshair,.intro-active>.escape-danger,.intro-active>.escape-notice,.intro-active>.escape-bottom { visibility:hidden; }
+.escape-panel.escape-intro { background:#02070b33; backdrop-filter:none; align-items:flex-end; padding:0; }
+.escape-intro .escape-card { width:100%; max-width:540px; margin:0; border:0; border-radius:0; overflow:visible; background:linear-gradient(transparent,#070d12ec 20%,#070d12 100%); box-shadow:none; padding:50px 26px 22px; }
+.escape-intro .escape-card>.escape-eyebrow { position:fixed; left:28px; top:max(26px,env(safe-area-inset-top)); }
+.escape-intro h1 { position:fixed; top:61px; left:26px; text-align:left; font-size:44px; line-height:1.2; text-shadow:0 3px 15px #000; }
+.escape-intro .escape-intro-controls { display:none; }
+.escape-intro .escape-story { font-size:11px; }
+.escape-intro .escape-card>p:not(.escape-story):not(.escape-eyebrow):not(.escape-storage):not(.escape-record) { display:none; }
+.escape-card { width:min(100%,470px); max-height:100%; overflow-y:auto; overscroll-behavior:contain; border:1px solid #9f8b695c; border-radius:18px; background:linear-gradient(150deg,#121c21ed,#090c10ee); padding:clamp(20px,5vw,34px); box-shadow:0 20px 70px #000b; scrollbar-width:thin; text-align:center; }
+.escape-eyebrow { color:#c4a579!important; font-size:10px!important; letter-spacing:3px; margin:0 0 16px!important; }
+.escape-card h1 { margin:0 0 18px; font-size:clamp(34px,8vw,52px); line-height:1.15; letter-spacing:4px; color:#f0dfc0; font-weight:900; text-shadow:0 4px 15px #000; }
+.escape-card h1 em { color:#be9a78; font-size:.64em; font-style:normal; letter-spacing:7px; }
+.escape-card h2 { font-size:27px; color:#e3cfac; margin:0 0 14px; }
+.escape-card p { color:#aebcb8; line-height:1.8; font-size:12px; margin:12px 0; }
+.escape-card .escape-story { color:#d1c6af; }
+.escape-intro-controls { display:grid; gap:6px; margin:18px 0; color:#a8b2ad; font-size:10px; }
+.escape-check { display:flex; justify-content:center; align-items:center; gap:9px; margin:18px 0; font-size:11px; color:#d2bd95; }
+.escape-check input { accent-color:#bd9a67; width:17px; height:17px; }
+.escape-card .escape-primary,.escape-card .escape-secondary { width:100%; display:block; margin-top:10px; min-height:46px; }
+.escape-card .escape-primary { background:#b49261; color:#111b1f; border-color:#e1c995; box-shadow:0 3px 0 #59452d; }
+.escape-card .escape-secondary { background:#192326; color:#d3c4aa; }
+.escape-links { display:flex; flex-wrap:wrap; justify-content:center; gap:6px 14px; margin-top:18px; }
+.escape-links button { padding:5px 0; border:0; border-radius:0; background:none; font-size:10px; color:#bcae92; min-height:32px; }
+.escape-card .escape-record { font-size:10px; color:#c8b68e; }
+.escape-card .escape-storage { color:#7f9691; font-size:9px; }
+#escape-floorplan { width:min(100%,290px); height:auto; margin:4px auto; border:1px solid #677a75; border-radius:7px; }
+.escape-card .escape-map-legend { font-size:9px; line-height:1.6; }
+.escape-setting-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:12px; font-size:10px; margin:16px 0 0; }
+.escape-setting-row label { display:flex; align-items:center; gap:5px; }
+.escape-setting-row button { font-size:10px; min-height:32px; padding:4px 7px; }
+.escape-help { text-align:left; padding-left:20px; color:#bdc8c0; font-size:11px; line-height:1.8; }
+.escape-help li { margin-bottom:9px; }
+.escape-result-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:22px 0; font-size:10px; color:#92aaa3; }
+.escape-result-stats strong { display:block; color:#f2d99f; font-size:22px; margin-top:8px; }
+.escape-capture-frog { width:min(100%,240px); aspect-ratio:1; margin:-10px auto 10px; background:url('/assets/character/haunted-frog-v1.webp') 100% 0 / 200% 200% no-repeat; filter:drop-shadow(0 0 30px #843c1b77); }
+@media(orientation:landscape) and (max-height:540px) {
+  .escape-hud { padding:8px 12px; }
+  .escape-hud strong { max-width:500px; font-size:11px; }
+  .escape-inventory { top:65px; }
+  .escape-notice { top:28%; max-width:50%; font-size:10px; }
+  .escape-danger { top:21%; }
+  .escape-bottom { bottom:8px; }
+  .escape-controls { margin-bottom:0; }
+  .escape-stick { width:100px; height:100px; }
+  .escape-stick span { left:30px; top:30px; }
+  .escape-actions { width:190px; }
+  .escape-interact { position:absolute; bottom:0; left:50%; transform:translateX(-50%); width:35%; }
+  .escape-meters { position:absolute; left:50%; bottom:52px; width:36%; transform:translateX(-50%); margin:0; }
+  .escape-card { padding:20px 28px; }
+}
+@media(max-width:350px) {
+  .escape-stick { width:96px; height:96px; }
+  .escape-stick span { left:28px; top:28px; }
+  .escape-actions { gap:5px; width:49%; }
+  .escape-hud strong { font-size:11px; }
+  .escape-inventory { top:110px; }
+  .escape-notice { top:29%; font-size:10px; }
+  .escape-card { padding:18px; }
+}

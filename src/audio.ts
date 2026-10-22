@@ -1,12 +1,13 @@
 import { parseSettings, type Settings } from "./settings.ts";
 import { PlaybackSession } from "./ios-audio.ts";
 
-type Effect = "tap" | "coin" | "win" | "dig";
+type Effect = "tap" | "coin" | "win" | "dig" | "step" | "door" | "heartbeat" | "noise";
 type Voice = { oscillator: OscillatorNode; gain: GainNode };
-type Recording = "normal" | "horror" | "laugh";
+type Recording = "normal" | "horror" | "escape" | "laugh";
 const recordingPaths: Record<Recording, string> = {
   normal: "/assets/audio/bubble-day-soft-v1.mp3",
   horror: "/assets/audio/haunted-bath-v1.mp3",
+  escape: "/assets/audio/sewer-escape-v1.mp3",
   laugh: "/assets/audio/haunted-laugh-v1.mp3",
 };
 const unlockEvents = ["pointerdown", "pointerup", "touchend", "click", "keydown"] as const;
@@ -15,6 +16,10 @@ const effectNotes: Record<Effect, { frequencies: number[]; step: number; type: O
   coin: { frequencies: [660, 990], step: .09, type: "sine" },
   win: { frequencies: [523, 659, 784, 1047], step: .12, type: "triangle" },
   dig: { frequencies: [185], step: .09, type: "sine" },
+  step: { frequencies: [82, 55], step: .045, type: "triangle" },
+  door: { frequencies: [94, 72, 48], step: .09, type: "triangle" },
+  heartbeat: { frequencies: [52, 36], step: .10, type: "sine" },
+  noise: { frequencies: [240, 90, 170, 55], step: .07, type: "triangle" },
 };
 
 export class AudioManager {
@@ -26,10 +31,11 @@ export class AudioManager {
   private lastDigAt = -Infinity;
   private musicSource?: AudioBufferSourceNode;
   private musicGain?: GainNode;
-  private mode: "normal" | "horror" = "normal";
+  private mode: "normal" | "horror" | "escape" = "normal";
   private buffers: Partial<Record<Recording, AudioBuffer>> = {};
   private loading: Partial<Record<Recording, Promise<AudioBuffer | undefined>>> = {};
   private get musicBuffer() { return this.buffers[this.mode]; }
+  private get scaryMode() { return this.mode !== "normal"; }
   private effectGeneration = 0;
   private sampledVoices = new Map<AudioBufferSourceNode, GainNode>();
   private musicOffset = 0;
@@ -119,7 +125,7 @@ export class AudioManager {
     this.syncMusic();
     if (!playing) this.playback.release();
   }
-  setMode(mode: "normal" | "horror"): void {
+  setMode(mode: "normal" | "horror" | "escape"): void {
     if (this.mode === mode) return;
     this.stopPreview();
     this.stopMusic();
@@ -130,10 +136,10 @@ export class AudioManager {
   haunt(): void { void this.playHaunt(); }
   private async playHaunt(preview = false): Promise<boolean> {
     const generation = this.effectGeneration;
-    if (this.mode !== "horror" || (!preview && !this.settings.sound) || this.disposed || document.hidden) return false;
+    if (!this.scaryMode || (!preview && !this.settings.sound) || this.disposed || document.hidden) return false;
     if (!await this.unlock()) return false;
     const buffer = await this.loadRecording("laugh"), context = this.context;
-    if (!buffer || generation !== this.effectGeneration || (!preview && !this.settings.sound) || this.mode !== "horror" || this.disposed || document.hidden || context?.state !== "running") { this.releasePlaybackIfIdle(); return false; }
+    if (!buffer || generation !== this.effectGeneration || (!preview && !this.settings.sound) || !this.scaryMode || this.disposed || document.hidden || context?.state !== "running") { this.releasePlaybackIfIdle(); return false; }
     this.playback.activate();
     const source = context.createBufferSource(), gain = context.createGain();
     source.buffer = buffer; gain.gain.setValueAtTime(.32, context.currentTime);
@@ -160,7 +166,7 @@ export class AudioManager {
           this.syncMusic();
           this.releasePlaybackIfIdle();
         }, 4000);
-      } else if (this.mode === "horror") return await this.playHaunt(true);
+      } else if (this.mode !== "normal") return await this.playHaunt(true);
       else this.playEffect("win");
       return true;
     } finally {
@@ -187,7 +193,7 @@ export class AudioManager {
       if (now - this.lastDigAt < 100) return;
       this.lastDigAt = now;
     }
-    if (this.settings.vibration && effect !== "dig" && "vibrate" in navigator)
+    if (this.settings.vibration && ["tap", "coin", "win", "door"].includes(effect) && "vibrate" in navigator)
       navigator.vibrate(effect === "win" ? 28 : effect === "coin" ? 18 : 8);
     if (!this.settings.sound) return;
     if (this.context?.state === "running") this.playEffect(effect);
@@ -200,7 +206,7 @@ export class AudioManager {
     if (!context || context.state !== "running" || this.disposed || document.hidden) return;
     this.playback.activate();
     const spec = effectNotes[effect], now = context.currentTime,
-      duration = spec.frequencies.length * spec.step, volume = effect === "dig" ? .07 : .12;
+      duration = spec.frequencies.length * spec.step, volume = effect === "dig" ? .07 : effect === "step" ? .055 : effect === "heartbeat" ? .09 : .12;
     const oscillator = context.createOscillator(), gain = context.createGain();
     oscillator.type = spec.type;
     gain.gain.setValueAtTime(.0001, now);
@@ -269,8 +275,9 @@ export class AudioManager {
     source.loop = true;
     // Original horror master is exactly 32 seconds; exclude MP3 padding.
     if (this.mode === "horror") source.loopEnd = Math.min(32, buffer.duration);
+    if (this.mode === "escape") source.loopEnd = Math.min(48, buffer.duration);
     gain.gain.setValueAtTime(.0001, context.currentTime);
-    gain.gain.linearRampToValueAtTime(.65, context.currentTime + .18);
+    gain.gain.linearRampToValueAtTime(this.mode === "escape" ? .42 : .65, context.currentTime + .18);
     source.connect(gain); gain.connect(context.destination);
     this.musicStartedAt = context.currentTime;
     source.start(context.currentTime, this.musicOffset);

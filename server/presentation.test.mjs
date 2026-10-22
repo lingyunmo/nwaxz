@@ -269,6 +269,23 @@ test("switching modes uses separate recordings, stops haunted voices and restore
   assert.ok(download.requests.includes("/assets/audio/haunted-laugh-v1.mp3"));
 });
 
+test("escape has its own bounded loop and the captured laugh can play after music stops", async t => {
+  const { manager, Context, download } = harness(t, { music: true });
+  Context.prototype.decodeAudioData = async function () { this.decodes++; return { duration: 48.024 }; };
+  await manager.unlock(); manager.setMode("escape"); manager.setPlaying(true); await settle();
+  const context = Context.instances[0], loop = context.sources.at(-1);
+  assert.equal(loop.loopEnd, 48); assert.equal(loop.loop, true);
+  assert.equal(Math.max(...context.gains[0].gain.values), .42);
+  assert.ok(download.requests.includes("/assets/audio/sewer-escape-v1.mp3"));
+  manager.setPlaying(false); assert.ok(loop.stopped);
+  assert.equal(await manager.preview("sound"), true);
+  assert.ok(download.requests.includes("/assets/audio/haunted-laugh-v1.mp3"));
+  assert.equal(context.sources.at(-1).loop, undefined);
+  manager.stopPreview(); assert.ok(context.sources.at(-1).stopped);
+  manager.setMode("normal"); manager.setPlaying(true); await settle();
+  assert.ok(download.requests.includes("/assets/audio/bubble-day-soft-v1.mp3"));
+});
+
 test("delayed haunted laughter cannot escape pause, mute or a mode change", async t => {
   const { manager, Context, download } = harness(t, { music: false });
   manager.setMode("horror"); await manager.unlock();

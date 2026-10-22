@@ -1,10 +1,18 @@
 # 开发状态与后续计划
 
-## 0.10.0 恐怖模式第二章候选
+## 0.11.0 极限恐怖逃生候选
+
+Issue #33：新增原创第一人称“下水道逃生”。从寝室搜索黄铜钥匙开始，经档案钥匙、保险丝、通电、地下工具柜、排水阀至剪网逃生，包含有视线/听觉的奶蛙、门锁碰撞、柜内藏身与被目击后的搜查、三夜机会、独立存档和最佳纪录。绘制封面、材质及透明道具图集，原创 48 秒氛围循环；被抓保留捧腹诡笑。原十八个洗澡关卡与 v1 存档继续使用。完整说明见 [ESCAPE_GAME.md](ESCAPE_GAME.md)，具体候选验收见 [VERIFICATION.md](VERIFICATION.md)。线上状态以合并后发布证据为准。
+
+## 最近核对发布：0.10.0
+
+PR #32 合并 SHA `6fbcd38f4e0a5dee8e9a63140d3227b7d664dde9`，[run 38862352356](https://github.com/lingyunmo/nwaxz/actions/runs/38862352356) 三个作业成功。公网版本、精确 SHA 及资源核对见 [发布证据](https://github.com/lingyunmo/nwaxz/pull/32#issuecomment-6209720452)。
+
+## 0.10.0 恐怖模式第二章
 
 Issue #31：新增“地下回声”三关（腐根封门、怨水洗衣间、午夜回风），恐怖模式由三关扩为六关。新增地下洗衣间绘制场景，组合水草、有限紫水、双海绵、风扇和污水池；保留普通十二关、原恐怖第一章、声音兼容、经典捧腹大笑与 v1 存档。76 项业务测试与 1 项 PWA 检查通过，浏览器三关实玩全币、暂停、导入导出和离线冷启动已验收，触摸真机未覆盖。详细证据见 [VERIFICATION.md](VERIFICATION.md)；发布证据另记在对应 PR。
 
-## 最近核对发布：0.9.1
+## 已核对发布：0.9.1（历史）
 
 PR #30 合并 SHA `2be41c946b95ed973367fa8d7ff95143cfc610d5`，[发布 run 38743106369](https://github.com/lingyunmo/nwaxz/actions/runs/38743106369) 三个作业成功。公网版本、SHA、bundle 与四段 MP3 MIME/内容已核对，浏览器更新保留存档和偏好；[发布证据](https://github.com/lingyunmo/nwaxz/pull/30#issuecomment-6193336224)。真实 iPhone Safari/微信扬声器听感仍待用户确认，不能以桌面验收代替。
 

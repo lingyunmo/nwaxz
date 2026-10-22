@@ -183,6 +183,9 @@ button:disabled {
   display: grid;
   gap: 14px;
 }
+.home-actions .escape-entry { background:linear-gradient(125deg,#45222a,#16242c); border-color:#c19272; color:#f4dbc3; }
+.home-actions .escape-entry small { color:#cfb49d; font-size:10px; font-weight:600; letter-spacing:1px; }
+.escape-loading { color:#eee0c6; padding:40px 24px; text-align:center; }
 .game-button {
   display: flex;
   align-items: center;

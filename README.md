@@ -21,7 +21,7 @@
 - 透明角色图集 `public/assets/character/milk-frog-atlas.webp`，包含 idle、breath、blink、look、tap、laugh、celebrate 动作。
 - 12 种角色姿态（原有 8 种及新增 4 种），姿态间平滑混合并连续呼吸摆动。
 
-0.11.0 已发布第二章“地下回声”和独立逃生篇；恐怖洗澡模式共六关，按章解锁并保留旧纪录。既有恐怖美术见 [ART_HORROR.md](docs/ART_HORROR.md)。0.12.0 本地候选已完成 headless Chromium 软件渲染验收，仍未发布；真实手机帧率、触摸体验和扬声器听感仍待真机复核。0.9.1 的 iPhone 声音兼容代码保留。云端同步尚未实现。
+0.11.0 已发布第二章“地下回声”和独立逃生篇；恐怖洗澡模式共六关，按章解锁并保留旧纪录。既有恐怖美术见 [ART_HORROR.md](docs/ART_HORROR.md)。0.12.0 已完成 headless Chromium 软件渲染候选验收；[最终发布与公网证据](https://github.com/lingyunmo/nwaxz/pull/38) 按实际 CI 和提交 SHA 核对，真实手机帧率、触摸体验和扬声器听感仍待真机复核。0.9.1 的 iPhone 声音兼容代码保留。云端同步尚未实现。
 
 线上游戏：[立即游玩](https://nwaxz.bzlom.cn)。版本与 QA 状态见 [DEVELOPMENT_STATE.md](docs/DEVELOPMENT_STATE.md)，玩法说明见 [GAME_DESIGN.md](docs/GAME_DESIGN.md)，已核对的发布证据见 [验证记录](docs/VERIFICATION.md)。绘制资源见 [ART_V2.md](docs/ART_V2.md)、[ART_PROPS.md](docs/ART_PROPS.md)、[ART_WORKSHOP.md](docs/ART_WORKSHOP.md) 和 [ART_BATHROOM.md](docs/ART_BATHROOM.md)。
 

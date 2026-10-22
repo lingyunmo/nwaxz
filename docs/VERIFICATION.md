@@ -4,6 +4,7 @@
 
 ## 0.12.0 真3D逃生候选验收
 
+- 发布链：功能 PR #36 合并为 `677ac44d7ec0c08ad5e7c9e7cd9b1a1b96d901e9`。首次 [run 39839872266](https://github.com/lingyunmo/nwaxz/actions/runs/39839872266) 的 Verify 成功，但 Dockerfile 未复制现有 pnpm 策略配置，镜像安装报最低发布时间策略错误；Deploy 未执行。构建输入修复见 [PR #38](https://github.com/lingyunmo/nwaxz/pull/38)，最终 CI、公网精确 SHA 与资源字节核对结果记录在该 PR，不能将首次失败记为发布成功。
 - Issue #35：Babylon.js 9.32 替换逃生篇的光线投射；原18关仍使用 Canvas 2D。墙、地面和天花采用既有绘制图集固定 UV；家具为真实 GLB，柜门有独立铰链和内部空间；出口有凹入的下水道通道。恐怖奶蛙使用18关节蒙皮和 idle、walk、run、laugh 四个闭合循环，保留张嘴、双手捧腹及肩膀抖动；普通模式角色未替换。
 - `pnpm check` 通过93项业务测试及1项PWA检查。包括原18关全币/水量/存档/音频回归、有效 AI 的连续逃生、共同家具避障、旧 v1 视角默认值及拒绝非法角度、真实柜内/出柜位置、GLB二进制权重/关节/动画、循环首尾一致、Babylon NullEngine 实际导入和姿态、相机俯仰而 UV 不动、场景销毁。两份 GLB 均无外链且各低于4MiB；离线清单191项、约10113KiB。
 - `ops/escape-browser.mjs` 使用独立临时 profile、headless Chromium 软件渲染和临时 localhost 服务，不连接或操控用户桌面/已打开的浏览器。900×650 键盘上下看后角度可保存；抓捕的立体大笑继续循环，下一夜恢复。实际柜内截图能看到真实门缝，离柜位置正确；从暂停按钮下载 JSON 后通过文件输入导回，会话逐字段相同。

@@ -35,7 +35,7 @@ export const PROPS: Prop[] = [
   { id: "cellar-drawer", x: 20.5, z: 16.5, kind: "drawer", name: "维修工具柜", loot: "cutters" },
   { id: "cellar-hide", x: 21.5, z: 19.5, kind: "wardrobe", name: "地下室衣柜" },
   { id: "drain", x: 18.5, z: 20.5, kind: "valve", name: "排水阀" },
-  { id: "exit-note", x: 18.5, z: 17.5, kind: "note", name: "最后一张纸条", text: "我听见下水道的风了。先转开排水阀，再剪开南墙铁网。别回头——它笑的时候，也在找你。" },
+  { id: "exit-note", x: 18.5, z: 17.5, kind: "note", name: "最后一张纸条", text: "先转开排水阀，再剪开南墙的铁网。下水道就在后面。" },
   { id: "exit", x: 20.5, z: 22.65, kind: "exit", name: "下水道铁网" },
 ];
 export const ITEM_NAMES: Record<Item, string> = { brass: "黄铜钥匙", cellar: "检修门钥匙", fuse: "保险丝", cutters: "断线钳" };
@@ -185,7 +185,7 @@ export class EscapeWorld {
     p.stamina = Math.max(0, Math.min(100, p.stamina + (running ? -18 : 13) * dt));
     if (p.light && !d.hidden) {
       p.battery = Math.max(0, p.battery - dt * .13);
-      if (!p.battery) { p.light = false; this.say("手电没电了。仍有微弱环境光，值班室抽屉里有备用电池。"); }
+      if (!p.battery) { p.light = false; this.say("手电没电了。值班室有备用电池。"); }
     }
     if (moving) {
       const norm = Math.max(1, Math.hypot(forward, side)), old = { x: p.x, z: p.z };
@@ -264,7 +264,7 @@ export class EscapeWorld {
     this.data.stones--;
     const p = this.data.player, at = { x: p.x, z: p.z };
     for (let t = .4; t < 6; t += .2) { const next = { x: p.x + Math.cos(p.angle) * t, z: p.z + Math.sin(p.angle) * t }; if (this.wall(next.x, next.z)) break; Object.assign(at, next); }
-    this.noise(at, 16); this.events.push({ type: "noise" }); this.say("石子落在前方。它没看见你时，会去查看声音。");
+    this.noise(at, 16); this.events.push({ type: "noise" }); this.say("石子落地。");
   }
   nearest(): { id: string; label: string; position: Vec } | undefined {
     if (this.data.hidden) return { id: "leave-hide", label: "悄悄离开衣柜", position: this.data.player };
@@ -302,25 +302,25 @@ export class EscapeWorld {
     }
     const object = PROPS.find(o => o.id === target.id)!;
     if (object.kind === "drawer") {
-      if (d.searched.includes(object.id)) { this.say("已经搜过了，没有遗漏。"); return; }
+      if (d.searched.includes(object.id)) { this.say("这里已经搜过了。"); return; }
       this.pending = { id: object.id, remaining: 1.15 }; this.noise(object, 3); return;
     }
     if (object.kind === "wardrobe") {
       if (this.seesPlayer() || d.hunter.state === "chase" && this.lineOfSight(d.hunter, d.player)) this.seenHide = object.id;
       d.hidden = object.id;
       Object.assign(d.player, { x: object.x, z: object.z + .08, angle: Math.PI / 2, pitch: 0 });
-      this.say(this.seenHide ? "它看见你进柜子了，快离开这里！" : "屏住呼吸，听脚步。确认它离开后再出去。"); return;
+      this.say(this.seenHide ? "它看见你了！" : "已躲进衣柜。"); return;
     }
     if (object.kind === "note") { if (!d.notes.includes(object.id)) d.notes.push(object.id); this.say(object.text!); return; }
     if (object.kind === "power") {
       if (!d.inventory.includes("fuse")) { this.say("保险丝缺失。去洗衣间找找。"); return; }
       if (d.power) { this.say("电源已经恢复。"); return; }
-      d.power = true; this.noise(object, 16); this.events.push({ type: "door" }); this.say("地下检修门恢复供电。配电箱的声音可能引来奶蛙。"); return;
+      d.power = true; this.noise(object, 16); this.events.push({ type: "door" }); this.say("电源恢复。小心，动静太大了。"); return;
     }
     if (object.kind === "valve") {
       if (!d.power) { this.say("排水泵没电。"); return; }
       if (d.drained) { this.say("水位已经降下去了。"); return; }
-      d.drained = true; this.noise(object, 16); this.events.push({ type: "noise" }); this.say("积水正在退去。用断线钳剪开南面的铁网！"); return;
+      d.drained = true; this.noise(object, 16); this.events.push({ type: "noise" }); this.say("水位下降，铁网露出来了。"); return;
     }
     if (!d.drained) { this.say("下水道还在涌水，先转开排水阀。"); return; }
     if (!d.inventory.includes("cutters")) { this.say("铁网封着出口，需要断线钳。"); return; }
@@ -330,9 +330,9 @@ export class EscapeWorld {
     const d = this.data; d.searched.push(object.id);
     if (object.loot) {
       if (!d.inventory.includes(object.loot)) d.inventory.push(object.loot);
-      this.events.push({ type: "item" }); this.say(`找到${ITEM_NAMES[object.loot]}。${this.objective}。`);
+      this.events.push({ type: "item" }); this.say(`找到${ITEM_NAMES[object.loot]}。`);
     } else if (object.battery) {
-      d.player.battery = 100; d.stones = Math.min(3, d.stones + 1); this.events.push({ type: "item" }); this.say("找到备用电池和一颗石子。手电已充满。");
+      d.player.battery = 100; d.stones = Math.min(3, d.stones + 1); this.events.push({ type: "item" }); this.say("找到电池和石子。");
     }
   }
   toggleLight() { if (this.data.player.battery > 0) this.data.player.light = !this.data.player.light; else this.say("手电已经没电了。"); }
@@ -346,7 +346,7 @@ export class EscapeWorld {
     const d = this.data; Object.assign(d.player, { x: 3.5, z: 5.5, angle: -Math.PI / 2, pitch: 0, stamina: 100, battery: Math.max(35, d.player.battery) });
     Object.assign(d.hunter, { x: 12.5, z: 9.5, angle: 0, state: "patrol" });
     d.hidden = undefined; d.phase = "playing"; this.seenHide = undefined; this.unseen = 0; this.path = []; this.pathTimer = 0;
-    this.patrolIndex = 0; this.target = { ...patrol[0] }; this.wait = -8; this.say("你在寝室醒来。找到的物品还在，别再被抓住。");
+    this.patrolIndex = 0; this.target = { ...patrol[0] }; this.wait = -8; this.say("物品还在，继续寻找出口。");
   }
   snapshot(): EscapeSnapshot {
     return JSON.parse(JSON.stringify({ ...this.data, pursuit: { target: this.target, seenHide: this.seenHide, unseen: this.unseen, wait: this.wait, patrolIndex: this.patrolIndex } }));

@@ -71,7 +71,7 @@ try {
   if(JSON.stringify(JSON.parse(backup).session)!==JSON.stringify(leaving)) throw new Error('backup differs from paused session');
   await page.locator('#escape-exit').click(); await page.locator('#extreme').click();
   await page.locator('#escape-import').setInputFiles({name:'escape-backup.json',mimeType:'application/json',buffer:Buffer.from(backup)});
-  await page.waitForFunction(()=>document.querySelector('.escape-storage')?.textContent.includes('逃生存档已导入'));
+  await page.waitForFunction(()=>document.querySelector('.escape-storage')?.textContent.includes('存档已导入'));
   const imported=JSON.parse(await page.evaluate(()=>localStorage.getItem('nwaxz-escape-session-v1')));
   if(JSON.stringify(imported)!==JSON.stringify(leaving)) throw new Error('import changed saved session');
   await page.locator('#escape-intro-exit').click();

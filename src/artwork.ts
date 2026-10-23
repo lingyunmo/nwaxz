@@ -1,4 +1,5 @@
 export const artworkPaths = {
+  hauntedCover: "/assets/scenes/haunted-cover-v1.webp",
   cover: "/assets/scenes/bath-cover-v2.webp",
   stage: "/assets/scenes/bath-stage-v2.webp",
   workshop: "/assets/scenes/workshop-stage-v1.webp",

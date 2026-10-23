@@ -17,7 +17,7 @@ export default defineConfig({
         name: "奶蛙爱洗澡",
         short_name: "nwaxz",
         lang: "zh-CN",
-        description: "划开泥土，让奶蛙洗个快乐澡。",
+        description: "泡泡浴场、午夜浴场、下水道逃生。选择你的冒险。",
         theme_color: "#286f70",
         background_color: "#286f70",
         display: "standalone",

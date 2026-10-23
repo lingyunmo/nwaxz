@@ -58,6 +58,10 @@
 .escape-map-page .escape-map-legend { display:flex; align-items:center; justify-content:center; gap:5px; margin:14px 0 0; font-size:9px; color:#9e9e84; }
 .escape-map-legend i { width:7px; height:7px; margin-left:6px; }.map-you { background:#f1d299; clip-path:polygon(50% 0,100% 100%,50% 75%,0 100%); }.map-door { background:#ae7950; }.map-hide { background:#694530; }.map-fog { background:#111918; border:1px solid #5b685333; }
 .escape-journal { text-align:left; border-left:2px solid #9f89505c; padding:2px 0 2px 14px; margin:25px 0; }.escape-journal small { font-size:9px; color:#958361; letter-spacing:3px; }.escape-journal p { font-size:12px; margin:8px 0; color:#cac1a4; }
+.escape-bindings { margin:18px 0 22px; font-size:11px; }
+.escape-bindings>div { display:flex; justify-content:space-between; align-items:baseline; gap:14px; padding:9px 0; border-bottom:1px solid #a3916c25; }
+.escape-bindings dt { color:#b9aa83; flex-shrink:0; }.escape-bindings dd { margin:0; text-align:right; color:#d4ccb6; }
+.escape-intro .escape-card .escape-storage:empty { display:none; }
 .capture-active .escape-card { background:linear-gradient(#101910e8,#080d09); }
 @media (pointer:coarse) {
   .escape-shell .escape-map-button { width:120px; top:max(12px,env(safe-area-inset-top)); right:12px; }.escape-hud { top:max(16px,env(safe-area-inset-top)); left:16px; gap:12px; }

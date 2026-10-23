@@ -91,3 +91,12 @@ button {
   color: #365d49;
   font-weight: 800;
 }
+.boot-screen { background:#0c1815; }
+.boot-stage { width:min(1280px,100vw); }
+.boot-gallery { display:grid; grid-template-columns:repeat(3,1fr); height:100%; opacity:.44; }
+.boot-gallery img { width:100%; height:100%; object-fit:cover; object-position:center 42%; min-width:0; }
+.boot-stage::after { content:''; position:absolute; inset:0; background:linear-gradient(transparent,#07120d22 35%,#07120dde 85%); }
+.boot-logo { position:absolute; z-index:1; top:32%; left:0; right:0; margin:0; text-align:center; color:#f4e3ac; font-size:clamp(30px,6vw,60px); font-weight:900; letter-spacing:5px; text-shadow:0 3px 15px #000; }
+.boot-logo span { display:block; color:#fff4df; font-size:.65em; letter-spacing:12px; margin-top:10px; }
+.boot-loading { z-index:1; bottom:13%; left:50%; transform:translateX(-50%); width:min(64%,300px); color:#d9d2b6; font-size:11px; font-weight:400; letter-spacing:3px; }
+.boot-loading progress { height:5px; border:0; border-radius:0; background:#374c3a; accent-color:#c6ad6d; }

@@ -6,7 +6,8 @@ import vm from "node:vm";
 test("built offline worker has one revision per URL and a cached navigation fallback", () => {
   let manifest,
     fallback,
-    claims = false;
+    claims = false,
+    videoRoute;
   const workbox = {
     precacheAndRoute(entries) {
       manifest = entries;
@@ -20,7 +21,11 @@ test("built offline worker has one revision per URL and a cached navigation fall
       return () => {};
     },
     NavigationRoute: class {},
-    registerRoute() {},
+    registerRoute(pattern, handler) { if (typeof pattern?.test === "function") videoRoute = { pattern, handler }; },
+    CacheFirst: class { constructor(options) { this.options = options; } },
+    RangeRequestsPlugin: class {},
+    CacheableResponsePlugin: class {},
+    ExpirationPlugin: class {},
   };
   vm.runInNewContext(
     fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8"),
@@ -39,6 +44,10 @@ test("built offline worker has one revision per URL and a cached navigation fall
   );
   assert.equal(fallback, "index.html");
   assert.ok(claims);
+  assert.ok(videoRoute.pattern.test("https://example.com/assets/video/escape-caught-2-v1.mp4"));
+  assert.ok(videoRoute.handler.options.plugins.some(p => p instanceof workbox.RangeRequestsPlugin));
+  assert.equal(videoRoute.handler.options.cacheName, "nwaxz-cinematics-v1");
+  assert.ok(!manifest.some(entry => entry.url.endsWith(".mp4")), "CGs must not block installation of the core game");
   for (const url of [
     "index.html",
     "icon.svg",

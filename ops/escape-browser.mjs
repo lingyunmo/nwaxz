@@ -12,7 +12,8 @@ const server = createApp({distDir:fileURLToPath(new URL('../dist/', import.meta.
 await new Promise(r=>server.once('listening',r));
 const base=`http://127.0.0.1:${server.address().port}`;
 let browser;
-const errors=[];
+const errors=[], offlineVideoMisses=[];
+let networkOffline=false;
 try {
   browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH,headless:true,args:['--disable-gpu','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--renderer-process-limit=1','--disable-background-networking']});
   const context=await browser.newContext({viewport:{width:900,height:650}, serviceWorkers:'allow'});
@@ -20,6 +21,7 @@ try {
   page.on('pageerror',e=>errors.push(e.message));
   page.on('console',m=>{if(m.type()==='error') errors.push(m.text());});
   await page.goto(base); console.log('home'); await page.locator('#extreme').click(); await page.locator('#escape-new').click();
+  await page.locator('#cinematic-skip').click();
   await page.locator('#escape-panel[hidden]').waitFor({timeout:30000,state:'attached'}); console.log('3d-ready');
   await page.keyboard.press('Escape');
   await page.screenshot({path:path.join(output, 'pause.png')});
@@ -78,8 +80,14 @@ try {
   const mobile=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:'allow'});
   const phone=await mobile.newPage();
   phone.on('pageerror',e=>errors.push('mobile: '+e.message));
-  phone.on('console',m=>{if(m.type()==='error') errors.push('mobile: '+m.text());});
+  phone.on('console',m=>{
+    if(m.type()!=='error')return;
+    const url=m.location().url;
+    if(networkOffline && /\/assets\/video\/escape-(opening|caught-[123])-v1\.mp4$/.test(url) && m.text().includes('net::ERR_FAILED')) offlineVideoMisses.push(url);
+    else errors.push('mobile: '+m.text()+' '+url);
+  });
   await phone.goto(base); await phone.locator('#extreme').tap(); await phone.locator('#escape-new').tap();
+  await phone.locator('#cinematic-skip').tap();
   await phone.locator('#escape-panel[hidden]').waitFor({timeout:30000,state:'attached'});
   const cdp=await mobile.newCDPSession(phone), stick=await phone.locator('#escape-stick').boundingBox();
   const sx=stick.x+stick.width/2,sy=stick.y+stick.height/2;
@@ -108,7 +116,7 @@ try {
   await phone.waitForFunction(()=>!!navigator.serviceWorker.controller);
   const cached=await phone.evaluate(async()=>{let results=[]; for(const n of ['models/escape-props-v1.glb','character/haunted-frog-v1.webp','character/haunted-frog-actions-v2.webp','ui/escape-map-atlas-v1.webp'])results.push(!!await caches.match('/assets/'+n,{ignoreSearch:true}));return results;});
   if(!cached.every(Boolean)) throw new Error('3D models absent from offline cache');
-  await mobile.setOffline(true); await phone.reload();
+  networkOffline=true; await mobile.setOffline(true); await phone.reload();
   await phone.locator('#extreme').tap(); await phone.locator('#escape-continue').tap();
   await phone.locator('#escape-panel[hidden]').waitFor({timeout:30000,state:'attached'});
   await phone.locator('#escape-pause').tap();
@@ -124,6 +132,6 @@ try {
   await phone.screenshot({path:path.join(output,'mobile-laugh.png')});
   await mobile.close();
   await context.close();
-  console.log(JSON.stringify({base, errors, pitch:current.player.pitch, nextNight:save.phase, mobileSave, cached, offline:true}));
+  console.log(JSON.stringify({base, errors, offlineVideoMisses, pitch:current.player.pitch, nextNight:save.phase, mobileSave, cached, offline:true}));
   if(errors.length) process.exitCode=1;
 } catch(e){console.error(e);console.error(JSON.stringify(errors));process.exitCode=1;} finally {await browser?.close();await new Promise(r=>server.close(r));}

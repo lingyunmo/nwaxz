@@ -2,6 +2,7 @@ import "./style.css";
 import "./hud.css";
 import { icon } from "./icons.ts";
 import { SaveWriteError, writeSaveBatch } from "./save.ts";
+import { CinematicPlayer, openingClip, randomCaughtClip, warmCinematics } from "./cinematic.ts";
 import { AudioManager } from "../audio.ts";
 import type { Settings } from "../settings.ts";
 import { EscapeWorld, ITEM_NAMES, type EscapeSnapshot } from "./world.ts";
@@ -27,6 +28,7 @@ export class EscapeGame {
   private paused = true;
   private started = false;
   private disposed = false;
+  private cinematic?: CinematicPlayer;
   private saved?: EscapeSnapshot;
   private record?: Best;
   private storageWarning = "";
@@ -63,7 +65,7 @@ export class EscapeGame {
       <div class="escape-controls"><div class="escape-stick" id="escape-stick" aria-label="移动摇杆"><span></span></div><div class="escape-actions"><button id="escape-light" aria-label="开关手电" title="手电 F">${icon("light")}<kbd>F</kbd></button><button id="escape-crouch" aria-label="切换蹲行" title="蹲行 C">${icon("crouch")}<kbd>C</kbd></button><button id="escape-stone" aria-label="丢石子" title="石子 Q">${icon("stone")}<b id="escape-stones">2</b><kbd>Q</kbd></button><button id="escape-sprint" aria-label="按住奔跑" title="奔跑 Shift">${icon("run")}<kbd>⇧</kbd></button></div></div>
       <button class="escape-interact" id="escape-interact" hidden>${icon("hand")}<span></span><kbd>E</kbd></button></div>
       <div id="escape-panel" class="escape-panel" role="dialog" aria-modal="true" aria-label="逃生菜单"></div><input id="escape-import" type="file" accept=".json,application/json" hidden></main>`;
-    this.bind(); this.intro();
+    this.bind(); this.intro(); warmCinematics(this.signal);
     this.raf = requestAnimationFrame(this.frame);
   }
   private $<T extends HTMLElement = HTMLElement>(selector: string) { return this.root.querySelector<T>(selector)!; }
@@ -110,6 +112,7 @@ export class EscapeGame {
     this.audio.setMode("escape"); this.applySound(); void this.audio.unlock();
     if (!document.fullscreenElement && document.documentElement.requestFullscreen) void document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
     this.panel('<p class="escape-eyebrow">下水道逃生</p><h2>正在载入…</h2>');
+    const opening = resume ? undefined : this.playCinematic(openingClip);
     try {
       this.art ??= await this.loadArt();
       if (this.disposed) return;
@@ -119,12 +122,24 @@ export class EscapeGame {
       if (this.disposed) return;
       this.renderer.resize(this.settings.quality === "high"); this.started = true; this.phase = this.world.data.phase;
       this.saveAt = this.world.data.elapsed; this.save();
+      await opening;
+      if (this.disposed) return;
       if (this.world.data.phase === "caught") this.result(); else this.resume();
     } catch {
+      this.cinematic?.close();
       this.renderer?.dispose(); this.renderer = undefined;
       this.panel('<h2>场景载入失败</h2><p>请检查网络，或换用支持 WebGL 的浏览器。进度已保留。</p><button id="escape-load-back" class="escape-primary">返回菜单</button>');
       this.button("escape-load-back", () => this.intro());
     }
+  }
+  private async playCinematic(path: string) {
+    this.paused = true; this.clearInput(); this.audio.setPlaying(false); this.audio.stopPreview();
+    const shell = this.$(".escape-shell"); shell.inert = true;
+    const player = new CinematicPlayer(this.root, path, this.sound); this.cinematic = player;
+    await player.done;
+    if (this.cinematic === player) this.cinematic = undefined;
+    shell.inert = false;
+    if (!this.disposed) this.$("#escape-panel").querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
   }
   private applySound() { this.audio.setSettings({ ...this.settings, music: this.music, sound: this.sound }); }
   private saveSound() { try { localStorage.setItem(SOUND, JSON.stringify({ music: this.music, sound: this.sound })); } catch { /* Audio still works without storage. */ } this.applySound(); }
@@ -162,8 +177,12 @@ export class EscapeGame {
     this.panel('<h2>重新进入浴场？</h2><p>重置当前逃生进度，保留最佳纪录。</p><button id="escape-confirm-restart" class="escape-primary">重新开始</button><button id="escape-cancel-restart" class="escape-secondary">继续游戏</button>');
     this.button("escape-confirm-restart", () => void this.start(false)); this.button("escape-cancel-restart", () => this.started ? this.pause() : this.intro());
   }
-  private result() {
+  private result(playCapture = false) {
     this.paused = true; this.clearInput(); this.audio.setPlaying(false); this.save();
+    if (playCapture) {
+      void this.playCinematic(randomCaughtClip()).then(() => { if (!this.disposed) this.result(); });
+      return;
+    }
     const d = this.world.data;
     if (d.phase === "won") {
       this.panel(`<p class="escape-eyebrow">下水道逃生</p><h1>逃生成功</h1><div class="escape-result-stats"><span>用时<strong>${time(d.elapsed)}</strong></span><span>被抓<strong>${d.captures} / 3</strong></span><span>纸条<strong>${d.notes.length} / 3</strong></span></div><p class="escape-record">最佳 ${time((this.record?.bestTimeMs ?? d.elapsed * 1000) / 1000)}</p><button id="escape-again" class="escape-primary">再玩一次</button><button id="escape-result-exit" class="escape-secondary">返回首页</button>`);
@@ -215,6 +234,7 @@ export class EscapeGame {
     sprint.addEventListener("pointerdown", e => { if (this.paused) return; e.preventDefault(); sprint.setPointerCapture(e.pointerId); this.sprinting = true; }, { signal: this.signal });
     for (const event of ["pointerup", "pointercancel", "lostpointercapture"]) sprint.addEventListener(event, () => { this.sprinting = false; }, { signal: this.signal });
     document.addEventListener("keydown", e => {
+      if (this.cinematic) return;
       if (this.$("#escape-panel").hidden === false) {
         if (e.key === "Escape" && this.started && this.world.data.phase === "playing") { e.preventDefault(); this.resume(); }
         if (e.key === "Tab") {
@@ -268,19 +288,19 @@ export class EscapeGame {
       this.renderer?.draw(this.world, dt);
       const d = this.world.data;
       for (const event of this.world.drainEvents()) {
-        if (event.type === "laugh") this.audio.haunt();
+        if (event.type === "laugh" && d.phase === "playing") this.audio.haunt();
         if (["step", "door", "noise"].includes(event.type)) this.audio.effect(event.type as "step" | "door" | "noise");
         if (event.type === "item") this.audio.effect("coin");
         if (["item", "door", "message"].includes(event.type)) this.save();
       }
       if (d.hunter.state === "chase" && d.elapsed - this.heartbeatAt > .72) { this.heartbeatAt = d.elapsed; this.audio.effect("heartbeat"); }
       if (d.elapsed - this.saveAt > 4) { this.saveAt = d.elapsed; this.save(); }
-      if (d.phase !== this.phase) { this.phase = d.phase; if (d.phase === "won") this.recordWin(); this.result(); }
+      if (d.phase !== this.phase) { this.phase = d.phase; if (d.phase === "won") this.recordWin(); this.result(d.phase === "caught" || d.phase === "lost"); }
       if (now - this.hudAt > 100) { this.hudAt = now; this.updateHud(); }
     }
     // Capture is a cosmetic animation only. Simulation, battery and saves do
     // not advance while its clearly visible original-art belly laugh loops.
-    if (this.started && this.paused && ["caught", "lost"].includes(this.world.data.phase) && !document.hidden && this.$(".escape-shell").classList.contains("capture-active")) this.renderer?.draw(this.world, dt);
+    if (this.started && this.paused && !this.cinematic && ["caught", "lost"].includes(this.world.data.phase) && !document.hidden && this.$(".escape-shell").classList.contains("capture-active")) this.renderer?.draw(this.world, dt);
     this.raf = requestAnimationFrame(this.frame);
   };
   private updateHud() {
@@ -320,6 +340,6 @@ export class EscapeGame {
     this.renderer?.drawMap(this.$("#escape-minimap"), this.world, true);
   }
   destroy() {
-    if (this.disposed) return; this.save(); this.disposed = true; this.controller.abort(); cancelAnimationFrame(this.raf); this.audio.setPlaying(false); this.audio.stopPreview(); this.renderer?.dispose();
+    if (this.disposed) return; this.save(); this.disposed = true; this.cinematic?.close(); this.controller.abort(); cancelAnimationFrame(this.raf); this.audio.setPlaying(false); this.audio.stopPreview(); this.renderer?.dispose();
   }
 }

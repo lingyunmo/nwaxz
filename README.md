@@ -4,6 +4,8 @@
 
 ## 当前功能
 
+0.15.0：极限恐怖新游戏播放用户提供的开场影片；每次被抓随机播放三段影片之一，结束或跳过后接原画大笑与结算。视频可暂停、静音、跳过，支持按需离线缓存。更新入口改用不受静态JS长期缓存影响的 `/game-worker`，联网/回前台主动检查，在安全菜单应用、游玩时延后。素材来源见[过场视频](docs/ART_CINEMATICS.md)，本批发布状态见[Issue44](https://github.com/lingyunmo/nwaxz/issues/44)。
+
 0.14.0 界面更新：三个同等大小的绘制封面入口，各模式独立续玩；首页不再显示普通模式的全局续关和泡泡币。设置、结算与逃生菜单精简文案，操作和存档工具按需展开。实现与验收见[文案约定](docs/UI_COPY.md)、[验证记录](docs/VERIFICATION.md)；本批线上发布结果见 [Issue #42](https://github.com/lingyunmo/nwaxz/issues/42)。
 
 0.13.0 已发布并公网核对，合并 SHA `df9c58df2eee20c1eaf92dcee260825bed4fdf9b`；[发布证据](https://github.com/lingyunmo/nwaxz/pull/40#issuecomment-6350384629)包含三个成功 CI 作业与15项线上资源逐字节核对。

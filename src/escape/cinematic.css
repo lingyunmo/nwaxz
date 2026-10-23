@@ -1,0 +1,6 @@
+.escape-cinematic { position:fixed; inset:0; z-index:100; display:grid; place-items:center; background:#000; color:#eee2cb; touch-action:manipulation; }
+.escape-cinematic video { display:block; width:100%; height:100%; object-fit:contain; }
+.cinematic-controls { position:absolute; left:max(16px,env(safe-area-inset-left)); right:max(16px,env(safe-area-inset-right)); bottom:max(16px,env(safe-area-inset-bottom)); display:flex; gap:10px; }
+.cinematic-controls button { min-height:44px; padding:10px 18px; border:1px solid #d8cbb16b; border-radius:5px; background:#090d0bb8; color:#e5d7bc; font:12px system-ui,sans-serif; cursor:pointer; }
+.cinematic-controls button:last-child { margin-left:auto; }.cinematic-controls button:focus-visible { outline:2px solid #ebd7a6; outline-offset:3px; }
+.cinematic-status { position:absolute; bottom:max(74px,calc(env(safe-area-inset-bottom) + 66px)); font:12px system-ui,sans-serif; color:#ddd1b5; }.cinematic-status:empty { display:none; }

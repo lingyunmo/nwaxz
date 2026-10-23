@@ -143,7 +143,7 @@ const normalLevels: Level[] = [
   },
   {
     id: "valve-wind-relay",
-    title: "风车开水啦",
+    title: "风扇送水",
     chapter: 4,
     scene: "workshop",
     hint: "先挖路、开风扇，再开清水阀。水不够时，检查高台右侧的水道。",
@@ -178,7 +178,7 @@ const normalLevels: Level[] = [
   },
   {
     id: "wind-sponge-relay",
-    title: "乘风的海绵水",
+    title: "借风送水",
     chapter: 4,
     scene: "workshop",
     hint: "先挖水道，开阀让海绵吸水。挤出水后，用风扇送过高台。",

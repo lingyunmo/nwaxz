@@ -18,6 +18,7 @@ test("release readiness, UTF-8, asset caching, and private-file isolation", asyn
   fs.mkdirSync(path.join(directory, "assets", "character"));
   fs.writeFileSync(path.join(directory, "assets", "character", "atlas.json"), "{}");
   fs.writeFileSync(path.join(directory, ".env"), "private-value");
+  fs.writeFileSync(path.join(directory, "sw.js"), 'self.addEventListener("install",()=>{})');
   const server = createApp({
     distDir: directory,
     revision: "test-revision",
@@ -51,6 +52,14 @@ test("release readiness, UTF-8, asset caching, and private-file isolation", asyn
     (await request("/assets/character/atlas.json")).headers.get("cache-control"),
     "no-cache",
   );
+  for (const endpoint of ["/game-worker", "/sw.js"]) {
+    const worker = await request(endpoint);
+    assert.equal(worker.status, 200);
+    assert.equal(worker.headers.get("cache-control"), "no-store, max-age=0");
+    assert.equal(worker.headers.get("service-worker-allowed"), "/");
+    assert.match(worker.headers.get("content-type"), /javascript/);
+    assert.match(await worker.text(), /self.addEventListener/);
+  }
   assert.equal((await request("/.env")).status, 404);
   assert.equal((await request("/api/unknown")).status, 404);
   fs.unlinkSync(path.join(directory, "index.html"));

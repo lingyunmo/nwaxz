@@ -2,7 +2,7 @@ import "./style.css";
 import "./menu.css";
 import type { EscapeGame } from "./escape/game.ts";
 import { version } from "../package.json";
-import { registerSW } from "virtual:pwa-register";
+import { createGameUpdater } from "./updates.ts";
 import { levels } from "./game/levels";
 import { canEnter, modeIndices, modeOf, nextLevel, type GameMode } from "./game/modes";
 import { BathGame, type RunResult } from "./game/renderer";
@@ -132,6 +132,7 @@ function renderHome() {
   $("#horror").onclick = () => openMode("horror");
   $("#extreme").onclick = () => void enterEscape();
   $("#settings").onclick = () => openSettings(); $("#update").onclick = applyUpdate;
+  queueMicrotask(() => gameUpdater.apply());
 }
 async function enterEscape() {
   leaveGame(); screen = "escape";
@@ -177,6 +178,7 @@ function renderLevels() {
   $("#next-chapter").onclick = () => { chapter = Math.min(chapterCount(), chapter + 1); renderLevels(); };
   for (const element of app.querySelectorAll<HTMLButtonElement>("[data-level]"))
     element.onclick = () => enterLevel(Number(element.dataset.level));
+  queueMicrotask(() => gameUpdater.apply());
 }
 function enterLevel(index: number) {
   if (!unlocked(index)) return;
@@ -349,6 +351,7 @@ function showDialog(content: string, onClose: () => void = () => {}) {
   dialog.querySelector<HTMLInputElement>("#import-file")!.onchange = importSave;
   app.append(dialog);
   dialog.onclose = onClose;
+  dialog.addEventListener("close", () => queueMicrotask(() => gameUpdater.apply()), { once: true });
   dialog.showModal();
   return dialog;
 }
@@ -569,11 +572,9 @@ document.addEventListener("fullscreenchange", () => {
 });
 window.addEventListener("pagehide", () => audio.suspend());
 window.addEventListener("pageshow", () => audio.resume());
-const updateSW = registerSW({
-  onOfflineReady() {
-    offlineReady = true;
-  },
-  onNeedRefresh() {
+const gameUpdater = createGameUpdater({
+  canReload: () => ["home", "levels"].includes(screen) && !app.querySelector("dialog[open]"),
+  onReady() {
     updateAvailable = true;
     const update = app.querySelector<HTMLButtonElement>("#update");
     if (update) update.hidden = false;
@@ -595,11 +596,12 @@ if ("serviceWorker" in navigator && "caches" in window) {
     .catch(() => {});
 }
 function applyUpdate() {
-  if (game && !game.won) {
-    toast("请先结束这一局，再更新游戏。");
+  if (!["home", "levels"].includes(screen)) {
+    toast("返回首页后更新。");
     return;
   }
-  void updateSW(true);
+  app.querySelector<HTMLDialogElement>("dialog[open]")?.close();
+  gameUpdater.apply();
 }
 async function boot() {
   try {

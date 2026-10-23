@@ -47,6 +47,16 @@ export default defineConfig({
         clientsClaim: true,
         navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,
+        runtimeCaching: [{
+          urlPattern: /\/assets\/video\/escape-(?:opening|caught-[123])-v1\.mp4$/,
+          handler: "CacheFirst",
+          options: {
+            cacheName: "nwaxz-cinematics-v1",
+            rangeRequests: true,
+            cacheableResponse: { statuses: [200] },
+            expiration: { maxEntries: 4, maxAgeSeconds: 365 * 24 * 60 * 60 },
+          },
+        }],
       },
     }),
   ],

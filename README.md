@@ -4,6 +4,8 @@
 
 ## 当前功能
 
+0.16.2：极限恐怖每次新游戏从“开场1”和“开场2”中等概率随机播放一段，继续存档不重播；两段均加入启动预加载和离线缓存。素材见[过场视频](docs/ART_CINEMATICS.md)，发布状态见 [Issue50](https://github.com/lingyunmo/nwaxz/issues/50)。
+
 0.16.1：修复手电光斑停在初始位置的问题，移动与上下左右转头时照明随视角更新。小地图和暂停地图显示当前位置；进入房间或长廊时居中显示约1.6秒地名，暂停时保留剩余时间。发布与验证见 [Issue48](https://github.com/lingyunmo/nwaxz/issues/48) 和[验证记录](docs/VERIFICATION.md)。
 
 0.16.0：启动页显示“正在准备浴室”、实际下载百分比与 MB，提前保存全部视频、音乐、地图、模型和游戏代码（196项，约23.66 MiB），再次打开复用缓存。三维浴场在启动时预热，进入及退出后重进复用同一场景；资源超时或失败时提供重试，也可明确选择先进入游戏。四段过场、经典捧腹大笑和 v1 存档保持兼容。`pnpm check`（103项业务测试、1项PWA检查）及启动、首页、逃生、CG、更新浏览器验收通过。实现与发布状态见[开发状态](docs/DEVELOPMENT_STATE.md#0160-资源预缓存与启动预热候选)、[验证记录](docs/VERIFICATION.md)和[Issue46](https://github.com/lingyunmo/nwaxz/issues/46)。

@@ -15,10 +15,15 @@ try {
   browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH,headless:true,args:['--disable-gpu','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--renderer-process-limit=1']});
   const context=await browser.newContext({viewport:{width:1280,height:720},serviceWorkers:'allow'}), page=await context.newPage();
   page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(base); await page.locator('#extreme').click(); await page.locator('#escape-new').click();
+  await page.goto(base); await page.locator('#extreme').click();
+  await page.evaluate(()=>{Math.random=()=>.1;});
+  await page.locator('#escape-new').click();
   const video=page.locator('.escape-cinematic video');
   await page.waitForFunction(()=>document.querySelector('video')?.currentTime>.35);
-  assert.match(await video.getAttribute('src'),/opening/);
+  assert.ok((await video.getAttribute('src')).endsWith('escape-opening-v1.mp4'),'Math.random=.1 selects the original opening');
+  assert.equal(await page.locator('.escape-cinematic').getAttribute('aria-label'),'开场影片');
+  const firstStart=await video.evaluate(v=>v.currentTime);
+  await page.waitForFunction(t=>document.querySelector('.escape-cinematic video')?.currentTime>t+.2,firstStart);
   assert.equal(await video.evaluate(v=>v.muted),false);
   await page.locator('#cinematic-play').click(); const at=await video.evaluate(v=>v.currentTime);
   const saved=await page.evaluate(k=>localStorage.getItem(k),sessionKey);
@@ -40,6 +45,19 @@ try {
   await page.locator('#extreme').click(); await page.locator('#escape-continue').click();
   await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   assert.equal(await page.locator('.escape-cinematic').count(),0,'continue must not replay opening');
+  await page.keyboard.press('Escape'); await page.locator('#escape-exit').click();
+  await page.locator('#extreme').click(); await page.locator('#escape-new').click();
+  await page.evaluate(()=>{Math.random=()=>.75;});
+  await page.locator('#escape-confirm-restart').click();
+  const secondOpening=page.locator('.escape-cinematic video');
+  await secondOpening.waitFor({timeout:30000});
+  assert.equal(await page.locator('.escape-cinematic').getAttribute('aria-label'),'开场影片');
+  assert.ok((await secondOpening.getAttribute('src')).endsWith('escape-opening-2-v1.mp4'),'Math.random=.75 selects the second opening');
+  const secondStart=await secondOpening.evaluate(v=>v.currentTime);
+  await page.waitForFunction(t=>document.querySelector('.escape-cinematic video')?.currentTime>t+.2,secondStart);
+  await page.locator('.escape-cinematic').waitFor({state:'detached',timeout:20000});
+  await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
+  await page.locator('#escape-view').waitFor();
   await page.keyboard.press('Escape'); await page.locator('#escape-exit').click();
   const selected=[];
   for(let n=0;n<3;n++) {
@@ -84,7 +102,9 @@ try {
   await phone.locator('#escape-pause').tap(); await phone.locator('#escape-exit').tap();
   const missing=await browser.newContext({serviceWorkers:'block'}),fallback=await missing.newPage();
   fallback.on('pageerror',e=>errors.push(e.message));
+  await fallback.addInitScript(()=>{Math.random=()=>.75;});
   await fallback.route('**/assets/video/escape-opening-v1.mp4',r=>r.fulfill({status:404,body:''}));
+  await fallback.route('**/assets/video/escape-opening-2-v1.mp4',r=>r.fulfill({status:404,body:''}));
   await fallback.goto(base);
   await fallback.locator('#enter-now').waitFor({timeout:40000});
   await fallback.locator('#enter-now').click();
@@ -95,16 +115,21 @@ try {
   // Full cached MP4 must serve byte ranges while disconnected.
   await page.evaluate(async()=>{await navigator.serviceWorker.ready;});
   await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
-  const urls=['opening','caught-1','caught-2','caught-3'].map(x=>`/assets/video/escape-${x}-v1.mp4`);
+  const urls=['opening','opening-2','caught-1','caught-2','caught-3'].map(x=>`/assets/video/escape-${x}-v1.mp4`);
   const cachedVideos=await page.evaluate(async urls=>Promise.all(urls.map(async url=>!!await caches.match(url,{ignoreSearch:true}))),urls);
-  assert.ok(cachedVideos.every(Boolean),'all four complete cinematic videos must be present in the precache');
+  assert.ok(cachedVideos.every(Boolean),'all five complete cinematic videos must be present in the precache');
   await context.setOffline(true);
   for(const url of urls){
     const range=await page.evaluate(async u=>{const r=await fetch(u,{headers:{Range:'bytes=0-255'}});return{status:r.status,length:(await r.arrayBuffer()).byteLength,range:r.headers.get('content-range')};},url);
     assert.equal(range.status,206);assert.equal(range.length,256);assert.match(range.range,/^bytes 0-255\//);
   }
+  await page.addInitScript(()=>{Math.random=()=>.75;});
   await page.reload(); await page.locator('#extreme').click(); await page.locator('#escape-new').click();
-  await page.waitForFunction(()=>document.querySelector('video')?.currentTime>.3);
+  await page.waitForFunction(()=>document.querySelector('.escape-cinematic video')?.currentTime>.3);
+  assert.ok((await page.locator('.escape-cinematic video').getAttribute('src')).endsWith('escape-opening-2-v1.mp4'),'second opening plays while offline');
+  assert.equal(await page.locator('.escape-cinematic').getAttribute('aria-label'),'开场影片');
+  const offlineStart=await page.locator('.escape-cinematic video').evaluate(v=>v.currentTime);
+  await page.waitForFunction(t=>document.querySelector('.escape-cinematic video')?.currentTime>t+.2,offlineStart);
   await page.screenshot({path:path.join(output,'offline.png')}); await page.locator('#cinematic-skip').click();
   await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   await blocked.close(); await context.close();

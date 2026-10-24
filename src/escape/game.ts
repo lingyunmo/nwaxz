@@ -2,7 +2,7 @@ import "./style.css";
 import "./hud.css";
 import { icon } from "./icons.ts";
 import { SaveWriteError, writeSaveBatch } from "./save.ts";
-import { CinematicPlayer, openingClip, randomCaughtClip } from "./cinematic.ts";
+import { CinematicPlayer, randomOpeningClip, randomCaughtClip } from "./cinematic.ts";
 import { AudioManager } from "../audio.ts";
 import type { Settings } from "../settings.ts";
 import { EscapeWorld, ITEM_NAMES, type EscapeSnapshot } from "./world.ts";
@@ -123,7 +123,7 @@ export class EscapeGame {
     this.audio.setMode("escape"); this.applySound(); void this.audio.unlock();
     if (!document.fullscreenElement && document.documentElement.requestFullscreen) void document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
     this.panel('<p class="escape-eyebrow">下水道逃生</p><h2>正在进入浴场…</h2><p id="escape-preparing" role="status"></p>');
-    const opening = resume ? undefined : this.playCinematic(openingClip);
+    const opening = resume ? undefined : this.playCinematic(randomOpeningClip());
     try {
       if (!this.renderer?.usable) {
         this.renderer?.dispose(); this.renderer = undefined;

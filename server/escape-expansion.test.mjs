@@ -76,4 +76,3 @@ test('glass does not repeatedly ring while standing on it and rearms only after 
   assert.equal(quiet.drainEvents().filter(e=>e.type==='noise').length,0);
   assert.equal(quiet.data.hunter.state,'patrol');
 });
-

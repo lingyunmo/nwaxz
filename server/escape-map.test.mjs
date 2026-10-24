@@ -6,13 +6,12 @@ import { DOORS, EscapeWorld, roomAt, SIZE } from "../src/escape/world.ts";
 const tileAt = (tiles, x, z) => tiles.find(tile => tile.x === x && tile.z === z);
 const indexOf = (x, z) => z * SIZE + x;
 
-test("six doorway tiles change room at their centerline without a doorway label", () => {
-  const upperRooms = ["寝室", "档案室", "值班室"];
-  const lowerRooms = ["洗衣间", "配电室", "地下检修室"];
-  for (const [index, door] of DOORS.entries()) {
-    const northDoor = door.z === 7;
-    const upper = northDoor ? upperRooms[index] : "回声长廊";
-    const lower = northDoor ? "回声长廊" : lowerRooms[index - 3];
+test("doorway thresholds assign every room, including the two expanded rooms", () => {
+  const sides = { bedroom: ["寝室", "回声长廊"], study: ["档案室", "回声长廊"], infirmary: ["值班室", "回声长廊"],
+    laundry: ["回声长廊", "洗衣间"], workshop: ["回声长廊", "配电室"], cellar: ["回声长廊", "地下检修室"],
+    changing: ["洗衣间", "旧更衣室"], boiler: ["配电室", "锅炉房"] };
+  for (const door of DOORS) {
+    const [upper, lower] = sides[door.id];
     const x = door.x + .5;
     assert.equal(roomAt({ x, z: door.z + .499 }), upper, `${door.id} upper threshold half`);
     assert.equal(roomAt({ x, z: door.z + .5 }), lower, `${door.id} lower threshold half`);
@@ -54,6 +53,13 @@ test("compact map is a player-centered 13x13 crop and marks only explored object
   assert.equal(tileAt(tiles, 20, 16).feature?.id, "cellar-drawer");
   assert.equal(tileAt(tiles, 16, 20).feature, undefined, "nearby unexplored tiles stay unmarked");
   assert.deepEqual(mapWindow(world.data.player), { x: 0, z: 0, columns: 25, rows: 25 });
+});
+
+test("explored floor hazards appear on the map without revealing nearby hazards", () => {
+  const world = new EscapeWorld(); world.data.explored = [indexOf(7, 9)];
+  const tiles = visibleTiles(world);
+  assert.equal(tileAt(tiles, 7, 9).feature?.kind, "hazard");
+  assert.equal(tileAt(tiles, 16, 9).feature, undefined);
 });
 
 test("player arrow points east at zero and south for positive quarter-turn", () => {

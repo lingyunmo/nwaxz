@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EscapeWorld, PROPS, DOORS, MAP, SIZE } from "../src/escape/world.ts";
+import { EscapeWorld, PROPS, DOORS, MAP, SIZE, roomAt } from "../src/escape/world.ts";
 
 const frames = (w, seconds, input = {}) => { for (let i = 0; i < Math.ceil(seconds * 60); i++) w.advance(1 / 60, input); };
 test("exploration respects closed doors, persists visited tiles and accepts legacy v1 saves", () => {
@@ -26,7 +26,7 @@ function placeFor(w, id) {
   Object.assign(w.data.player, { x: point.x, z: point.z + 1 }); face(w, point); return point;
 }
 
-test("escape walls and both keyed doors really block motion and vision", () => {
+test("escape walls and doors really block motion and vision", () => {
   const w = new EscapeWorld();
   assert.equal(w.wall(11.5, 7.5), 2);
   assert.equal(w.lineOfSight({ x: 11.5, z: 8.5 }, { x: 11.5, z: 6.5 }), false);
@@ -38,6 +38,10 @@ test("escape walls and both keyed doors really block motion and vision", () => {
   Object.assign(w.data.player, { x: 19.5, z: 10.5, angle: Math.PI / 2 }); w.data.inventory.push("cellar");
   w.interact(); assert.match(w.message, /供电/); assert.equal(w.wall(19.5, 11.5), 2);
   w.data.power = true; w.interact(); assert.equal(w.wall(19.5, 11.5), 0);
+  assert.equal(roomAt({ x: 4.5, z: 18.25 }), "洗衣间");
+  assert.equal(roomAt({ x: 4.5, z: 18.75 }), "旧更衣室");
+  assert.equal(roomAt({ x: 11.5, z: 18.75 }), "锅炉房");
+  assert.equal(w.wall(4.5, 18.5), 2, "new room doors collide while closed");
   Object.assign(w.data.player, { x: 1.3, z: 3.5, angle: Math.PI }); frames(w, .5, { forward: 1 });
   assert.ok(w.data.player.x >= 1.18, "solid walls cannot be crossed");
 });
@@ -192,10 +196,71 @@ test("the exit requires drained water and real cutters, not just reaching the so
   w.data.inventory.push("cutters"); w.interact(); assert.equal(w.data.phase, "won");
 });
 
-// A continuous input route with active patrol/vision/hearing: no teleports,
-// no injected inventory, no disabled enemy. This is the reference escape route.
-test("a complete continuous route can escape with the hunter active", () => {
-  const w = new EscapeWorld(); w.toggleLight();
+test("the expansion requires the handwheel and the exact powered boiler sequence", () => {
+  const w = new EscapeWorld();
+  w.data.inventory.push("fuse"); w.data.power = true;
+  for (const id of ["valve-cold", "valve-return", "valve-vent"]) {
+    placeFor(w, id); w.interact(); assert.match(w.message, /手轮/);
+  }
+  w.data.inventory.push("handwheel"); w.data.searched.push("changing-drawer");
+  placeFor(w, "valve-return"); w.interact();
+  assert.deepEqual(w.data.expansion.valves, []); assert.match(w.message, /顺序错了/);
+  placeFor(w, "valve-cold"); w.interact(); placeFor(w, "valve-return"); w.interact(); placeFor(w, "valve-vent"); w.interact();
+  assert.deepEqual(w.data.expansion.valves, ["valve-cold", "valve-return", "valve-vent"]);
+  placeFor(w, "valve-return"); w.interact();
+  assert.deepEqual(w.data.expansion.valves, ["valve-cold", "valve-return", "valve-vent"], "completed valves cannot be reset by extra interactions");
+  placeFor(w, "drain"); w.interact(); assert.equal(w.data.drained, true);
+  const saved = w.snapshot(); assert.deepEqual(EscapeWorld.restore(saved).snapshot(), saved);
+  for (const mutate of [d => d.expansion.valves = ["valve-return"], d => d.expansion.valves.push("valve-vent"), d => d.expansion.valves = ["valve-cold"], d => d.expansion.extra = true, d => d.inventory = d.inventory.filter(i => i !== "handwheel")]) {
+    const invalid = structuredClone(saved); mutate(invalid); assert.throws(() => EscapeWorld.restore(invalid));
+  }
+});
+
+test("legacy v1 saves retain the original valve requirement and new state IDs are exact", () => {
+  const fresh = new EscapeWorld().snapshot(); delete fresh.expansion;
+  const legacy = EscapeWorld.restore(fresh);
+  assert.equal(legacy.snapshot().expansion, undefined);
+  Object.assign(legacy.data.player, { x: 4.5, z: 17.5, angle: Math.PI / 2 });
+  legacy.interact();
+  assert.equal(legacy.nearest(), undefined, "legacy saves cannot open newly added expansion doors");
+  assert.equal(legacy.wall(4.5, 18.5), 2, "sealed expansion doors stay physically closed");
+  assert.deepEqual(EscapeWorld.restore(legacy.snapshot()).snapshot(), legacy.snapshot(), "an old save round-trips after legal interaction near the sealed door");
+  Object.assign(legacy.data.player, { x: 9.5, z: 21.5, angle: -Math.PI / 2 });
+  legacy.interact(); assert.equal(legacy.data.drained, false, "boiler valves are not mistaken for the legacy drain valve");
+  assert.equal(legacy.nearest(), undefined, "legacy saves have no expansion valve interaction");
+  legacy.data.inventory.push("fuse", "cutters"); legacy.data.power = true;
+  placeFor(legacy, "drain"); legacy.interact(); assert.equal(legacy.data.drained, true, "a legacy save can use its original drain valve condition");
+  for (const item of ["hand-wheel", "rusty-wheel", "valve-cold"]) {
+    const invalid = new EscapeWorld().snapshot(); invalid.inventory.push(item); assert.throws(() => EscapeWorld.restore(invalid));
+  }
+  const invalidLegacy = { ...fresh, searched: ["changing-drawer"] };
+  assert.throws(() => EscapeWorld.restore(invalidLegacy), "new expansion evidence cannot be stripped into a legacy session");
+});
+
+test("malformed optional save extensions fail with the normal format error", () => {
+  const base = new EscapeWorld().snapshot();
+  const invalidExpansion = structuredClone(base); invalidExpansion.expansion = null;
+  assert.throws(() => EscapeWorld.restore(invalidExpansion), /逃生存档格式不正确/);
+  const legacy = structuredClone(base); delete legacy.expansion; legacy.pursuit.target = null;
+  assert.throws(() => EscapeWorld.restore(legacy), /逃生存档格式不正确/);
+});
+
+test("glass hazards trigger once on walking, stay quiet when crouched and rearm after leaving", () => {
+  const w = new EscapeWorld(); w.data.elapsed = 20;
+  Object.assign(w.data.player, { x: 6.9, z: 9.5, angle: 0, light: false });
+  w.data.hunter.x = 12.5; w.data.hunter.z = 9.5;
+  frames(w, .5, { forward: 1 });
+  assert.match(w.message, /碎玻璃/); assert.ok(["investigate", "chase"].includes(w.data.hunter.state));
+  const events = w.drainEvents(); assert.equal(events.filter(e => e.type === "noise").length, 1);
+  frames(w, .5, { forward: 1 }); assert.equal(w.drainEvents().filter(e => e.type === "noise").length, 0);
+  Object.assign(w.data.player, { x: 6.9, z: 9.5, angle: 0, crouched: true }); w.data.hunter.state = "patrol"; w.data.elapsed = 17;
+  frames(w, .5, { forward: 1 }); assert.doesNotMatch(w.message, /碎玻璃/); assert.equal(w.data.hunter.state, "patrol");
+});
+
+// Continuous control input with active patrol/vision/hearing; no teleporting or
+// enemy suppression. The same driver proves both the expanded and legacy chains.
+function continuousRoute(w, order) {
+  w.toggleLight();
   function approach(point) {
     const candidates = [[0, 1], [0, -1], [1, 0], [-1, 0]].map(([dx, dz]) => ({ x: point.x + dx, z: point.z + dz })).filter(p => !w.wall(p.x, p.z));
     const routes = candidates.map(target => ({ target, path: w.route(w.data.player, target) })).filter(r => r.path.length || Math.floor(w.data.player.x) === Math.floor(r.target.x) && Math.floor(w.data.player.z) === Math.floor(r.target.z)).sort((a, b) => a.path.length - b.path.length);
@@ -209,7 +274,6 @@ test("a complete continuous route can escape with the hunter active", () => {
     }
     face(w, point); return true;
   }
-  const order = ["bed-drawer", "study", "study-drawer", "laundry-drawer", "power", "cellar", "cellar-drawer", "drain", "exit"];
   for (const id of order) {
     let done = false;
     for (let attempt = 0; attempt < 3 && !done; attempt++) {
@@ -236,7 +300,17 @@ test("a complete continuous route can escape with the hunter active", () => {
       }
     }
   }
-  assert.equal(w.data.phase, "won"); assert.deepEqual(w.data.inventory.sort(), ["brass", "cellar", "cutters", "fuse"]);
+  return w;
+}
+test("a complete continuous expansion route can escape with the hunter active", () => {
+  const w = continuousRoute(new EscapeWorld(), ["bed-drawer", "study", "study-drawer", "laundry-drawer", "power", "cellar", "cellar-drawer", "changing", "changing-drawer", "boiler", "boiler-note", "valve-cold", "valve-return", "valve-vent", "drain", "exit"]);
+  assert.equal(w.data.phase, "won"); assert.deepEqual(w.data.inventory.sort(), ["brass", "cellar", "cutters", "fuse", "handwheel"]);
+  assert.ok(w.data.elapsed > 30); assert.ok(w.data.captures < 3); assert.ok(MAP[22][20] === 0);
+});
+test("an old v1 session can still complete its original route with the hunter active", () => {
+  const old = new EscapeWorld().snapshot(); delete old.expansion;
+  const w = continuousRoute(EscapeWorld.restore(old), ["bed-drawer", "study", "study-drawer", "laundry-drawer", "power", "cellar", "cellar-drawer", "drain", "exit"]);
+  assert.equal(w.data.phase, "won"); assert.equal(w.data.expansion, undefined);
+  assert.deepEqual(w.data.inventory.sort(), ["brass", "cellar", "cutters", "fuse"]);
   assert.ok(w.data.elapsed > 30); assert.ok(w.data.captures < 3);
-  assert.ok(MAP[22][20] === 0);
 });

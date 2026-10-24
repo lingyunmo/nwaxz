@@ -2,6 +2,7 @@ const paths = {
   pause: '<path d="M8 5v14M16 5v14"/>',
   map: '<path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2Zm6-2v16m6-14v16"/>',
   key: '<circle cx="8" cy="8" r="4"/><path d="m11 11 9 9m-4-4 3-3m-6 0 3-3"/>',
+  handwheel: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.6"/><path d="M12 5V2m0 20v-3M5 12H2m20 0h-3M7 7 5 5m14 14-2-2m0-10 2-2M5 19l2-2"/>',
   fuse: '<path d="M7 5h10v14H7Zm0 3H4v8h3m10-8h3v8h-3m-7-4h4"/>',
   cutters: '<circle cx="7" cy="18" r="3"/><circle cx="17" cy="18" r="3"/><path d="m9 16 8-13m-2 13L7 3m5 7v3"/>',
   light: '<path d="m4 10 6-6 5 5-6 6Zm6-6 1-3 7 7-3 1m-7 5 7 7 6-6-7-7M2 2l2 2m14-2-1 3M2 18l3-1"/>',

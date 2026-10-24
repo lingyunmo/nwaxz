@@ -4,6 +4,8 @@
 
 ## 当前功能
 
+0.17.0：极限恐怖新增旧更衣室、锅炉房、手轮与三阀泄压谜题；踩响长廊碎玻璃会引来奶蛙，可绕开或蹲行通过。新增内容用于新游戏，旧逃生存档继续原路线。由 Luna 实现、主代理审查和验收，实际发布证据见 [Issue #54](https://github.com/lingyunmo/nwaxz/issues/54)。
+
 0.16.3：电脑点击一次游戏画面后即可移动鼠标转头，无需按住；Esc 暂停并释放鼠标。捕获不可用时，画面内移动鼠标仍可转头；手机滑动和键盘观察保留。操作见[逃生玩法](docs/ESCAPE_GAME.md)，验证与实际发布状态见 [Issue #52](https://github.com/lingyunmo/nwaxz/issues/52)。
 
 0.16.2：极限恐怖每次新游戏从“开场1”和“开场2”中等概率随机播放一段，继续存档不重播；两段均加入启动预加载和离线缓存。素材见[过场视频](docs/ART_CINEMATICS.md)，发布状态见 [Issue50](https://github.com/lingyunmo/nwaxz/issues/50)。

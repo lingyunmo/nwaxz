@@ -1,9 +1,9 @@
-import { DOORS, MAP, PROPS, SIZE, type EscapeWorld, type Prop, type Vec } from "./world.ts";
+import { DOORS, HAZARDS, MAP, PROPS, SIZE, type EscapeWorld, type Prop, type Vec } from "./world.ts";
 
 export type MapReveal = "explored" | "near" | "fog";
 export type MapTerrain = "floor" | "wall" | "outside";
 export type MapDoor = { id: string; open: boolean; locked: boolean };
-export type MapFeature = { id: string; kind: Prop["kind"] };
+export type MapFeature = { id: string; kind: Prop["kind"] | "hazard" };
 export type MapTile = {
   x: number;
   z: number;
@@ -16,6 +16,7 @@ export type MapTile = {
 export type MapWindow = { x: number; z: number; columns: number; rows: number };
 
 type ExploredData = EscapeWorld["data"] & { explored?: number[] };
+const EXPANSION_FEATURE_IDS = new Set(["changing-drawer", "changing-hide", "boiler-note", "boiler-hide", "valve-cold", "valve-return", "valve-vent"]);
 
 /** Map grid coordinates to the fixed whole-map view or player-centered 13x13 crop. */
 export function mapWindow(player: Vec, compact = false): MapWindow {
@@ -55,12 +56,14 @@ export function visibleTiles(world: EscapeWorld, compact = false): MapTile[] {
           tile.door = {
             id: door.id,
             open: d.opened.includes(door.id),
-            locked: !!door.key && !d.unlocked.includes(door.id)
+            locked: (!d.expansion?.enabled && ["changing", "boiler"].includes(door.id))
+              || !!door.key && !d.unlocked.includes(door.id)
               || door.id === "cellar" && !d.power && !d.unlocked.includes(door.id),
           };
         }
-        const feature = PROPS.find(candidate => Math.floor(candidate.x) === x && Math.floor(candidate.z) === z);
+        const feature = PROPS.find(candidate => Math.floor(candidate.x) === x && Math.floor(candidate.z) === z && (d.expansion?.enabled || !EXPANSION_FEATURE_IDS.has(candidate.id)));
         if (feature) tile.feature = { id: feature.id, kind: feature.kind };
+        else if (d.expansion?.enabled && HAZARDS.some(candidate => Math.floor(candidate.x) === x && Math.floor(candidate.z) === z)) tile.feature = { id: `glass-${x}`, kind: "hazard" };
       }
       result.push(tile);
     }
@@ -292,6 +295,12 @@ export class EscapeMap {
     const centerX = x + cell / 2, centerY = y + cell / 2;
     const inset = Math.max(2, cell * .2);
     const size = cell - inset * 2;
+    if (feature.kind === "hazard") {
+      ctx.fillStyle = "#a9d5ce"; ctx.strokeStyle = "#354b4b"; ctx.lineWidth = Math.max(1, cell * .045);
+      ctx.beginPath(); ctx.moveTo(centerX, y + inset); ctx.lineTo(x + cell - inset, centerY + inset / 2);
+      ctx.lineTo(centerX + inset / 3, y + cell - inset); ctx.lineTo(x + inset, centerY - inset / 3); ctx.closePath(); ctx.fill(); ctx.stroke();
+      return;
+    }
     if (feature.kind === "note") {
       this.drawAtlas(ctx, 3, x + inset, y + inset, size, size, () => {
         ctx.fillStyle = "#c5b98b";

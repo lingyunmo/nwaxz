@@ -8,6 +8,7 @@ import type { Settings } from "../settings.ts";
 import { EscapeWorld, ITEM_NAMES, type EscapeSnapshot } from "./world.ts";
 import { EscapeRenderer, type EscapeArt } from "./renderer.ts";
 import { prepareEscape, returnPreparedEscape, takePreparedEscape } from "./preparation.ts";
+import { EscapeLook, type MouseLookMode } from "./look.ts";
 export { prepareEscape } from "./preparation.ts";
 
 const SESSION = "nwaxz-escape-session-v1", RECORD = "nwaxz-escape-record-v1", SOUND = "nwaxz-escape-sound-v1";
@@ -37,7 +38,10 @@ export class EscapeGame {
   private keys = new Set<string>();
   private stick = { x: 0, y: 0 };
   private sprinting = false;
-  private look?: { id: number; x: number; y: number };
+  private look?: EscapeLook;
+  private mouseMode: MouseLookMode = "click";
+  private mouseHintUntil = 0;
+  private unlockAt = -1000;
   private saveAt = 0;
   private hudAt = 0;
   private heartbeatAt = 0;
@@ -59,10 +63,11 @@ export class EscapeGame {
       if (sound && typeof sound.music === "boolean" && typeof sound.sound === "boolean") { this.music = sound.music; this.sound = sound.sound; }
       else this.sound = settings.sound;
     } catch { this.storageWarning = "存档读取失败，可从备份恢复。"; }
-    this.root.innerHTML = `<main class="escape-shell" aria-label="极限恐怖逃生"><canvas id="escape-view" tabindex="0" aria-label="3D第一人称逃生。WASD移动，拖动上下左右转头，方向键转身，PageUp和PageDown抬头低头，Shift奔跑，C蹲行，F手电，E交互，Q丢石子，Esc暂停。"></canvas>
+    this.root.innerHTML = `<main class="escape-shell" aria-label="极限恐怖逃生"><canvas id="escape-view" tabindex="0" aria-label="3D第一人称逃生。WASD移动，点击画面后移动鼠标转头；手机滑动转头。方向键转身，PageUp和PageDown抬头低头，Shift奔跑，C蹲行，F手电，E交互，Q丢石子，Esc暂停并释放鼠标。"></canvas>
       <header class="escape-hud"><button id="escape-pause" class="escape-round" aria-label="暂停逃生">${icon("pause")}</button><div class="escape-location"><span id="escape-room">${safe(this.world.room)}</span><span id="escape-night">第1夜 · 00:00</span><div id="escape-lives" aria-label="剩余机会"></div></div></header>
       <button id="escape-map" class="escape-map-button" aria-label="查看地图，当前位置：${safe(this.world.room)}"><canvas id="escape-minimap" width="208" height="208" aria-hidden="true"></canvas><span>浴场地图 <kbd>M</kbd></span><small id="escape-map-room">${safe(this.world.room)}</small></button>
       <div class="escape-room-toast" id="escape-room-toast" aria-live="polite" hidden></div>
+      <div class="escape-mouse-hint" id="escape-mouse-hint" hidden>点击画面，移动鼠标转头</div>
       <div class="escape-crosshair" aria-hidden="true"></div><div class="escape-danger" id="escape-danger" role="status"></div><div class="escape-notice" id="escape-notice" role="status" aria-live="polite" hidden></div>
       <div class="escape-search" id="escape-search" hidden><span>搜索中</span><progress max="1.15" value="0" aria-label="搜索进度"></progress></div>
       <div class="escape-bottom"><div class="escape-meters"><label title="体力">${icon("run")}<meter id="escape-stamina" aria-label="体力" min="0" max="100" value="100"></meter></label><label title="手电电量">${icon("light")}<meter id="escape-battery" aria-label="手电电量" min="0" max="100" value="100"></meter></label></div>
@@ -77,6 +82,7 @@ export class EscapeGame {
   private $<T extends HTMLElement = HTMLElement>(selector: string) { return this.root.querySelector<T>(selector)!; }
   private button(id: string, fn: () => void) { this.$(`#${id}`).addEventListener("click", fn, { signal: this.signal }); }
   private panel(html: string) {
+    this.look?.suspend();
     this.$(".escape-shell").classList.remove("intro-active");
     this.$(".escape-shell").classList.remove("capture-active");
     this.$("#escape-panel").classList.remove("escape-intro", "escape-pause-panel");
@@ -89,7 +95,7 @@ export class EscapeGame {
     this.paused = true; this.audio.setPlaying(false);
     const canResume = this.saved && ["playing", "caught"].includes(this.saved.phase);
     this.panel(`<p class="escape-eyebrow">极限恐怖</p><h1>奶蛙<br><em>下水道逃生</em></h1><p>找到出口。躲开奶蛙。</p><p class="escape-story">找齐钥匙和工具，逃进下水道。</p>
-      <div class="escape-intro-controls"><span>WASD 移动 · 拖动上下左右转头</span><span>E 交互 · Shift 奔跑 · C 蹲行</span><span>手机：左摇杆移动，右侧滑动看四周</span></div>
+      <div class="escape-intro-controls"><span>WASD 移动 · 点击画面后移动鼠标转头</span><span>E 交互 · Shift 奔跑 · C 蹲行</span><span>手机：左摇杆移动，右侧滑动看四周</span></div>
       <label class="escape-check"><input id="escape-intro-music" type="checkbox" ${this.music ? "checked" : ""}>音乐</label>
       ${canResume ? '<button id="escape-continue" class="escape-primary">继续逃生</button>' : ""}<button id="escape-new" class="${canResume ? "escape-secondary" : "escape-primary"}">${canResume ? "重新开始" : "进入浴场"}</button>
       <div class="escape-links"><button id="escape-intro-help">操作</button><button id="escape-intro-saves">存档</button><button id="escape-intro-exit">返回首页</button></div>
@@ -158,6 +164,7 @@ export class EscapeGame {
   }
   private async playCinematic(path: string) {
     this.paused = true; this.clearInput(); this.audio.setPlaying(false); this.audio.stopPreview();
+    this.look?.suspend();
     this.$("#escape-room-toast").hidden = true;
     const shell = this.$(".escape-shell"); shell.inert = true;
     const player = new CinematicPlayer(this.root, path, this.sound); this.cinematic = player;
@@ -170,13 +177,15 @@ export class EscapeGame {
   private saveSound() { try { localStorage.setItem(SOUND, JSON.stringify({ music: this.music, sound: this.sound })); } catch { /* Audio still works without storage. */ } this.applySound(); }
   private resume() {
     this.$(".escape-shell").classList.remove("capture-active");
-    this.$("#escape-view").setAttribute("aria-label", "3D第一人称逃生。WASD移动，拖动画面上下左右转头，E交互，PageUp和PageDown抬头低头，Esc暂停。");
+    this.$("#escape-view").setAttribute("aria-label", "3D第一人称逃生。WASD移动，点击画面后移动鼠标转头；手机滑动转头。E交互，PageUp和PageDown抬头低头，Esc暂停并释放鼠标。");
     this.$("#escape-panel").hidden = true; this.$(".escape-shell").classList.remove("menu-active"); this.updateHud(); this.paused = false; this.lastFrame = 0; this.clearInput();
     this.$("#escape-view").focus({ preventScroll: true }); this.audio.setPlaying(true); void this.audio.unlock();
+    this.look?.capture();
   }
-  private clearInput() { this.keys.clear(); this.stick = { x: 0, y: 0 }; this.look = undefined; this.sprinting = false; this.$("#escape-stick span").style.transform = "translate(0,0)"; }
+  private clearInput() { this.keys.clear(); this.stick = { x: 0, y: 0 }; this.look?.clear(); this.sprinting = false; this.$("#escape-stick span").style.transform = "translate(0,0)"; }
   private pause(map = false) {
     if (!this.started || this.world.data.phase !== "playing") return;
+    if (document.pointerLockElement === this.root.querySelector("#escape-view")) this.unlockAt = performance.now();
     this.paused = true; this.clearInput(); this.audio.setPlaying(false); this.save();
     this.panel(`<div class="escape-pause-layout"><div class="escape-map-page"><p class="escape-eyebrow">地下浴场</p><h2>浴场地图</h2><canvas id="escape-floorplan" width="500" height="500" aria-label="浴场地图，箭头是你，暗处尚未探索"></canvas><p class="escape-map-legend"><i class="map-you"></i>你 <i class="map-door"></i>门 <i class="map-hide"></i>衣柜 <i class="map-fog"></i>未探索</p><p class="escape-map-current" id="escape-map-current">当前位置：${safe(this.world.room)}</p></div>
       <div class="escape-pause-menu"><p class="escape-eyebrow">已暂停</p><h2>暂停</h2><div class="escape-journal"><small>线索</small><p id="escape-goal">${safe(this.world.objective)}</p></div><button id="escape-resume" class="escape-primary">继续逃生</button>
@@ -193,7 +202,7 @@ export class EscapeGame {
   }
   private help(fromPause: boolean) {
     const touch = matchMedia("(pointer:coarse)").matches;
-    const controls = touch ? [["移动", "左侧摇杆"], ["观察", "滑动右侧画面"], ["互动", "靠近目标后点击手掌"], ["奔跑", "按住奔跑按钮"]] : [["移动", "WASD / 方向键"], ["观察", "拖动画面 / PageUp、PageDown"], ["互动", "E / 空格"], ["奔跑", "Shift"], ["蹲行 / 手电", "C / F"], ["石子 / 地图", "Q / M"]];
+    const controls = touch ? [["移动", "左侧摇杆"], ["观察", "滑动右侧画面"], ["互动", "靠近目标后点击手掌"], ["奔跑", "按住奔跑按钮"]] : [["移动", "WASD / 方向键"], ["观察", "点击画面后移动鼠标"], ["抬头 / 低头", "PageUp / PageDown"], ["互动", "E / 空格"], ["奔跑", "Shift"], ["蹲行 / 手电", "C / F"], ["石子 / 地图", "Q / M"], ["暂停 / 释放鼠标", "Esc"]];
     this.panel(`<h2>操作</h2><dl class="escape-bindings">${controls.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("")}</dl><ul class="escape-help"><li>找齐钥匙和工具，打开下水道铁网。</li><li>奔跑会发出声音，石子可以引开奶蛙。</li><li>先甩掉它的视线，再躲进衣柜。</li><li>被抓后进入下一夜，物品保留。第三次被抓则失败。</li></ul><button id="escape-help-close" class="escape-primary">返回</button>`);
     this.button("escape-help-close", () => fromPause ? this.pause() : this.intro());
   }
@@ -257,7 +266,7 @@ export class EscapeGame {
     document.addEventListener("keydown", e => {
       if (this.cinematic) return;
       if (this.$("#escape-panel").hidden === false) {
-        if (e.key === "Escape" && this.started && this.world.data.phase === "playing") { e.preventDefault(); this.resume(); }
+        if (e.key === "Escape" && this.started && this.world.data.phase === "playing") { e.preventDefault(); if (!e.repeat && performance.now() - this.unlockAt > 250) this.resume(); }
         if (e.key === "Tab") {
           const buttons = [...this.$("#escape-panel").querySelectorAll<HTMLElement>("button,input")], at = buttons.indexOf(document.activeElement as HTMLElement), next = (at + (e.shiftKey ? -1 : 1) + buttons.length) % buttons.length;
           e.preventDefault(); buttons[next]?.focus();
@@ -301,10 +310,25 @@ export class EscapeGame {
     };
   }
   private bindView(view: HTMLCanvasElement) {
-    view.addEventListener("pointerdown", e => { if (this.paused) return; e.preventDefault(); view.setPointerCapture(e.pointerId); this.look = { id: e.pointerId, x: e.clientX, y: e.clientY }; view.focus({ preventScroll: true }); }, { signal: this.signal });
-    view.addEventListener("pointermove", e => { if (!this.look || this.look.id !== e.pointerId || this.paused || this.world.data.hidden) return; this.world.data.player.angle = Math.atan2(Math.sin(this.world.data.player.angle + (e.clientX - this.look.x) * .005), Math.cos(this.world.data.player.angle + (e.clientX - this.look.x) * .005)); this.world.data.player.pitch = Math.max(-1.3, Math.min(1.3, (this.world.data.player.pitch ?? 0) - (e.clientY - this.look.y) * .004)); this.look.x = e.clientX; this.look.y = e.clientY; }, { signal: this.signal });
+    this.look?.dispose();
+    this.look = new EscapeLook(view, {
+      active: () => !this.disposed && this.started && !this.paused && !this.cinematic && this.world.data.phase === "playing",
+      rotate: (x, y) => {
+        if (this.world.data.hidden) return;
+        const p = this.world.data.player;
+        p.angle = Math.atan2(Math.sin(p.angle + x * .005), Math.cos(p.angle + x * .005));
+        p.pitch = Math.max(-1.3, Math.min(1.3, (p.pitch ?? 0) - y * .004));
+      },
+      unlocked: () => { this.unlockAt = performance.now(); if (!this.paused) this.pause(); },
+      mode: mode => { this.mouseMode = mode; if (mode === "free") this.mouseHintUntil = performance.now() + 2500; this.updateMouseHint(); },
+    }, this.signal);
     view.addEventListener("webglcontextlost", e => { e.preventDefault(); if (this.started && !this.paused) this.pause(); }, { signal: this.signal });
-    for (const event of ["pointerup", "pointercancel", "lostpointercapture"]) view.addEventListener(event, () => { this.look = undefined; }, { signal: this.signal });
+  }
+  private updateMouseHint() {
+    this.$(".escape-shell").classList.toggle("mouse-locked", this.mouseMode === "locked");
+    const hint = this.$("#escape-mouse-hint");
+    hint.textContent = this.mouseMode === "free" ? "移动鼠标转头 · Esc 暂停" : "点击画面，移动鼠标转头";
+    hint.hidden = this.paused || !!this.cinematic || !matchMedia("(pointer:fine)").matches || this.mouseMode === "locked" || this.mouseMode === "free" && performance.now() > this.mouseHintUntil;
   }
   private frame = (now: number) => {
     if (this.disposed) return;
@@ -331,6 +355,7 @@ export class EscapeGame {
     this.raf = requestAnimationFrame(this.frame);
   };
   private updateHud() {
+    this.updateMouseHint();
     const d = this.world.data;
     const room = this.world.room;
     if (room !== this.lastRoom) { this.lastRoom = room; this.roomCueUntil = d.elapsed + 1.6; }

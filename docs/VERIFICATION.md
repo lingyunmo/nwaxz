@@ -1,5 +1,14 @@
 # 发布与验证记录
 
+## 0.16.0 启动完整预加载候选（2026-10-24）
+
+- `pnpm check`：103 项业务测试、1 项构建后 PWA 检查通过。预缓存 196 项，约 23.66 MiB，含全部四段 MP4；逐项校验文件字节数、修订和 SHA256 完整性字段。PNG 母版与未使用的旧角色 GLB 继续保留，不进入运行时缓存。
+- `ops/preload-browser.mjs`：独立无窗口 Chromium、390×844 触控视口，慢速流式视频期间进度从 12% 持续变化到 100%，下载未完成不出现菜单；进入前全部 196 项已缓存。预热 canvas 与两次进入逃生时是同一个对象，WebGL context 仅一个；测试机重进 85 ms，不代表真机性能。
+- 删除一段视频的缓存后，只重新下载该缺项；断网冷启动后开场能播放并进入真三维浴场，0 意外请求失败/页面错误。模拟模型下载 503 后提供重试并保留本地数据，恢复服务后成功进入；模拟设备无 WebGL 时，可明确选择进入二维模式。
+- `ops/home-browser.mjs`、`ops/escape-browser.mjs`：桌面/手机横竖屏、触控与键盘、暂停冻结、衣柜、大笑循环、下一夜、v1 存档导入导出和离线通过。`ops/cinematics-browser.mjs`：开场自然结束、三个被抓片选择、暂停/静音/跳过、阻止自动播放恢复、缺片回退、四段离线 206 Range 通过，未主动 fetch 视频填缓存。
+- `ops/updates-browser.mjs`：游玩时延后更新、回菜单恰好重载一次、IndexedDB/设置/逃生存档严格一致、离线不循环刷新、初装 worker 503 自动重试通过。上述脚本均使用独立 headless profile，未操作用户浏览器。
+- 本节记录候选验证；合并 SHA、GitHub Actions 与公网核对另见 [Issue46](https://github.com/lingyunmo/nwaxz/issues/46)。未以软件渲染测试替代真实 iPhone Safari/微信的帧率或扬声器验收。
+
 ## 0.15.0 开场、随机被抓CG与更新候选（2026-10-23）
 
 - `pnpm check`：103项业务测试和1项PWA检查通过。源站测试新增worker的no-store、根作用域许可和脚本类型；PWA检查确认视频不进入基础预缓存，运行时使用完整文件CacheFirst和RangeRequests。

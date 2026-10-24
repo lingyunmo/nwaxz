@@ -2,6 +2,8 @@
 
 ## 客户端
 
+0.16.0 启动加载由 `src/sw.ts` 与 `src/preload.ts` 协作完成：构建清单携带资源修订、字节数和完整性信息，统一预缓存视频、声画和代码。启动页按实际接收/已缓存字节显示进度；同修订文件直接复用，缺项在启动时补齐。完整缓存后，`src/escape/preparation.ts` 预热三维浴场，保留一个 canvas/renderer，在模式进入与退出之间交接；离开菜单后无后台渲染循环。视频使用支持 Range 的预缓存路由，数据存档和媒体缓存相互独立。启动失败支持重试或明确进入在线模式，不清理用户数据。发布与浏览器验证见 [VERIFICATION.md](VERIFICATION.md)。
+
 - `src/`：TypeScript 前端和样式，由 Vite 构建。
 - `server/`：Express 服务端，提供构建产物、`/api/health` 和 `/api` 未实现接口的 404 响应。
 - `public/`：静态公开资源，包括角色图集。

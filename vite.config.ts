@@ -1,5 +1,13 @@
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { createHash } from "node:crypto";
+const extraPrecacheEntries: { url: string; revision: string | null; bytes?: number; integrity?: string }[] = [];
+function resourceInfo(url: string) {
+  const file = resolve("dist", url);
+  return { bytes: statSync(file).size, integrity: `sha256-${createHash("sha256").update(readFileSync(file)).digest("base64")}` };
+}
 
 export default defineConfig({
   server: {
@@ -9,6 +17,9 @@ export default defineConfig({
   },
   plugins: [
     VitePWA({
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       registerType: "prompt",
       injectRegister: false,
       // The glob below already includes the icon and character files.
@@ -32,30 +43,27 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
+      injectManifest: {
+        additionalManifestEntries: extraPrecacheEntries,
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-        globPatterns: ["**/*.{js,css,html,svg,png,webp,json,woff2,mp3,glb}"],
+        globPatterns: ["**/*.{js,css,html,svg,png,webp,json,woff2,mp3,mp4,glb}"],
         // Keep editable masters published; gameplay loads their smaller WebPs.
         globIgnores: [
           "assets/character/milk-frog-atlas.png",
           "assets/models/extreme-milk-frog-v1.glb",
           "assets/props/bath-props-v1.png",
           "assets/props/garden-props-v1.png",
+          "preload-manifest.json",
         ],
         // Only Vite's content-hashed bundles can omit a cache revision.
         dontCacheBustURLsMatching: /^assets\/[^/]+-[A-Za-z0-9_-]{8}\.(?:js|css)$/,
-        clientsClaim: true,
-        navigateFallbackDenylist: [/^\/api\//],
-        cleanupOutdatedCaches: true,
-        runtimeCaching: [{
-          urlPattern: /\/assets\/video\/escape-(?:opening|caught-[123])-v1\.mp4$/,
-          handler: "CacheFirst",
-          options: {
-            cacheName: "nwaxz-cinematics-v1",
-            rangeRequests: true,
-            cacheableResponse: { statuses: [200] },
-            expiration: { maxEntries: 4, maxAgeSeconds: 365 * 24 * 60 * 60 },
-          },
+        manifestTransforms: [async entries => {
+          // Workbox removes its own `size` field after transforms; retain bytes for runtime progress.
+          const manifest = entries.map(entry => ({ ...entry, ...resourceInfo(entry.url) }));
+          for (const entry of extraPrecacheEntries) Object.assign(entry, resourceInfo(entry.url));
+          // Release audit data. The client gets its manifest from the worker itself.
+          writeFileSync(resolve("dist/preload-manifest.json"), JSON.stringify([...manifest, ...extraPrecacheEntries]));
+          return { manifest, warnings: [] };
         }],
       },
     }),

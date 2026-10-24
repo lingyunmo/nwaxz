@@ -103,6 +103,7 @@ export class PaintedFrog {
       l.mesh.updateVerticesData(VertexBuffer.PositionKind, data, false, false);
     }
   }
+  setReducedMotion(reduced: boolean) { this.reduced = reduced; }
   dispose() {
     for (const l of this.layers) { l.mesh.dispose(); l.material.dispose(); l.original.dispose(); l.actions.dispose(); }
     this.root.dispose();

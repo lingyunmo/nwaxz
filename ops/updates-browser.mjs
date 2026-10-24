@@ -12,10 +12,16 @@ for(const version of ['a','b']) {
   const target=path.join(output,version); await fs.cp('dist',target,{recursive:true});
   const html=(await fs.readFile(path.join(target,'index.html'),'utf8')).replace('<body>',`<body data-test-release="${version}">`);
   await fs.writeFile(path.join(target,'index.html'),html);
-  const worker=await fs.readFile(path.join(target,'sw.js'),'utf8');
+  const workerPath=path.join(target,'sw.js');
+  const worker=await fs.readFile(workerPath,'utf8');
+  const manifest=JSON.parse(await fs.readFile(path.join(target,'preload-manifest.json'),'utf8'));
+  const indexEntry=manifest.find(entry=>entry.url==='index.html');
+  assert.ok(indexEntry?.revision,'preload audit manifest must include index.html revision');
   const revision=createHash('md5').update(html).digest('hex');
-  const changed=worker.replace(/url:"index.html",revision:"[^"]+"/,`url:"index.html",revision:"${revision}"`);
-  assert.notEqual(worker,changed);await fs.writeFile(path.join(target,'sw.js'),changed);
+  assert.equal(worker.split(indexEntry.revision).length-1,1,'worker must contain exactly one old index revision');
+  const integrity=`sha256-${createHash('sha256').update(html).digest('base64')}`;
+  const changed=worker.replace(indexEntry.revision,revision).replace(indexEntry.integrity,integrity);
+  assert.notEqual(worker,changed);await fs.writeFile(workerPath,changed);
 }
 const apps=Object.fromEntries(['a','b'].map(v=>[v,createApp({distDir:path.join(output,v),revision:v})]));
 let release='a', rejectWorker=0;
@@ -56,7 +62,7 @@ try {
   const beforeNavigation=navigations;
   release='b';
   await page.evaluate(()=>window.dispatchEvent(new Event('online')));
-  await page.waitForFunction(async()=>!!(await navigator.serviceWorker.getRegistration('/'))?.waiting,{},{timeout:30000});
+  await page.waitForFunction(async()=>!!(await navigator.serviceWorker.getRegistration('/'))?.waiting,{},{timeout:60000});
   await page.waitForTimeout(200);
   assert.equal(navigations,beforeNavigation,'must not reload a paused/in-progress game');
   assert.equal(await page.locator('body').getAttribute('data-test-release'),'a');

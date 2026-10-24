@@ -100,3 +100,7 @@ button {
 .boot-logo span { display:block; color:#fff4df; font-size:.65em; letter-spacing:12px; margin-top:10px; }
 .boot-loading { z-index:1; bottom:13%; left:50%; transform:translateX(-50%); width:min(64%,300px); color:#d9d2b6; font-size:11px; font-weight:400; letter-spacing:3px; }
 .boot-loading progress { height:5px; border:0; border-radius:0; background:#374c3a; accent-color:#c6ad6d; }
+#boot-label { display:block; font-size:14px; letter-spacing:2px; }
+#boot-detail { display:block; margin-top:12px; min-height:2.8em; font-size:11px; line-height:1.6; letter-spacing:1px; font-variant-numeric:tabular-nums; }
+.boot-loading button { margin:8px 5px 0; padding:10px 14px; border:1px solid #bfa66e; border-radius:5px; background:#253a2c; color:#fff0ca; cursor:pointer; font:inherit; letter-spacing:1px; }
+.boot-loading p { line-height:1.7; letter-spacing:1px; }

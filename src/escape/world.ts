@@ -45,6 +45,16 @@ export const ROOMS = [
   { name: "洗衣间", x: 1, z: 12, w: 6, h: 6 }, { name: "配电室", x: 9, z: 12, w: 6, h: 6 },
   { name: "地下检修室", x: 17, z: 12, w: 6, h: 11 },
 ];
+const normalRoomAt = (point: Vec) => ROOMS.find(r => point.x >= r.x && point.x < r.x + r.w && point.z >= r.z && point.z < r.z + r.h)?.name;
+export function roomAt(point: Vec) {
+  const door = DOORS.find(d => point.x >= d.x && point.x < d.x + 1 && point.z >= d.z && point.z < d.z + 1);
+  if (door) {
+    const before = normalRoomAt({ x: point.x, z: door.z - .01 });
+    const after = normalRoomAt({ x: point.x, z: door.z + 1.01 });
+    return point.z < door.z + .5 ? before ?? "门口" : after ?? "门口";
+  }
+  return normalRoomAt(point) ?? "门口";
+}
 type HunterState = "patrol" | "investigate" | "chase" | "search";
 export type Phase = "playing" | "caught" | "lost" | "won";
 export type EscapeSnapshot = {
@@ -93,7 +103,7 @@ export class EscapeWorld {
   }
   pending?: { id: string; remaining: number };
   message = "床头抽屉里，也许有钥匙。";
-  get room() { return ROOMS.find(r => this.data.player.x >= r.x && this.data.player.x < r.x + r.w && this.data.player.z >= r.z && this.data.player.z < r.z + r.h)?.name ?? "门口"; }
+  get room() { return roomAt(this.data.player); }
   get objective(): string {
     const d = this.data;
     if (!d.inventory.includes("brass")) return "搜索寝室床头抽屉，找到黄铜钥匙";

@@ -1,10 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EscapeMap, mapWindow, playerArrow, visibleTiles } from "../src/escape/minimap.ts";
-import { EscapeWorld, SIZE } from "../src/escape/world.ts";
+import { DOORS, EscapeWorld, roomAt, SIZE } from "../src/escape/world.ts";
 
 const tileAt = (tiles, x, z) => tiles.find(tile => tile.x === x && tile.z === z);
 const indexOf = (x, z) => z * SIZE + x;
+
+test("six doorway tiles change room at their centerline without a doorway label", () => {
+  const upperRooms = ["寝室", "档案室", "值班室"];
+  const lowerRooms = ["洗衣间", "配电室", "地下检修室"];
+  for (const [index, door] of DOORS.entries()) {
+    const northDoor = door.z === 7;
+    const upper = northDoor ? upperRooms[index] : "回声长廊";
+    const lower = northDoor ? "回声长廊" : lowerRooms[index - 3];
+    const x = door.x + .5;
+    assert.equal(roomAt({ x, z: door.z + .499 }), upper, `${door.id} upper threshold half`);
+    assert.equal(roomAt({ x, z: door.z + .5 }), lower, `${door.id} lower threshold half`);
+  }
+  const world = new EscapeWorld();
+  Object.assign(world.data.player, { x: 11.5, z: 7.5 });
+  assert.equal(world.room, "回声长廊", "world room lookup follows the centerline assignment");
+});
 
 test("whole map samples the 25x25 grid and shows features only on explored tiles", () => {
   const world = new EscapeWorld();

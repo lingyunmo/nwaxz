@@ -57,13 +57,13 @@ test("search takes time, cancels on movement, and pickup cannot be duplicated", 
   assert.deepEqual(w.data.inventory, ["brass"]);
 });
 
-test("hunter hears sprinting but not crouching, and walls block sight", () => {
+test("hearing accumulates for sprinting inside range, and walls block sight", () => {
   const w = new EscapeWorld(42); w.data.elapsed = 19;
   Object.assign(w.data.player, { x: 9.5, z: 9.5, angle: Math.PI, crouched: true, light: false });
   Object.assign(w.data.hunter, { x: 13.5, z: 9.5, angle: 0 });
   frames(w, .8, { forward: 1 }); assert.equal(w.data.hunter.state, "patrol");
   w.data.player.crouched = false; frames(w, .5, { forward: 1, sprint: true });
-  assert.ok(["investigate", "chase"].includes(w.data.hunter.state));
+  assert.ok(w.data.hunt.noise > 0); assert.equal(w.hearing.action, "sprint");
   Object.assign(w.data.player, { x: 10.5, z: 5.5, light: true });
   Object.assign(w.data.hunter, { x: 12.5, z: 9.5, angle: -Math.PI / 2, state: "patrol" });
   assert.equal(w.seesPlayer(), false);
@@ -251,7 +251,7 @@ test("glass hazards trigger once on walking, stay quiet when crouched and rearm 
   Object.assign(w.data.player, { x: 6.9, z: 9.5, angle: 0, light: false });
   w.data.hunter.x = 12.5; w.data.hunter.z = 9.5;
   frames(w, .5, { forward: 1 });
-  assert.match(w.message, /碎玻璃/); assert.ok(["investigate", "chase"].includes(w.data.hunter.state));
+  assert.match(w.message, /碎玻璃/); assert.ok(w.data.hunt.noise > 0, "heard glass adds distance-attenuated sound evidence");
   const events = w.drainEvents(); assert.equal(events.filter(e => e.type === "noise").length, 1);
   frames(w, .5, { forward: 1 }); assert.equal(w.drainEvents().filter(e => e.type === "noise").length, 0);
   const quiet = new EscapeWorld(42);

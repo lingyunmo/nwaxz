@@ -1,3 +1,4 @@
+import { ALERT_THRESHOLD, ALERT_MULTIPLIER, HEARING, SENSES, combinePerception, type Sense } from "./perception.ts";
 export type Vec = { x: number; z: number };
 export type Item = "brass" | "cellar" | "fuse" | "cutters" | "handwheel";
 export type EscapeInput = { forward?: number; strafe?: number; turn?: number; look?: number; sprint?: boolean };
@@ -88,14 +89,14 @@ const inExpansionRoom = (point: unknown): point is Vec => {
 type HunterState = "patrol" | "investigate" | "chase" | "search";
 export type Phase = "playing" | "caught" | "lost" | "won";
 export type EscapeSnapshot = {
-  version: 1; player: Vec & { angle: number; pitch?: number; stamina: number; battery: number; light: boolean; crouched: boolean };
+  version: 1; player: Vec & { angle: number; pitch?: number; stamina: number; battery: number; light: boolean; crouched: boolean; sprinting?: boolean; winded?: boolean };
   hunter: Vec & { angle: number; state: HunterState }; elapsed: number; captures: number;
   phase: Phase; inventory: Item[]; searched: string[]; opened: string[]; unlocked: string[];
   notes: string[]; hidden?: string; power: boolean; drained: boolean; stones: number;
   explored?: number[];
   expansion?: { enabled: true; valves: string[] };
   pursuit?: { target: Vec; seenHide?: string; unseen: number; wait: number; patrolIndex: number };
-  hunt?: { version: 1; effort: number; panting: boolean; breathIn: number; glare: number; lightArmed: boolean; freeze: number; reveal: number; collected: string[]; freezeUsed: number; revealUsed: number; rng: number; recent: number[] };
+  hunt?: { version: 1; effort: number; panting: boolean; breathIn: number; glare: number; lightArmed: boolean; freeze: number; reveal: number; collected: string[]; freezeUsed: number; revealUsed: number; rng: number; recent: number[]; noise?: number; sight?: number; exposure?: number; alert?: number; traces?: Partial<Record<Sense, Vec>>; focus?: Sense };
 };
 export type EscapeEvent = { type: "message" | "step" | "door" | "item" | "laugh" | "caught" | "won" | "noise" | "breath"; text?: string };
 const dist = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -104,10 +105,10 @@ const initialOpen = ["bedroom", "infirmary", "laundry", "workshop"];
 const patrol: Vec[] = [{ x: 12.5, z: 9.5 }, { x: 20.5, z: 9.5 }, { x: 19.5, z: 3.5 }, { x: 12.5, z: 9.5 }, { x: 4.5, z: 9.5 }, { x: 4.5, z: 14.5 }, { x: 4.5, z: 21.5 }, { x: 11.5, z: 21.5 }];
 export class EscapeWorld {
   data: EscapeSnapshot = {
-    version: 1, player: { x: 3.5, z: 5.5, angle: -Math.PI / 2, pitch: 0, stamina: 100, battery: 100, light: true, crouched: false },
+    version: 1, player: { x: 3.5, z: 5.5, angle: -Math.PI / 2, pitch: 0, stamina: 100, battery: 100, light: true, crouched: false, sprinting: false, winded: false },
     hunter: { x: 12.5, z: 9.5, angle: 0, state: "patrol" }, elapsed: 0, captures: 0, phase: "playing",
     inventory: [], searched: [], opened: [...initialOpen], unlocked: [...initialOpen], notes: [], power: false, drained: false, stones: 2, expansion: { enabled: true, valves: [] },
-    hunt: { version: 1, effort: 0, panting: false, breathIn: 0, glare: 0, lightArmed: true, freeze: 0, reveal: 0, collected: [], freezeUsed: 0, revealUsed: 0, rng: (Math.random() * 0xffffffff) >>> 0, recent: [] },
+    hunt: { version: 1, effort: 0, panting: false, breathIn: 0, glare: 0, lightArmed: true, freeze: 0, reveal: 0, collected: [], freezeUsed: 0, revealUsed: 0, rng: (Math.random() * 0xffffffff) >>> 0, recent: [], noise: 0, sight: 0, exposure: 0, alert: 0, traces: {} },
   };
   events: EscapeEvent[] = [];
   target: Vec = { ...patrol[0] };
@@ -121,6 +122,7 @@ export class EscapeWorld {
   private hunterStep = 0;
   private laughAt = 0;
   private seenHide?: string;
+  private lastMovement: "walk" | "crouch" | "sprint" | "still" = "still";
   private mapPosition = "";
   constructor(seed?: number) {
     const hunt = this.data.hunt!;
@@ -143,6 +145,65 @@ export class EscapeWorld {
   pending?: { id: string; remaining: number };
   message = "床头抽屉里，也许有钥匙。";
   get room() { return roomAt(this.data.player); }
+  get movementMode(): "walk" | "crouch" | "sprint" | "recover" | "hidden" {
+    const d = this.data;
+    return d.hidden ? "hidden" : d.player.crouched ? "crouch" : d.player.sprinting ? d.player.winded ? "recover" : "sprint" : "walk";
+  }
+  toggleCrouch() {
+    if (this.data.phase !== "playing" || this.data.hidden) return;
+    this.data.player.crouched = !this.data.player.crouched;
+    this.data.player.sprinting = false;
+  }
+  toggleSprint() {
+    if (this.data.phase !== "playing" || this.data.hidden) return;
+    this.data.player.sprinting = !this.data.player.sprinting;
+    if (this.data.player.sprinting) this.data.player.crouched = false;
+  }
+  get perceptionMultiplier() { return (this.data.hunt?.alert ?? 0) > 0 ? ALERT_MULTIPLIER : 1; }
+  get perception() {
+    const hunt = this.data.hunt!;
+    return combinePerception({ noise: hunt.noise ?? 0, glare: hunt.glare, sight: hunt.sight ?? 0 }, this.data.phase === "playing" && this.data.hunter.state === "chase");
+  }
+  get lightPerception() {
+    const illuminated = this.illuminatesHunter();
+    return { illuminated, rate: illuminated && this.data.hunt!.freeze <= 0 ? 20 * this.perceptionMultiplier : 0 };
+  }
+  get hunterDecision() {
+    const d = this.data;
+    if (d.hunt!.freeze > 0) return "已定身";
+    if (d.hunter.state === "patrol") return "游走中";
+    if (d.hunter.state === "search") return this.seenHide ? "搜查衣柜" : "搜索线索";
+    if (d.hunter.state === "chase") return this.vision.visible ? "视线追击" : d.hunt!.focus === "noise" ? "循声追击" : d.hunt!.focus === "glare" ? "追查光源" : "追查目击点";
+    return d.hunt!.focus === "noise" ? "循声调查" : d.hunt!.focus === "glare" ? "寻找光源" : "检查目击点";
+  }
+  get vision() {
+    const distance = dist(this.data.player, this.data.hunter) * 1.5, visible = this.seesPlayer();
+    const base = distance <= 3 ? 60 : distance <= 7 ? 35 : 20;
+    return { visible, distance, rate: visible && this.data.hunt!.freeze <= 0 ? base * this.perceptionMultiplier : 0 };
+  }
+  /** The HUD and simulation share these exact audible ranges, attenuation and rates. */
+  get hearing() {
+    const d = this.data, distance = dist(d.player, d.hunter) * 1.5;
+    const occluded = !this.lineOfSight(d.player, d.hunter);
+    const attenuation = occluded ? .55 : 1;
+    const motion = this.lastMovement === "still" ? undefined : HEARING[this.lastMovement];
+    const breathing = !!d.hunt?.panting;
+    const sources = [...(motion ? [motion] : []), ...(breathing ? [HEARING.breath] : [])];
+    const range = Math.max(0, ...sources.map(s => s.range * attenuation));
+    const rate = d.hunt!.freeze > 0 ? 0 : Math.max(0, ...sources.map(s => s.rate * Math.max(0, 1 - distance / (s.range * attenuation)) ** 2)) * this.perceptionMultiplier;
+    return { action: this.lastMovement, distance, range, rate, audible: rate > 0, breathing, occluded };
+  }
+  get exposureHint() {
+    const d = this.data, h = d.hunt!;
+    if (h.freeze > 0) return "奶蛙已定身，趁现在离开。";
+    if (d.hunter.state === "chase") return "转弯甩开视线，再找柜子躲藏。";
+    if (d.hidden) return h.panting ? "屏住呼吸，等喘息平复。" : "躲好了，等它走远。";
+    if ((h.alert ?? 0) > 0) return "它警觉了！放轻脚步，避开视线。";
+    if (this.vision.visible) return "它正看着这里，快离开视线。";
+    if (this.illuminatesHunter()) return "光照到了它，移开手电。";
+    if (this.hearing.audible) return "脚步传得过去，蹲行或停下。";
+    return "避开视线，放轻脚步。线索会叠加。";
+  }
   get objective(): string {
     const d = this.data;
     if (!d.inventory.includes("brass")) return "搜索寝室床头抽屉，找到黄铜钥匙";
@@ -181,7 +242,24 @@ export class EscapeWorld {
     const d = this.data, p = d.player, h = d.hunter;
     if (d.hidden || d.elapsed < 4) return false;
     const range = h.state === "chase" ? 13 : p.light ? 9 : p.crouched ? 3.8 : 6;
-    return dist(p, h) < range && (h.state === "chase" || Math.abs(angleDelta(Math.atan2(p.z - h.z, p.x - h.x), h.angle)) < 1.05) && this.lineOfSight(h, p);
+    return dist(p, h) < range && (h.state === "chase" || Math.abs(angleDelta(Math.atan2(p.z - h.z, p.x - h.x), h.angle)) < 1.05) && this.clearSight(h, p);
+  }
+  private clearSight(a: Vec, b: Vec) {
+    if (!this.lineOfSight(a, b)) return false;
+    return !PROPS.some(cabinet => {
+      if (cabinet.kind !== "wardrobe") return false;
+      let enter = 0, leave = 1;
+      for (const [axis, half] of [["x", .4], ["z", .29]] as const) {
+        const delta = b[axis] - a[axis], low = cabinet[axis] - half, high = cabinet[axis] + half;
+        if (Math.abs(delta) < .00001) { if (a[axis] < low || a[axis] > high) return false; }
+        else {
+          const aa = (low - a[axis]) / delta, bb = (high - a[axis]) / delta;
+          enter = Math.max(enter, Math.min(aa, bb)); leave = Math.min(leave, Math.max(aa, bb));
+          if (enter > leave) return false;
+        }
+      }
+      return leave > 0 && enter < 1;
+    });
   }
   private illuminatesHunter() {
     const { player: p, hunter: h, hidden } = this.data;
@@ -194,47 +272,64 @@ export class EscapeWorld {
     const fx = Math.cos(p.angle) * Math.cos(pitch), fz = Math.sin(p.angle) * Math.cos(pitch), fy = Math.sin(pitch);
     const dot = (dx * fx + dz * fz + dy * fy) / Math.max(.001, distance);
     if (dot < Math.cos(TORCH_CONE / 2)) return false;
-    if (!this.lineOfSight(p, h)) return false;
-    // Wardrobes stand above the entire eye-to-torso ray; low drawers can be lit over.
-    return !PROPS.some(cabinet => {
-      if (cabinet.kind !== "wardrobe") return false;
-      let enter = 0, leave = 1;
-      for (const [axis, half] of [["x", .4], ["z", .29]] as const) {
-        const delta = h[axis] - p[axis], low = cabinet[axis] - half, high = cabinet[axis] + half;
-        if (Math.abs(delta) < .00001) { if (p[axis] < low || p[axis] > high) return false; }
-        else {
-          const a = (low - p[axis]) / delta, b = (high - p[axis]) / delta;
-          enter = Math.max(enter, Math.min(a, b)); leave = Math.min(leave, Math.max(a, b));
-          if (enter > leave) return false;
-        }
-      }
-      return leave > 0 && enter < 1;
-    });
+    return this.clearSight(p, h);
   }
   private updateHunt(dt: number, walked: number, running: boolean) {
     const hunt = this.data.hunt!, d = this.data;
+    this.lastMovement = walked > .0001 ? running ? "sprint" : d.player.crouched ? "crouch" : "walk" : "still";
     if (walked > .0001) hunt.effort = Math.min(100, hunt.effort + (running ? 14 : d.player.crouched ? 3 : 6) * dt);
     else hunt.effort = Math.max(0, hunt.effort - 20 * dt);
     if (!hunt.panting && hunt.effort >= 100) { hunt.panting = true; hunt.breathIn = 0; }
     if (hunt.panting && hunt.effort < 35) { hunt.panting = false; hunt.breathIn = 0; }
     if (hunt.panting) {
       hunt.breathIn -= dt;
-      if (hunt.breathIn <= 0) { hunt.breathIn = 2.5; this.events.push({ type: "breath" }); this.noise(d.player, 12); }
+      if (hunt.breathIn <= 0) { hunt.breathIn = 2.5; this.events.push({ type: "breath" }); }
     }
     hunt.freeze = Math.max(0, hunt.freeze - dt);
     hunt.reveal = Math.max(0, hunt.reveal - dt);
-    if (this.illuminatesHunter()) {
-      hunt.glare = Math.min(100, hunt.glare + 20 * dt);
-      if (hunt.glare >= 99.999 && hunt.lightArmed) {
-        hunt.glare = 100;
-        hunt.lightArmed = false;
-        this.noise({ x: d.player.x, z: d.player.z }, 24);
-        this.target = { x: d.player.x, z: d.player.z };
-        if (d.hunter.state !== "chase") d.hunter.state = "investigate";
-        this.say("它注意到灯光了！");
-      }
-    } else hunt.glare = Math.max(0, hunt.glare - 25 * dt);
+    // Freeze suspends perception as well as pursuit; held scores retain their explanation.
+    if (hunt.freeze > 0) return;
+    hunt.alert = Math.max(0, (hunt.alert ?? 0) - dt);
+    const hearing = this.hearing, vision = this.vision;
+    const illuminated = this.illuminatesHunter() && hunt.freeze <= 0;
+    hunt.noise = Math.max(0, Math.min(100, (hunt.noise ?? 0) + (hearing.rate > 0 ? hearing.rate : -12) * dt));
+    hunt.sight = Math.max(0, Math.min(100, (hunt.sight ?? 0) + (vision.rate > 0 ? vision.rate : -25) * dt));
+    hunt.glare = Math.max(0, Math.min(100, hunt.glare + (illuminated ? 20 * this.perceptionMultiplier : -25) * dt));
+    if (hunt.glare >= 99.999) { hunt.glare = 100; hunt.lightArmed = false; }
     if (!hunt.lightArmed && hunt.glare < 60) hunt.lightArmed = true;
+    this.syncExposure({ ...(hearing.audible ? { noise: d.player } : {}), ...(vision.rate > 0 ? { sight: d.player } : {}), ...(illuminated ? { glare: d.player } : {}) });
+  }
+  private syncExposure(sensed: Partial<Record<Sense, Vec>> = {}) {
+    const d = this.data, hunt = d.hunt!;
+    hunt.traces ??= {};
+    for (const key of SENSES) if (sensed[key]) hunt.traces[key] = { x: sensed[key]!.x, z: sensed[key]!.z };
+    const risk = this.perception;
+    hunt.exposure = risk.total;
+    if (hunt.freeze > 0) return;
+    const live = SENSES.filter(key => sensed[key]);
+    const available = live.length ? live : d.hunter.state !== "chase" && risk.total === 100 ? SENSES.filter(key => hunt.traces![key]) : [];
+    const source = available.sort((a, b) => risk.contributions[b].points - risk.contributions[a].points)[0];
+    const at = source && hunt.traces[source];
+    if (risk.total >= ALERT_THRESHOLD - 1e-8) {
+      if (!(hunt.alert! > 0)) this.say("它警觉了！感知提升，快藏好。");
+      hunt.alert = 6;
+      if (!at) return;
+      hunt.focus = source;
+      if (risk.total === 100) { this.startChase(at); return; }
+      if (d.hunter.state !== "chase") {
+        const next = this.reachableTarget(at);
+        if (d.hunter.state !== "investigate" || dist(this.target, next) > .6) this.pathTimer = 0;
+        d.hunter.state = "investigate"; this.target = next; this.wait = 4;
+      }
+    }
+  }
+  private startChase(at: Vec) {
+    const d = this.data;
+    const next = this.reachableTarget(at);
+    if (d.hunter.state !== "chase") { this.pathTimer = 0; this.events.push({ type: "laugh" }); this.say("暴露了！甩开视线，找地方躲藏！"); }
+    else if (dist(this.target, next) > .6) this.pathTimer = 0;
+    d.hunter.state = "chase"; d.hunt!.exposure = 100;
+    this.target = next; this.unseen = 0; this.wait = 0;
   }
   /** Model footprints in map units, shared by player and pursuer collision. */
   private furniture(x: number, z: number, radius = 0) {
@@ -321,7 +416,9 @@ export class EscapeWorld {
     p.pitch = Math.max(-1.3, Math.min(1.3, (p.pitch ?? 0) + (input.look ?? 0) * dt * 1.5));
     const forward = Math.max(-1, Math.min(1, input.forward ?? 0)), side = Math.max(-1, Math.min(1, input.strafe ?? 0));
     const moving = !d.hidden && Math.hypot(forward, side) > .05;
-    const running = Boolean(moving && input.sprint && !p.crouched && p.stamina > 2);
+    if (p.stamina <= 2) p.winded = true;
+    if (p.winded && p.stamina >= 30) p.winded = false;
+    const running = Boolean(moving && (input.sprint ?? p.sprinting) && !p.crouched && !p.winded && p.stamina > 2);
     const speed = running ? 3 : p.crouched ? .95 : 1.7;
     p.stamina = Math.max(0, Math.min(100, p.stamina + (running ? -18 : 13) * dt));
     if (p.light && !d.hidden) {
@@ -335,14 +432,13 @@ export class EscapeWorld {
       walked = dist(old, p); this.footstep += walked;
       if (this.footstep > (p.crouched ? 1.1 : .85)) {
         this.footstep = 0; this.events.push({ type: "step" });
-        if (!p.crouched) this.noise(p, running ? 7 : 2.4);
       }
       if (d.expansion?.enabled) HAZARDS.forEach((hazard, index) => {
         const distance = dist(p, hazard);
         if (distance > .85) this.glassArmed[index] = true;
         else if (distance < .34 && this.glassArmed[index]) {
           this.glassArmed[index] = false;
-          if (!p.crouched) { this.events.push({ type: "noise" }); this.noise(hazard, 11); this.say("脚下的碎玻璃响了！它听见了动静。"); }
+          if (!p.crouched) { this.events.push({ type: "noise" }); this.noise(hazard, 11, 45); this.say("脚下的碎玻璃响了！"); }
         }
       });
     }
@@ -353,13 +449,13 @@ export class EscapeWorld {
       else if ((this.pending.remaining -= dt) <= 0) { this.pending = undefined; this.search(object); }
     }
     this.updateHunter(dt);
+    if (d.phase === "playing") this.syncExposure();
   }
   private updateHunter(dt: number) {
     const d = this.data, h = d.hunter;
     if (d.hunt!.freeze > 0) return;
-    if (this.seesPlayer()) {
-      if (h.state !== "chase") { this.events.push({ type: "laugh" }); this.say("它看见你了！转弯甩开视线，再找柜子！"); }
-      h.state = "chase"; this.target = { x: d.player.x, z: d.player.z }; this.unseen = 0; this.wait = 0;
+    if (h.state === "chase" && this.seesPlayer()) {
+      this.target = { x: d.player.x, z: d.player.z }; this.unseen = 0; this.wait = 0;
     } else if (h.state === "chase") {
       this.unseen += dt;
       if (this.unseen > 3.5) { h.state = "search"; this.wait = 4; }
@@ -376,6 +472,7 @@ export class EscapeWorld {
         if (this.wait < 1.8) return;
         this.wait = 0; this.target = this.choosePatrolTarget(); this.pathTimer = 0;
       } else {
+        if (h.state === "chase") { h.state = "search"; this.wait = 4; }
         this.wait -= dt;
         if (this.wait > 0) { h.angle += dt * .55; return; }
         h.state = "patrol"; this.seenHide = undefined; this.target = this.choosePatrolTarget(); this.pathTimer = 0;
@@ -404,9 +501,17 @@ export class EscapeWorld {
     }
     if (d.elapsed - this.laughAt > 20) { this.laughAt = d.elapsed; this.events.push({ type: "laugh" }); }
   }
-  noise(at: Vec, range: number) {
-    const h = this.data.hunter;
-    if (h.state === "chase" || dist(h, at) > range) return;
+  noise(at: Vec, range: number, score = 0) {
+    const d = this.data, h = d.hunter;
+    const effectiveRange = range * (score === 0 || this.lineOfSight(h, at) ? 1 : .55);
+    const distance = dist(h, at);
+    if (distance > effectiveRange || d.hunt!.freeze > 0) return;
+    if (score > 0) {
+      d.hunt!.noise = Math.min(100, (d.hunt!.noise ?? 0) + score * Math.max(0, 1 - distance / effectiveRange) ** 2 * this.perceptionMultiplier);
+      this.syncExposure({ noise: at }); return;
+    }
+    if (h.state === "chase") return;
+    d.hunt!.focus = "noise";
     h.state = "investigate"; this.target = this.reachableTarget(at); this.wait = 4; this.pathTimer = 0;
   }
   crystalCharges(kind: CrystalKind) {
@@ -453,7 +558,7 @@ export class EscapeWorld {
     }
     if (target.id === "leave-hide") {
       const cabinet = PROPS.find(p => p.id === d.hidden)!;
-      Object.assign(d.player, { x: cabinet.x, z: cabinet.z + 1, angle: Math.PI / 2, pitch: 0, crouched: true });
+      Object.assign(d.player, { x: cabinet.x, z: cabinet.z + 1, angle: Math.PI / 2, pitch: 0, crouched: false, sprinting: false });
       d.hidden = undefined; this.say("你悄悄离开了柜子。"); return;
     }
     const door = DOORS.find(o => o.id === target.id);
@@ -468,16 +573,19 @@ export class EscapeWorld {
         if (occupied) { this.say("先离开门框，再关门。"); return; }
         d.opened = d.opened.filter(id => id !== door.id);
       } else d.opened.push(door.id);
-      this.events.push({ type: "door" }); this.noise(target.position, 4); return;
+      this.events.push({ type: "door" }); this.noise(target.position, 4, 14); return;
     }
     const object = PROPS.find(o => o.id === target.id)!;
     if (object.kind === "drawer") {
       if (d.searched.includes(object.id)) { this.say("这里已经搜过了。"); return; }
-      this.pending = { id: object.id, remaining: 1.15 }; this.noise(object, 3); return;
+      this.pending = { id: object.id, remaining: 1.15 }; this.noise(object, 3, 10); return;
     }
     if (object.kind === "wardrobe") {
-      if (this.seesPlayer() || d.hunter.state === "chase" && this.lineOfSight(d.hunter, d.player)) this.seenHide = object.id;
+      if (d.hunt!.freeze <= 0 && (this.seesPlayer() || d.hunter.state === "chase" && this.clearSight(d.hunter, d.player))) {
+        this.seenHide = object.id; d.hunt!.sight = 100; this.syncExposure({ sight: d.player });
+      }
       d.hidden = object.id;
+      d.player.sprinting = false;
       Object.assign(d.player, { x: object.x, z: object.z + .08, angle: Math.PI / 2, pitch: 0 });
       this.say(this.seenHide ? "它看见你了！" : "已躲进衣柜。"); return;
     }
@@ -485,7 +593,7 @@ export class EscapeWorld {
     if (object.kind === "power") {
       if (!d.inventory.includes("fuse")) { this.say("保险丝缺失。去洗衣间找找。"); return; }
       if (d.power) { this.say("电源已经恢复。"); return; }
-      d.power = true; this.noise(object, 16); this.events.push({ type: "door" }); this.say("电源恢复。小心，动静太大了。"); return;
+      d.power = true; this.noise(object, 16, 60); this.events.push({ type: "door" }); this.say("电源恢复。小心，动静太大了。"); return;
     }
     if (object.kind === "valve") {
       if (object.id !== "drain" && d.expansion?.enabled) {
@@ -495,16 +603,16 @@ export class EscapeWorld {
         if (valves.includes(object.id)) { this.say(`${object.name}已经转到位。`); return; }
         if (object.id !== expected) {
           d.expansion.valves = [];
-          this.noise(object, 14); this.events.push({ type: "noise" });
+          this.noise(object, 14, 65); this.events.push({ type: "noise" });
           this.say("阀门顺序错了，管道猛地震响。顺序已重置！"); return;
         }
-        valves.push(object.id); this.noise(object, 7); this.events.push({ type: "door" });
+        valves.push(object.id); this.noise(object, 7, 24); this.events.push({ type: "door" });
         this.say(valves.length === VALVE_ORDER.length ? "最后一股蒸汽散尽，锅炉已泄压。" : `${object.name}转到位。继续按纸条操作。`); return;
       }
       if (!d.power) { this.say("排水泵没电。"); return; }
       if (d.drained) { this.say("水位已经降下去了。"); return; }
       if (d.expansion?.enabled && (!d.inventory.includes("handwheel") || d.expansion.valves.length !== VALVE_ORDER.length)) { this.say("锅炉尚未泄压，排水阀也缺少手轮。"); return; }
-      d.drained = true; this.noise(object, 16); this.events.push({ type: "noise" }); this.say("水位下降，铁网露出来了。"); return;
+      d.drained = true; this.noise(object, 16, 65); this.events.push({ type: "noise" }); this.say("水位下降，铁网露出来了。"); return;
     }
     if (!d.drained) { this.say("下水道还在涌水，先转开排水阀。"); return; }
     if (!d.inventory.includes("cutters")) { this.say("铁网封着出口，需要断线钳。"); return; }
@@ -528,14 +636,16 @@ export class EscapeWorld {
   }
   nextNight() {
     if (this.data.phase !== "caught") return;
-    const d = this.data; Object.assign(d.player, { x: 3.5, z: 5.5, angle: -Math.PI / 2, pitch: 0, stamina: 100, battery: Math.max(35, d.player.battery) });
+    const d = this.data; Object.assign(d.player, { x: 3.5, z: 5.5, angle: -Math.PI / 2, pitch: 0, stamina: 100, battery: Math.max(35, d.player.battery), crouched: false, sprinting: false, winded: false });
     Object.assign(d.hunter, { x: 12.5, z: 9.5, angle: 0, state: "patrol" });
     d.hidden = undefined; d.phase = "playing"; this.seenHide = undefined; this.unseen = 0; this.path = []; this.pathTimer = 0;
     this.patrolIndex = 0; this.target = this.choosePatrolTarget(); this.wait = 0; this.data.hunt!.rng = (this.random() * 0xffffffff) >>> 0 || 1; this.clearHuntAlerts(); this.say("物品还在，继续寻找出口。");
   }
   private clearHuntAlerts() {
     const hunt = this.data.hunt!;
-    Object.assign(hunt, { effort: 0, panting: false, breathIn: 0, glare: 0, lightArmed: true, freeze: 0, reveal: 0 });
+    Object.assign(hunt, { effort: 0, panting: false, breathIn: 0, glare: 0, lightArmed: true, freeze: 0, reveal: 0, noise: 0, sight: 0, exposure: 0, alert: 0, traces: {} });
+    delete hunt.focus;
+    this.lastMovement = "still";
   }
   snapshot(): EscapeSnapshot {
     return JSON.parse(JSON.stringify({ ...this.data, pursuit: { target: this.target, seenHide: this.seenHide, unseen: this.unseen, wait: this.wait, patrolIndex: this.patrolIndex } }));
@@ -558,7 +668,13 @@ export class EscapeWorld {
         || Object.keys(d.expansion).some(k => !["enabled", "valves"].includes(k)) || d.expansion.enabled !== true
         || !ids(d.expansion.valves, [...VALVE_ORDER]) || d.expansion.valves.some((id, index) => id !== VALVE_ORDER[index]))
       || d.hunt !== undefined && (!d.hunt || typeof d.hunt !== "object" || Array.isArray(d.hunt)
-        || Object.keys(d.hunt).some(k => !["version", "effort", "panting", "breathIn", "glare", "lightArmed", "freeze", "reveal", "collected", "freezeUsed", "revealUsed", "rng", "recent"].includes(k))
+        || Object.keys(d.hunt).some(k => !["version", "effort", "panting", "breathIn", "glare", "lightArmed", "freeze", "reveal", "collected", "freezeUsed", "revealUsed", "rng", "recent", "noise", "sight", "exposure", "alert", "traces", "focus"].includes(k))
+        || d.hunt.focus !== undefined && !SENSES.includes(d.hunt.focus)
+        || [d.hunt.noise, d.hunt.sight, d.hunt.exposure].some(v => v !== undefined && !number(v, 0, 100))
+        || d.hunt.alert !== undefined && !number(d.hunt.alert, 0, 6)
+        || d.hunt.traces !== undefined && (!d.hunt.traces || typeof d.hunt.traces !== "object" || Array.isArray(d.hunt.traces)
+          || Object.keys(d.hunt.traces).some(k => !SENSES.includes(k as Sense))
+          || Object.values(d.hunt.traces).some(p => !p || typeof p !== "object" || Array.isArray(p) || Object.keys(p).some(k => !["x", "z"].includes(k)) || !number(p.x, .2, SIZE - .2) || !number(p.z, .2, SIZE - .2)))
         || d.hunt.version !== 1 || !number(d.hunt.effort, 0, 100) || typeof d.hunt.panting !== "boolean" || !number(d.hunt.breathIn, 0, 2.5)
         || !number(d.hunt.glare, 0, 100) || typeof d.hunt.lightArmed !== "boolean" || !number(d.hunt.freeze, 0, 10) || !number(d.hunt.reveal, 0, 10)
         || !ids(d.hunt.collected, CRYSTALS.map(c => c.id)) || !Number.isInteger(d.hunt.freezeUsed) || !number(d.hunt.freezeUsed, 0, CRYSTALS.filter(c => c.kind === "freeze").length)
@@ -571,6 +687,8 @@ export class EscapeWorld {
         || d.hunt.lightArmed && d.hunt.glare >= 100 || !d.hunt.lightArmed && d.hunt.glare < 60
         || d.hunt.freeze > 0 && d.hunt.freezeUsed === 0 || d.hunt.reveal > 0 && d.hunt.revealUsed === 0)
       || typeof d.power !== "boolean" || typeof d.drained !== "boolean" || typeof d.player.light !== "boolean" || typeof d.player.crouched !== "boolean"
+      || d.player.sprinting !== undefined && typeof d.player.sprinting !== "boolean" || d.player.winded !== undefined && typeof d.player.winded !== "boolean"
+      || d.player.sprinting === true && d.player.crouched
       || !number(d.player.stamina, 0, 100) || !number(d.player.battery, 0, 100) || !number(d.player.angle, -Math.PI, Math.PI) || !number(d.hunter.angle, -Math.PI, Math.PI)
       || d.player.pitch !== undefined && !number(d.player.pitch, -1.3, 1.3)
       || d.hidden !== undefined && !PROPS.some(o => o.id === d.hidden && o.kind === "wardrobe")) throw new Error("逃生存档格式不正确");
@@ -590,6 +708,12 @@ export class EscapeWorld {
       || PROPS.some(o => o.loot && d.searched.includes(o.id) && !d.inventory.includes(o.loot))) throw new Error("逃生存档目标状态不正确");
     const world = new EscapeWorld(); world.data = JSON.parse(JSON.stringify(d));
     if (!world.data.hunt) world.data.hunt = { version: 1, effort: 0, panting: false, breathIn: 0, glare: 0, lightArmed: true, freeze: 0, reveal: 0, collected: [], freezeUsed: 0, revealUsed: 0, rng: (Math.random() * 0xffffffff) >>> 0 || 1, recent: [] };
+    const hunt = world.data.hunt;
+    hunt.noise ??= 0; hunt.sight ??= d.hunter.state === "chase" ? 100 : 0; hunt.alert ??= 0; hunt.traces ??= {};
+    if (d.phase === "playing" && d.hunter.state === "chase" && world.perception.raw === 0) hunt[hunt.focus ?? "sight"] = 100;
+    hunt.exposure = world.perception.total;
+    if (world.data.player.sprinting === undefined && !d.hidden) world.data.player.crouched = false;
+    world.data.player.sprinting ??= false; world.data.player.winded ??= false;
     for (const p of [d.player, d.hunter]) if (!number(p.x, .2, SIZE - .2) || !number(p.z, .2, SIZE - .2) || world.wall(p.x, p.z)) throw new Error("逃生存档位置不正确");
     if (d.hidden && dist(d.player, PROPS.find(o => o.id === d.hidden)!) > 1.9) throw new Error("逃生存档藏匿位置不正确");
     world.data.player.pitch ??= 0;

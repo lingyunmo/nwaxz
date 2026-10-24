@@ -1,6 +1,7 @@
 import "./cinematic.css";
 
-export const openingClip = "/assets/video/escape-opening-v1.mp4";
+export const openingClips = ["/assets/video/escape-opening-v1.mp4", "/assets/video/escape-opening-2-v1.mp4"];
+export const randomOpeningClip = () => openingClips[Math.floor(Math.random() * openingClips.length)];
 export const caughtClips = [1, 2, 3].map(n => `/assets/video/escape-caught-${n}-v1.mp4`);
 export const randomCaughtClip = () => caughtClips[Math.floor(Math.random() * caughtClips.length)];
 
@@ -17,7 +18,7 @@ export class CinematicPlayer {
     this.element = document.createElement("div");
     this.element.className = "escape-cinematic";
     this.element.setAttribute("role", "dialog"); this.element.setAttribute("aria-modal", "true");
-    this.element.setAttribute("aria-label", path === openingClip ? "开场影片" : "被抓影片");
+    this.element.setAttribute("aria-label", openingClips.includes(path) ? "开场影片" : "被抓影片");
     this.element.innerHTML = `<video playsinline webkit-playsinline preload="auto" aria-label="过场动画"></video><p class="cinematic-status" role="status">载入中…</p><div class="cinematic-controls"><button id="cinematic-play">播放</button><button id="cinematic-sound"></button><button id="cinematic-skip">跳过</button></div>`;
     this.video = this.element.querySelector("video")!;
     this.video.muted = !sound; this.video.src = path;

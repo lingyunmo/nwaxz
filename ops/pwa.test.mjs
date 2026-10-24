@@ -18,7 +18,13 @@ test("built preload covers revisioned game resources, including all whole videos
     assert.ok(worker.includes(entry.url), `${entry.url} must be in the worker`);
   }
   const videos = manifest.filter(entry => entry.url.endsWith(".mp4"));
-  assert.equal(videos.length, 4);
+  assert.deepEqual(videos.map(entry => entry.url).sort(), [
+    "assets/video/escape-caught-1-v1.mp4",
+    "assets/video/escape-caught-2-v1.mp4",
+    "assets/video/escape-caught-3-v1.mp4",
+    "assets/video/escape-opening-2-v1.mp4",
+    "assets/video/escape-opening-v1.mp4",
+  ]);
   assert.ok(videos.every(entry => entry.revision && entry.bytes > 2000000));
   assert.ok(manifest.every(entry => entry.url !== "preload-manifest.json"));
   for (const url of [

@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
 import { Mesh } from "@babylonjs/core/Meshes/mesh.js";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture.js";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector.js";
 import { frogPose } from "../src/escape/frog.ts";
 import "@babylonjs/core/Culling/ray.js";
 import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader.js";
@@ -12,6 +13,35 @@ import "@babylonjs/loaders/glTF/2.0/Extensions/KHR_materials_emissive_strength.j
 import { createEscapeScene, aimCamera, CELL } from "../src/escape/scene.ts";
 import { installEscapeModels } from "../src/escape/models.ts";
 import { EscapeWorld } from "../src/escape/world.ts";
+
+test("flashlight projection stays centered after moving, turning and looking up/down", () => {
+  const engine = new NullEngine(), view = createEscapeScene(engine), world = new EscapeWorld();
+  try {
+    const cookie = new Texture(null, view.scene);
+    cookie.isReady = () => true;
+    view.torch.projectionTexture = cookie;
+    const effect = { setMatrix() {}, setTexture() {} };
+    let previous;
+    for (const [x, z, angle, pitch, height] of [[3.5,5.5,-Math.PI/2,0,1.65], [12.5,9.5,0,.65,1.65], [20.5,20.5,Math.PI,-.7,1.02]]) {
+      Object.assign(world.data.player, { x, z, angle, pitch });
+      aimCamera(view, world, height);
+      view.camera.getViewMatrix(true);
+      view.torch.transferTexturesToEffect(effect, "0");
+      const matrix = view.torch.projectionTextureMatrix;
+      const hit = view.camera.position.add(view.camera.getForwardRay().direction.scale(4));
+      const projected = Vector3.TransformCoordinates(hit, matrix);
+      // Allow the camera's Euler/float rounding, while rejecting world-fixed projection.
+      assert.ok(Math.abs(projected.x - .5) < .003 && Math.abs(projected.y - .5) < .003,
+        `beam must follow camera at ${x},${z}, yaw ${angle}, pitch ${pitch}: ${projected}`);
+      if (previous) assert.notDeepEqual([...matrix.m], previous, "moving the beam must update its cookie transform");
+      previous = [...matrix.m];
+      assert.equal(view.torch.intensity, 5);
+    }
+    world.data.player.light = false; aimCamera(view, world, 1.65); assert.equal(view.torch.intensity, 0);
+    world.data.player.light = true; world.data.player.battery = 0; aimCamera(view, world, 1.65); assert.equal(view.torch.intensity, 0);
+    world.data.player.battery = 100; world.data.hidden = "bed-hide"; aimCamera(view, world, 1.65); assert.equal(view.torch.intensity, 0);
+  } finally { view.scene.dispose(); engine.dispose(); }
+});
 
 test("real 3D camera can look up/down while world UVs and geometry stay fixed", () => {
   const engine = new NullEngine(), view = createEscapeScene(engine), w = new EscapeWorld();

@@ -44,6 +44,8 @@ export class EscapeGame {
   private lastNotice = "";
   private noticeUntil = 0;
   private inventoryKey = "";
+  private lastRoom = "";
+  private roomCueUntil = -1;
   private phase = "playing";
   private music = true;
   private sound = true;
@@ -58,8 +60,9 @@ export class EscapeGame {
       else this.sound = settings.sound;
     } catch { this.storageWarning = "存档读取失败，可从备份恢复。"; }
     this.root.innerHTML = `<main class="escape-shell" aria-label="极限恐怖逃生"><canvas id="escape-view" tabindex="0" aria-label="3D第一人称逃生。WASD移动，拖动上下左右转头，方向键转身，PageUp和PageDown抬头低头，Shift奔跑，C蹲行，F手电，E交互，Q丢石子，Esc暂停。"></canvas>
-      <header class="escape-hud"><button id="escape-pause" class="escape-round" aria-label="暂停逃生">${icon("pause")}</button><div class="escape-location"><span id="escape-room">地下浴场</span><span id="escape-night">第1夜 · 00:00</span><div id="escape-lives" aria-label="剩余机会"></div></div></header>
-      <button id="escape-map" class="escape-map-button" aria-label="查看地图"><canvas id="escape-minimap" width="208" height="208" aria-hidden="true"></canvas><span>浴场地图 <kbd>M</kbd></span></button>
+      <header class="escape-hud"><button id="escape-pause" class="escape-round" aria-label="暂停逃生">${icon("pause")}</button><div class="escape-location"><span id="escape-room">${safe(this.world.room)}</span><span id="escape-night">第1夜 · 00:00</span><div id="escape-lives" aria-label="剩余机会"></div></div></header>
+      <button id="escape-map" class="escape-map-button" aria-label="查看地图，当前位置：${safe(this.world.room)}"><canvas id="escape-minimap" width="208" height="208" aria-hidden="true"></canvas><span>浴场地图 <kbd>M</kbd></span><small id="escape-map-room">${safe(this.world.room)}</small></button>
+      <div class="escape-room-toast" id="escape-room-toast" aria-live="polite" hidden></div>
       <div class="escape-crosshair" aria-hidden="true"></div><div class="escape-danger" id="escape-danger" role="status"></div><div class="escape-notice" id="escape-notice" role="status" aria-live="polite" hidden></div>
       <div class="escape-search" id="escape-search" hidden><span>搜索中</span><progress max="1.15" value="0" aria-label="搜索进度"></progress></div>
       <div class="escape-bottom"><div class="escape-meters"><label title="体力">${icon("run")}<meter id="escape-stamina" aria-label="体力" min="0" max="100" value="100"></meter></label><label title="手电电量">${icon("light")}<meter id="escape-battery" aria-label="手电电量" min="0" max="100" value="100"></meter></label></div>
@@ -138,6 +141,7 @@ export class EscapeGame {
       }
       if (this.disposed) return;
       this.world = resume && this.saved ? EscapeWorld.restore(this.saved) : new EscapeWorld();
+      this.beginRoomCue();
       this.renderer.setReducedMotion(this.settings.reducedMotion);
       if (this.disposed) return;
       this.renderer.resize(this.settings.quality === "high"); this.started = true; this.phase = this.world.data.phase;
@@ -154,6 +158,7 @@ export class EscapeGame {
   }
   private async playCinematic(path: string) {
     this.paused = true; this.clearInput(); this.audio.setPlaying(false); this.audio.stopPreview();
+    this.$("#escape-room-toast").hidden = true;
     const shell = this.$(".escape-shell"); shell.inert = true;
     const player = new CinematicPlayer(this.root, path, this.sound); this.cinematic = player;
     await player.done;
@@ -173,7 +178,7 @@ export class EscapeGame {
   private pause(map = false) {
     if (!this.started || this.world.data.phase !== "playing") return;
     this.paused = true; this.clearInput(); this.audio.setPlaying(false); this.save();
-    this.panel(`<div class="escape-pause-layout"><div class="escape-map-page"><p class="escape-eyebrow">地下浴场</p><h2>浴场地图</h2><canvas id="escape-floorplan" width="500" height="500" aria-label="浴场地图，箭头是你，暗处尚未探索"></canvas><p class="escape-map-legend"><i class="map-you"></i>你 <i class="map-door"></i>门 <i class="map-hide"></i>衣柜 <i class="map-fog"></i>未探索</p></div>
+    this.panel(`<div class="escape-pause-layout"><div class="escape-map-page"><p class="escape-eyebrow">地下浴场</p><h2>浴场地图</h2><canvas id="escape-floorplan" width="500" height="500" aria-label="浴场地图，箭头是你，暗处尚未探索"></canvas><p class="escape-map-legend"><i class="map-you"></i>你 <i class="map-door"></i>门 <i class="map-hide"></i>衣柜 <i class="map-fog"></i>未探索</p><p class="escape-map-current" id="escape-map-current">当前位置：${safe(this.world.room)}</p></div>
       <div class="escape-pause-menu"><p class="escape-eyebrow">已暂停</p><h2>暂停</h2><div class="escape-journal"><small>线索</small><p id="escape-goal">${safe(this.world.objective)}</p></div><button id="escape-resume" class="escape-primary">继续逃生</button>
       <div class="escape-setting-row"><label><input id="escape-music" type="checkbox" ${this.music ? "checked" : ""}>音乐</label><label><input id="escape-sound" type="checkbox" ${this.sound ? "checked" : ""}>音效</label><button id="escape-audio-recover">恢复声音</button></div>
       <div class="escape-links"><button id="escape-backup">备份存档</button><button id="escape-help">操作说明</button><button id="escape-restart">重新开始</button><button id="escape-exit">保存并退出</button></div><p class="escape-storage" id="escape-save-status">${this.storageWarning || "进度已保存"}</p></div></div>`);
@@ -211,7 +216,7 @@ export class EscapeGame {
       this.panel(`<p class="escape-eyebrow">${d.phase === "lost" ? "第三次被抓住" : `第 ${d.captures} 次被抓住`}</p><h2>${d.phase === "lost" ? "逃生失败" : "被抓住了"}</h2><p>${d.phase === "lost" ? `坚持了 ${time(d.elapsed)}` : "物品和已打开的锁会保留。"}</p><button id="escape-next" class="escape-primary">${d.phase === "lost" ? "重新开始" : `醒来 · 第 ${d.captures + 1} 夜`}</button><div class="escape-links"><button id="escape-replay-laugh">再听笑声</button><button id="escape-result-exit">保存并退出</button></div>`);
       this.$(".escape-shell").classList.add("capture-active");
       this.$("#escape-view").setAttribute("aria-label", "原画奶蛙正张嘴、双手捧腹大笑；游戏进度已暂停");
-      this.button("escape-next", () => { if (d.phase === "lost") void this.start(false); else { this.world.nextNight(); this.phase = "playing"; this.save(); this.resume(); } });
+      this.button("escape-next", () => { if (d.phase === "lost") void this.start(false); else { this.world.nextNight(); this.phase = "playing"; this.beginRoomCue(); this.save(); this.resume(); } });
       this.button("escape-result-exit", this.exit);
       this.audio.haunt();
       // One deliberate click can replay the recognisable laugh, without changing settings.
@@ -327,7 +332,18 @@ export class EscapeGame {
   };
   private updateHud() {
     const d = this.world.data;
-    this.$("#escape-room").textContent = this.world.room;
+    const room = this.world.room;
+    if (room !== this.lastRoom) { this.lastRoom = room; this.roomCueUntil = d.elapsed + 1.6; }
+    this.$("#escape-room").textContent = room;
+    const mapButton = this.$("#escape-map");
+    mapButton.setAttribute("aria-label", `查看地图，当前位置：${room}`);
+    this.$("#escape-map-room").textContent = room;
+    const roomCue = this.$("#escape-room-toast");
+    if (roomCue.textContent !== room) roomCue.textContent = room;
+    roomCue.classList.toggle("reduced-motion", this.settings.reducedMotion);
+    roomCue.hidden = !this.started || this.paused || !!this.cinematic || d.phase !== "playing" || d.elapsed >= this.roomCueUntil;
+    const pauseRoom = this.root.querySelector<HTMLElement>("#escape-map-current");
+    if (pauseRoom) pauseRoom.textContent = `当前位置：${room}`;
     const items = ["brass", "cellar", "fuse", "cutters"] as const;
     const inventoryKey = d.inventory.join(",") + ":" + d.captures;
     if (inventoryKey !== this.inventoryKey) {
@@ -360,6 +376,10 @@ export class EscapeGame {
     this.$("#escape-search").hidden = !this.world.pending;
     this.$<HTMLProgressElement>("#escape-search progress").value = this.world.pending ? 1.15 - this.world.pending.remaining : 0;
     this.renderer?.drawMap(this.$("#escape-minimap"), this.world, true);
+  }
+  private beginRoomCue() {
+    this.lastRoom = this.world.room;
+    this.roomCueUntil = this.world.data.elapsed + 1.6;
   }
   destroy() {
     if (this.disposed) return; this.save(); this.disposed = true; this.cinematic?.close(); this.controller.abort(); cancelAnimationFrame(this.raf); this.audio.setPlaying(false); this.audio.stopPreview();

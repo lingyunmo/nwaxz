@@ -129,8 +129,10 @@ export function aimCamera(view: EscapeScene, world: EscapeWorld, eyeHeight: numb
   view.camera.position.set(p.x * CELL, eyeHeight, p.z * CELL);
   const direction = new Vector3(Math.cos(p.angle) * Math.cos(pitch), Math.sin(pitch), Math.sin(p.angle) * Math.cos(pitch));
   view.camera.setTarget(view.camera.position.add(direction));
-  view.torch.position.copyFrom(view.camera.position);
-  view.torch.direction.copyFrom(direction);
+  // SpotLight setters invalidate the projected beam's view matrix. Mutating
+  // either Vector3 in place leaves the cookie stuck at the initial world pose.
+  view.torch.position = view.camera.position.clone();
+  view.torch.direction = direction;
   view.torch.intensity = p.light && !world.data.hidden && p.battery > 0 ? 5 : 0;
   view.eyeFill.position.copyFrom(view.camera.position);
 }

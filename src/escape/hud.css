@@ -24,6 +24,9 @@
 .escape-room-toast.reduced-motion { animation:none; }
 .escape-map-current { margin:12px 0 0; text-align:center; color:#d6c39c; font-size:11px; letter-spacing:2px; }
 .escape-crosshair { top:50%; width:4px; height:4px; border-radius:50%; background:#e9e1bd99; box-shadow:0 0 4px #000; }
+.escape-mouse-hint { position:absolute; top:calc(50% + 32px); left:50%; transform:translateX(-50%); color:#cfc5ac; font-size:11px; letter-spacing:1px; white-space:nowrap; text-shadow:0 2px 5px #000; pointer-events:none; }
+#escape-view { cursor:crosshair; }.mouse-locked #escape-view { cursor:none; }
+.menu-active>.escape-mouse-hint,.capture-active>.escape-mouse-hint,.intro-active>.escape-mouse-hint { visibility:hidden; }
 .escape-danger { top:13%; left:50%; width:auto; transform:translateX(-50%); font-size:11px; letter-spacing:4px; color:#d6ad8a; font-weight:400; }
 .escape-notice { top:auto; bottom:26%; width:min(78%,440px); padding:9px 16px; font-size:11px; color:#e1d7ba; background:linear-gradient(90deg,transparent,#070a08c9 15%,#070a08c9 85%,transparent); animation:escape-notice-in .25s ease-out; }
 @keyframes escape-notice-in { from { opacity:0; translate:0 6px; } to { opacity:1; translate:0; } }

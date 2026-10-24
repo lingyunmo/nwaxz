@@ -4,6 +4,8 @@
 
 ## 当前功能
 
+0.16.3：电脑点击一次游戏画面后即可移动鼠标转头，无需按住；Esc 暂停并释放鼠标。捕获不可用时，画面内移动鼠标仍可转头；手机滑动和键盘观察保留。操作见[逃生玩法](docs/ESCAPE_GAME.md)，验证与实际发布状态见 [Issue #52](https://github.com/lingyunmo/nwaxz/issues/52)。
+
 0.16.2：极限恐怖每次新游戏从“开场1”和“开场2”中等概率随机播放一段，继续存档不重播；两段均加入启动预加载和离线缓存。素材见[过场视频](docs/ART_CINEMATICS.md)，发布状态见 [Issue50](https://github.com/lingyunmo/nwaxz/issues/50)。
 
 0.16.1：修复手电光斑停在初始位置的问题，移动与上下左右转头时照明随视角更新。小地图和暂停地图显示当前位置；进入房间或长廊时居中显示约1.6秒地名，暂停时保留剩余时间。发布与验证见 [Issue48](https://github.com/lingyunmo/nwaxz/issues/48) 和[验证记录](docs/VERIFICATION.md)。

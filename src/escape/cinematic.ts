@@ -4,17 +4,6 @@ export const openingClip = "/assets/video/escape-opening-v1.mp4";
 export const caughtClips = [1, 2, 3].map(n => `/assets/video/escape-caught-${n}-v1.mp4`);
 export const randomCaughtClip = () => caughtClips[Math.floor(Math.random() * caughtClips.length)];
 
-/** Full-file requests warm the range-aware runtime cache without delaying the menu. */
-export function warmCinematics(signal: AbortSignal) {
-  if (!navigator.onLine || !navigator.serviceWorker?.controller) return;
-  void (async () => {
-    for (const path of [openingClip, ...caughtClips]) {
-      if (signal.aborted || !navigator.onLine) return;
-      try { const response = await fetch(path, { signal }); if (!response.ok) return; await response.arrayBuffer(); } catch { return; /* Stop prefetching when the network disappears. */ }
-    }
-  })();
-}
-
 export class CinematicPlayer {
   readonly done: Promise<void>;
   private finish!: () => void;

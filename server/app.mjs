@@ -34,7 +34,7 @@ export function createApp({ distDir, revision = "development" }) {
   });
   app.use("/api", (_req, res) => res.status(404).json({ error: "接口不存在" }));
   // No extension: public .js responses previously carried month-long caching.
-  // The generated worker uses root-relative sibling imports and scope '/'.
+  // The bundled worker controls the root scope and must bypass static JS caches.
   app.get(["/game-worker", "/sw.js"], (_req, res) => {
     res.set({ "Cache-Control": "no-store, max-age=0", "Service-Worker-Allowed": "/", "Content-Type": "text/javascript; charset=utf-8" });
     if (!distDir) return res.status(503).end();

@@ -2,11 +2,13 @@ import "./style.css";
 import "./hud.css";
 import { icon } from "./icons.ts";
 import { SaveWriteError, writeSaveBatch } from "./save.ts";
-import { CinematicPlayer, openingClip, randomCaughtClip, warmCinematics } from "./cinematic.ts";
+import { CinematicPlayer, openingClip, randomCaughtClip } from "./cinematic.ts";
 import { AudioManager } from "../audio.ts";
 import type { Settings } from "../settings.ts";
 import { EscapeWorld, ITEM_NAMES, type EscapeSnapshot } from "./world.ts";
 import { EscapeRenderer, type EscapeArt } from "./renderer.ts";
+import { prepareEscape, returnPreparedEscape, takePreparedEscape } from "./preparation.ts";
+export { prepareEscape } from "./preparation.ts";
 
 const SESSION = "nwaxz-escape-session-v1", RECORD = "nwaxz-escape-record-v1", SOUND = "nwaxz-escape-sound-v1";
 type Best = { version: 1; escapes: number; bestTimeMs: number; fewestCaptures: number; mostNotes: number };
@@ -65,7 +67,8 @@ export class EscapeGame {
       <div class="escape-controls"><div class="escape-stick" id="escape-stick" aria-label="移动摇杆"><span></span></div><div class="escape-actions"><button id="escape-light" aria-label="开关手电" title="手电 F">${icon("light")}<kbd>F</kbd></button><button id="escape-crouch" aria-label="切换蹲行" title="蹲行 C">${icon("crouch")}<kbd>C</kbd></button><button id="escape-stone" aria-label="丢石子" title="石子 Q">${icon("stone")}<b id="escape-stones">2</b><kbd>Q</kbd></button><button id="escape-sprint" aria-label="按住奔跑" title="奔跑 Shift">${icon("run")}<kbd>⇧</kbd></button></div></div>
       <button class="escape-interact" id="escape-interact" hidden>${icon("hand")}<span></span><kbd>E</kbd></button></div>
       <div id="escape-panel" class="escape-panel" role="dialog" aria-modal="true" aria-label="逃生菜单"></div><input id="escape-import" type="file" accept=".json,application/json" hidden></main>`;
-    this.bind(); this.intro(); warmCinematics(this.signal);
+    this.adoptPrepared();
+    this.bind(); this.intro();
     this.raf = requestAnimationFrame(this.frame);
   }
   private $<T extends HTMLElement = HTMLElement>(selector: string) { return this.root.querySelector<T>(selector)!; }
@@ -102,23 +105,40 @@ export class EscapeGame {
     this.button("escape-intro-import", () => this.$<HTMLInputElement>("#escape-import").click());
     this.button("escape-saves-back", () => this.intro());
   }
-  private async loadArt() {
-    const paths = { materials: "/assets/scenes/escape-materials-v1.webp", map: "/assets/ui/escape-map-atlas-v1.webp" };
-    return Object.fromEntries(await Promise.all(Object.entries(paths).map(async ([key, path]) => { const img = new Image(); img.src = path; await img.decode(); return [key, img]; }))) as EscapeArt;
+  private adoptPrepared() {
+    const bundle = takePreparedEscape();
+    if (!bundle) return;
+    const placeholder = this.$<HTMLCanvasElement>("#escape-view");
+    for (const attribute of placeholder.attributes) bundle.canvas.setAttribute(attribute.name, attribute.value);
+    bundle.canvas.removeAttribute("style");
+    placeholder.replaceWith(bundle.canvas);
+    this.renderer = bundle.renderer; this.art = bundle.art;
+    this.renderer.setReducedMotion(this.settings.reducedMotion);
   }
   private async start(resume: boolean) {
     this.save(); this.started = false; this.paused = true;
-    this.renderer?.dispose(); this.renderer = undefined;
     this.audio.setMode("escape"); this.applySound(); void this.audio.unlock();
     if (!document.fullscreenElement && document.documentElement.requestFullscreen) void document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
-    this.panel('<p class="escape-eyebrow">下水道逃生</p><h2>正在载入…</h2>');
+    this.panel('<p class="escape-eyebrow">下水道逃生</p><h2>正在进入浴场…</h2><p id="escape-preparing" role="status"></p>');
     const opening = resume ? undefined : this.playCinematic(openingClip);
     try {
-      this.art ??= await this.loadArt();
+      if (!this.renderer?.usable) {
+        this.renderer?.dispose(); this.renderer = undefined;
+        await prepareEscape(this.settings, stage => { const label = this.root.querySelector("#escape-preparing"); if (label) label.textContent = stage; });
+        if (this.disposed) return;
+        // Only the canvas changes here; global game listeners remain bound once.
+        const bundle = takePreparedEscape();
+        if (!bundle) throw new Error("场景尚未准备完成");
+        const previous = this.$<HTMLCanvasElement>("#escape-view");
+        for (const attribute of previous.attributes) bundle.canvas.setAttribute(attribute.name, attribute.value);
+        bundle.canvas.removeAttribute("style");
+        previous.replaceWith(bundle.canvas);
+        this.renderer = bundle.renderer; this.art = bundle.art;
+        this.bindView(bundle.canvas);
+      }
       if (this.disposed) return;
       this.world = resume && this.saved ? EscapeWorld.restore(this.saved) : new EscapeWorld();
-      this.renderer = new EscapeRenderer(this.$("#escape-view"), this.art, this.settings.reducedMotion);
-      await this.renderer.load();
+      this.renderer.setReducedMotion(this.settings.reducedMotion);
       if (this.disposed) return;
       this.renderer.resize(this.settings.quality === "high"); this.started = true; this.phase = this.world.data.phase;
       this.saveAt = this.world.data.elapsed; this.save();
@@ -225,11 +245,7 @@ export class EscapeGame {
     stick.addEventListener("pointerdown", e => { if (this.paused) return; e.preventDefault(); stickId = e.pointerId; stick.setPointerCapture(e.pointerId); moveStick(e); }, { signal: this.signal });
     stick.addEventListener("pointermove", e => { if (stickId === e.pointerId) moveStick(e); }, { signal: this.signal });
     for (const event of ["pointerup", "pointercancel", "lostpointercapture"]) stick.addEventListener(event, () => { stickId = undefined; this.stick = { x: 0, y: 0 }; stick.querySelector<HTMLElement>("span")!.style.transform = "translate(0,0)"; }, { signal: this.signal });
-    const view = this.$("#escape-view");
-    view.addEventListener("pointerdown", e => { if (this.paused) return; e.preventDefault(); view.setPointerCapture(e.pointerId); this.look = { id: e.pointerId, x: e.clientX, y: e.clientY }; view.focus({ preventScroll: true }); }, { signal: this.signal });
-    view.addEventListener("pointermove", e => { if (!this.look || this.look.id !== e.pointerId || this.paused || this.world.data.hidden) return; this.world.data.player.angle = Math.atan2(Math.sin(this.world.data.player.angle + (e.clientX - this.look.x) * .005), Math.cos(this.world.data.player.angle + (e.clientX - this.look.x) * .005)); this.world.data.player.pitch = Math.max(-1.3, Math.min(1.3, (this.world.data.player.pitch ?? 0) - (e.clientY - this.look.y) * .004)); this.look.x = e.clientX; this.look.y = e.clientY; }, { signal: this.signal });
-    view.addEventListener("webglcontextlost", e => { e.preventDefault(); if (this.started && !this.paused) this.pause(); }, { signal: this.signal });
-    for (const event of ["pointerup", "pointercancel", "lostpointercapture"]) view.addEventListener(event, () => { this.look = undefined; }, { signal: this.signal });
+    this.bindView(this.$("#escape-view"));
     const sprint = this.$("#escape-sprint");
     sprint.addEventListener("pointerdown", e => { if (this.paused) return; e.preventDefault(); sprint.setPointerCapture(e.pointerId); this.sprinting = true; }, { signal: this.signal });
     for (const event of ["pointerup", "pointercancel", "lostpointercapture"]) sprint.addEventListener(event, () => { this.sprinting = false; }, { signal: this.signal });
@@ -278,6 +294,12 @@ export class EscapeGame {
       }
       finally { (e.target as HTMLInputElement).value = ""; }
     };
+  }
+  private bindView(view: HTMLCanvasElement) {
+    view.addEventListener("pointerdown", e => { if (this.paused) return; e.preventDefault(); view.setPointerCapture(e.pointerId); this.look = { id: e.pointerId, x: e.clientX, y: e.clientY }; view.focus({ preventScroll: true }); }, { signal: this.signal });
+    view.addEventListener("pointermove", e => { if (!this.look || this.look.id !== e.pointerId || this.paused || this.world.data.hidden) return; this.world.data.player.angle = Math.atan2(Math.sin(this.world.data.player.angle + (e.clientX - this.look.x) * .005), Math.cos(this.world.data.player.angle + (e.clientX - this.look.x) * .005)); this.world.data.player.pitch = Math.max(-1.3, Math.min(1.3, (this.world.data.player.pitch ?? 0) - (e.clientY - this.look.y) * .004)); this.look.x = e.clientX; this.look.y = e.clientY; }, { signal: this.signal });
+    view.addEventListener("webglcontextlost", e => { e.preventDefault(); if (this.started && !this.paused) this.pause(); }, { signal: this.signal });
+    for (const event of ["pointerup", "pointercancel", "lostpointercapture"]) view.addEventListener(event, () => { this.look = undefined; }, { signal: this.signal });
   }
   private frame = (now: number) => {
     if (this.disposed) return;
@@ -340,6 +362,8 @@ export class EscapeGame {
     this.renderer?.drawMap(this.$("#escape-minimap"), this.world, true);
   }
   destroy() {
-    if (this.disposed) return; this.save(); this.disposed = true; this.cinematic?.close(); this.controller.abort(); cancelAnimationFrame(this.raf); this.audio.setPlaying(false); this.audio.stopPreview(); this.renderer?.dispose();
+    if (this.disposed) return; this.save(); this.disposed = true; this.cinematic?.close(); this.controller.abort(); cancelAnimationFrame(this.raf); this.audio.setPlaying(false); this.audio.stopPreview();
+    if (this.renderer && this.art) returnPreparedEscape({ renderer: this.renderer, art: this.art, canvas: this.$("#escape-view") });
+    this.renderer = undefined;
   }
 }

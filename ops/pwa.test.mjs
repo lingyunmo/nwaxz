@@ -1,53 +1,26 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import vm from "node:vm";
+import { createHash } from "node:crypto";
 
-test("built offline worker has one revision per URL and a cached navigation fallback", () => {
-  let manifest,
-    fallback,
-    claims = false,
-    videoRoute;
-  const workbox = {
-    precacheAndRoute(entries) {
-      manifest = entries;
-    },
-    cleanupOutdatedCaches() {},
-    clientsClaim() {
-      claims = true;
-    },
-    createHandlerBoundToURL(url) {
-      fallback = url;
-      return () => {};
-    },
-    NavigationRoute: class {},
-    registerRoute(pattern, handler) { if (typeof pattern?.test === "function") videoRoute = { pattern, handler }; },
-    CacheFirst: class { constructor(options) { this.options = options; } },
-    RangeRequestsPlugin: class {},
-    CacheableResponsePlugin: class {},
-    ExpirationPlugin: class {},
-  };
-  vm.runInNewContext(
-    fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8"),
-    {
-      self: { define: true, addEventListener() {} },
-      define(_dependencies, factory) {
-        factory(workbox);
-      },
-    },
-  );
-  assert.ok(Array.isArray(manifest));
-  assert.equal(
-    new Set(manifest.map((entry) => entry.url)).size,
-    manifest.length,
-    "duplicate URLs can abort Workbox initialization before installation",
-  );
-  assert.equal(fallback, "index.html");
-  assert.ok(claims);
-  assert.ok(videoRoute.pattern.test("https://example.com/assets/video/escape-caught-2-v1.mp4"));
-  assert.ok(videoRoute.handler.options.plugins.some(p => p instanceof workbox.RangeRequestsPlugin));
-  assert.equal(videoRoute.handler.options.cacheName, "nwaxz-cinematics-v1");
-  assert.ok(!manifest.some(entry => entry.url.endsWith(".mp4")), "CGs must not block installation of the core game");
+test("built preload covers revisioned game resources, including all whole videos", () => {
+  const manifest = JSON.parse(fs.readFileSync(new URL("../dist/preload-manifest.json", import.meta.url), "utf8"));
+  const worker = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
+  assert.ok(!worker.includes("self.__WB_MANIFEST"), "manifest must be injected");
+  assert.ok(worker.includes("PREPARE_GAME"));
+  assert.equal(new Set(manifest.map(entry => entry.url)).size, manifest.length);
+  for (const entry of manifest) {
+    const content = fs.readFileSync(new URL(`../dist/${entry.url}`, import.meta.url));
+    assert.equal(entry.bytes, content.length, `${entry.url} progress size`);
+    assert.equal(entry.integrity, `sha256-${createHash("sha256").update(content).digest("base64")}`);
+    assert.ok(worker.includes(`"bytes":${entry.bytes}`), "runtime byte counts must survive manifest injection");
+    if (entry.revision) assert.equal(entry.revision, createHash("md5").update(content).digest("hex"));
+    assert.ok(worker.includes(entry.url), `${entry.url} must be in the worker`);
+  }
+  const videos = manifest.filter(entry => entry.url.endsWith(".mp4"));
+  assert.equal(videos.length, 4);
+  assert.ok(videos.every(entry => entry.revision && entry.bytes > 2000000));
+  assert.ok(manifest.every(entry => entry.url !== "preload-manifest.json"));
   for (const url of [
     "index.html",
     "icon.svg",

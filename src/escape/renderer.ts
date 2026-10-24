@@ -14,6 +14,7 @@ import { aimCamera, CELL, createEscapeScene } from "./scene.ts";
 import { installEscapeModels } from "./models.ts";
 import { DOORS, type EscapeWorld } from "./world.ts";
 import { EscapeMap } from "./minimap.ts";
+import { withTimeout } from "../loading.ts";
 
 export type EscapeArt = { materials: HTMLImageElement; map: HTMLImageElement };
 export class EscapeRenderer {
@@ -51,19 +52,33 @@ export class EscapeRenderer {
     this.captureLight.diffuse = new Color3(.92, .84, .64); this.captureLight.range = 8; this.captureLight.intensity = 10;
     this.captureLight.setEnabled(false);
   }
-  async load() {
+  get usable() { return !this.disposed && !this.engine._gl?.isContextLost(); }
+  setReducedMotion(reduced: boolean) { this.reduced = reduced; this.models?.actor.setReducedMotion(reduced); }
+  async load(onStage: (stage: string) => void = () => {}) {
     try {
+      onStage("正在摆放浴室里的物件…");
       for (const name of ["escape-props-v1.glb"]) {
-        const container = await LoadAssetContainerAsync(`/assets/models/${name}`, this.view.scene, { pluginOptions: { gltf: { animationStartMode: 0 } } });
-        if (this.disposed) { container.dispose(); return; }
+        const task = LoadAssetContainerAsync(`/assets/models/${name}`, this.view.scene, { pluginOptions: { gltf: { animationStartMode: 0 } } }).then(container => {
+          if (this.disposed) { container.dispose(); throw new Error("场景已关闭"); }
+          return container;
+        });
+        const container = await withTimeout(task, "浴室模型准备超时，请重试。");
         this.containers.push(container);
       }
-      const original = new Texture("/assets/character/haunted-frog-v1.webp", this.view.scene);
-      const actions = new Texture("/assets/character/haunted-frog-actions-v2.webp", this.view.scene);
+      onStage("奶蛙正在就位…");
+      const texture = (url: string) => {
+        let image: Texture;
+        return withTimeout(new Promise<Texture>((resolve, reject) => {
+          image = new Texture(url, this.view.scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => resolve(image), message => reject(new Error(message || "奶蛙贴图未能载入")));
+        }), "奶蛙贴图准备超时，请重试。");
+      };
+      const [original, actions] = await Promise.all([texture("/assets/character/haunted-frog-v1.webp"), texture("/assets/character/haunted-frog-actions-v2.webp")]);
+      if (this.disposed) throw new Error("场景已关闭");
       this.models = installEscapeModels(this.view.scene, this.containers[0], { original, actions }, this.reduced);
       for (const mesh of [...this.models.propRoots.values()].flatMap(n => n.getChildMeshes())) this.shadow.addShadowCaster(mesh, false);
       for (const door of this.view.doors.values()) for (const mesh of door.getChildMeshes()) this.shadow.addShadowCaster(mesh, false);
-      await this.view.scene.whenReadyAsync();
+      onStage("正在点亮浴室…");
+      await withTimeout(this.view.scene.whenReadyAsync(), "浴室灯光准备超时，请重试。");
     } catch (e) { this.dispose(); throw e; }
   }
   resize(high = false) {

@@ -1,3 +1,4 @@
+import { loadImage } from "./loading.ts";
 export const artworkPaths = {
   hauntedCover: "/assets/scenes/haunted-cover-v1.webp",
   cover: "/assets/scenes/bath-cover-v2.webp",
@@ -23,9 +24,7 @@ export async function loadArtwork(
   let done = 0;
   const images = await Promise.all(
     entries.map(async ([name, url]) => {
-      const image = new Image();
-      image.src = url;
-      await image.decode();
+      const image = await loadImage(url);
       onProgress(++done, entries.length);
       return [name, image] as const;
     }),

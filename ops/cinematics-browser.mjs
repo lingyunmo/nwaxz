@@ -85,7 +85,10 @@ try {
   const missing=await browser.newContext({serviceWorkers:'block'}),fallback=await missing.newPage();
   fallback.on('pageerror',e=>errors.push(e.message));
   await fallback.route('**/assets/video/escape-opening-v1.mp4',r=>r.fulfill({status:404,body:''}));
-  await fallback.goto(base);await fallback.locator('#extreme').click();await fallback.locator('#escape-new').click();
+  await fallback.goto(base);
+  await fallback.locator('#enter-now').waitFor({timeout:40000});
+  await fallback.locator('#enter-now').click();
+  await fallback.locator('#extreme').click();await fallback.locator('#escape-new').click();
   await fallback.locator('#escape-panel[hidden]').waitFor({state:'attached',timeout:30000});
   assert.equal(await fallback.locator('.escape-cinematic').count(),0,'missing CG must fall back to playable scene');
   await missing.close();
@@ -93,7 +96,8 @@ try {
   await page.evaluate(async()=>{await navigator.serviceWorker.ready;});
   await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
   const urls=['opening','caught-1','caught-2','caught-3'].map(x=>`/assets/video/escape-${x}-v1.mp4`);
-  for(const url of urls)await page.evaluate(async u=>{const r=await fetch(u);await r.arrayBuffer();},url);
+  const cachedVideos=await page.evaluate(async urls=>Promise.all(urls.map(async url=>!!await caches.match(url,{ignoreSearch:true}))),urls);
+  assert.ok(cachedVideos.every(Boolean),'all four complete cinematic videos must be present in the precache');
   await context.setOffline(true);
   for(const url of urls){
     const range=await page.evaluate(async u=>{const r=await fetch(u,{headers:{Range:'bytes=0-255'}});return{status:r.status,length:(await r.arrayBuffer()).byteLength,range:r.headers.get('content-range')};},url);

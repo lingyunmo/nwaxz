@@ -3,6 +3,7 @@ import "./menu.css";
 import type { EscapeGame } from "./escape/game.ts";
 import { version } from "../package.json";
 import { createGameUpdater } from "./updates.ts";
+import { preloadGame } from "./preload.ts";
 import { levels } from "./game/levels";
 import { canEnter, modeIndices, modeOf, nextLevel, type GameMode } from "./game/modes";
 import { BathGame, type RunResult } from "./game/renderer";
@@ -603,27 +604,42 @@ function applyUpdate() {
   app.querySelector<HTMLDialogElement>("dialog[open]")?.close();
   gameUpdater.apply();
 }
-async function boot() {
+async function boot(enterNow = false) {
   try {
-    const artwork = loadArtwork((done, total) => {
-      const meter = app.querySelector<HTMLProgressElement>("#boot-progress");
-      if (meter) meter.value = (done / total) * 90;
-    });
+    const loading = $(".boot-loading");
+    loading.innerHTML = '<small id="boot-label">正在准备浴室…</small><progress id="boot-progress" max="100" aria-label="游戏加载进度"></progress><small id="boot-detail">初次进入会准备视频、地图和音乐</small>';
+    if (!enterNow && !import.meta.env.DEV) {
+      await preloadGame(value => {
+        const percent = value.totalBytes > 0 ? Math.floor(value.loadedBytes / value.totalBytes * 100) : 0;
+        $<HTMLProgressElement>("#boot-progress").value = percent;
+        $("#boot-detail").textContent = `${percent}% · ${(value.loadedBytes / 1048576).toFixed(1)} / ${(value.totalBytes / 1048576).toFixed(1)} MB`;
+      }, () => gameUpdater.check());
+      offlineReady = true;
+    }
+    $("#boot-label").textContent = "正在布置浴室…";
+    $("#boot-progress").removeAttribute("value");
+    const artwork = loadArtwork((done, total) => { $("#boot-detail").textContent = `浴场贴图 ${done} / ${total}`; });
+    const scene = (async () => { if (!enterNow) {
+      const escape = await import("./escape/game.ts");
+      await escape.prepareEscape(settings, stage => { $("#boot-detail").textContent = stage; });
+    } })();
     let saveReadFailed = false;
     const saved = loadProgress().catch(() => {
       saveReadFailed = true;
       return emptyProgress();
     });
-    [art, progress] = await Promise.all([artwork, saved]);
+    [art, progress] = await Promise.all([artwork, saved, scene]);
     applySettings();
     renderHome();
     if (saveReadFailed) toast("存档读取失败，请稍后重试。");
-  } catch {
+  } catch (error) {
     const loading = app.querySelector<HTMLElement>(".boot-loading");
     if (loading) {
       loading.innerHTML =
-        '<p>资源载入失败，请检查网络后重试。</p><button id="retry-load">重新加载</button>';
+        '<p id="boot-error"></p><button id="retry-load">继续准备</button><button id="enter-now">先进入游戏</button>';
+      $("#boot-error").textContent = error instanceof Error ? error.message : "浴室准备失败，请重试。";
       $("#retry-load").onclick = () => location.reload();
+      $("#enter-now").onclick = () => void boot(true);
     }
   }
 }

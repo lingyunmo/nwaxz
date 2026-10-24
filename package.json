@@ -1,6 +1,6 @@
 {
   "name": "nwaxz",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "license": "UNLICENSED",
@@ -28,6 +28,10 @@
     "typescript": "7.0.2",
     "vite": "8.3.4",
     "vite-plugin-pwa": "2.0.0",
+    "workbox-core": "7.4.1",
+    "workbox-precaching": "7.4.1",
+    "workbox-range-requests": "7.4.1",
+    "workbox-routing": "7.4.1",
     "workbox-window": "^7.4.1"
   }
 }

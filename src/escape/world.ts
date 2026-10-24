@@ -1,5 +1,5 @@
 export type Vec = { x: number; z: number };
-export type Item = "brass" | "cellar" | "fuse" | "cutters";
+export type Item = "brass" | "cellar" | "fuse" | "cutters" | "handwheel";
 export type EscapeInput = { forward?: number; strafe?: number; turn?: number; look?: number; sprint?: boolean };
 export type Prop = Vec & { id: string; kind: "wardrobe" | "drawer" | "power" | "valve" | "exit" | "note"; name: string; loot?: Item; text?: string; battery?: boolean };
 export const SIZE = 25;
@@ -10,7 +10,8 @@ const carve = (x: number, z: number, w: number, h: number) => {
 carve(1, 1, 6, 6); carve(9, 1, 6, 6); carve(17, 1, 6, 6);
 carve(1, 8, 22, 3);
 carve(1, 12, 6, 6); carve(9, 12, 6, 6); carve(17, 12, 6, 11);
-for (const [x, z] of [[4, 7], [11, 7], [19, 7], [4, 11], [11, 11], [19, 11]]) grid[z][x] = 0;
+carve(1, 19, 6, 5); carve(9, 19, 6, 5);
+for (const [x, z] of [[4, 7], [11, 7], [19, 7], [4, 11], [11, 11], [19, 11], [4, 18], [11, 18]]) grid[z][x] = 0;
 export const MAP = grid;
 export const DOORS = [
   { id: "bedroom", x: 4, z: 7, name: "寝室门" },
@@ -19,6 +20,8 @@ export const DOORS = [
   { id: "laundry", x: 4, z: 11, name: "洗衣间门" },
   { id: "workshop", x: 11, z: 11, name: "配电室门" },
   { id: "cellar", x: 19, z: 11, name: "地下检修门", key: "cellar" as Item },
+  { id: "changing", x: 4, z: 18, name: "旧更衣室" },
+  { id: "boiler", x: 11, z: 18, name: "锅炉房" },
 ];
 export const PROPS: Prop[] = [
   { id: "bed-drawer", x: 2.5, z: 2.5, kind: "drawer", name: "床头抽屉", loot: "brass" },
@@ -36,14 +39,22 @@ export const PROPS: Prop[] = [
   { id: "cellar-hide", x: 21.5, z: 19.5, kind: "wardrobe", name: "地下室衣柜" },
   { id: "drain", x: 18.5, z: 20.5, kind: "valve", name: "排水阀" },
   { id: "exit-note", x: 18.5, z: 17.5, kind: "note", name: "最后一张纸条", text: "先转开排水阀，再剪开南墙的铁网。下水道就在后面。" },
+  { id: "changing-drawer", x: 2.5, z: 20.5, kind: "drawer", name: "旧更衣柜", loot: "handwheel" },
+  { id: "changing-hide", x: 5.5, z: 22.5, kind: "wardrobe", name: "更衣室柜子" },
+  { id: "boiler-note", x: 9.5, z: 22.5, kind: "note", name: "维修纸条", text: "锅炉泄压顺序：先关冷水，再开回流，最后排气。手轮缺失时，阀杆会空转。" },
+  { id: "boiler-hide", x: 13.5, z: 22.5, kind: "wardrobe", name: "锅炉检修柜" },
+  { id: "valve-cold", x: 9.5, z: 20.5, kind: "valve", name: "冷水阀" },
+  { id: "valve-return", x: 11.5, z: 20.5, kind: "valve", name: "回流阀" },
+  { id: "valve-vent", x: 13.5, z: 20.5, kind: "valve", name: "排气阀" },
   { id: "exit", x: 20.5, z: 22.65, kind: "exit", name: "下水道铁网" },
 ];
-export const ITEM_NAMES: Record<Item, string> = { brass: "黄铜钥匙", cellar: "检修门钥匙", fuse: "保险丝", cutters: "断线钳" };
+export const ITEM_NAMES: Record<Item, string> = { brass: "黄铜钥匙", cellar: "检修门钥匙", fuse: "保险丝", cutters: "断线钳", handwheel: "生锈手轮" };
 export const ROOMS = [
   { name: "寝室", x: 1, z: 1, w: 6, h: 6 }, { name: "档案室", x: 9, z: 1, w: 6, h: 6 },
   { name: "值班室", x: 17, z: 1, w: 6, h: 6 }, { name: "回声长廊", x: 1, z: 8, w: 22, h: 3 },
   { name: "洗衣间", x: 1, z: 12, w: 6, h: 6 }, { name: "配电室", x: 9, z: 12, w: 6, h: 6 },
   { name: "地下检修室", x: 17, z: 12, w: 6, h: 11 },
+  { name: "旧更衣室", x: 1, z: 19, w: 6, h: 5 }, { name: "锅炉房", x: 9, z: 19, w: 6, h: 5 },
 ];
 const normalRoomAt = (point: Vec) => ROOMS.find(r => point.x >= r.x && point.x < r.x + r.w && point.z >= r.z && point.z < r.z + r.h)?.name;
 export function roomAt(point: Vec) {
@@ -55,6 +66,16 @@ export function roomAt(point: Vec) {
   }
   return normalRoomAt(point) ?? "门口";
 }
+export const HAZARDS: Vec[] = [{ x: 7.5, z: 9.5 }, { x: 16.5, z: 9.5 }];
+export const VALVE_ORDER = ["valve-cold", "valve-return", "valve-vent"] as const;
+const EXPANSION_DOORS = new Set(["changing", "boiler"]);
+const EXPANSION_PROPS = new Set(["changing-drawer", "changing-hide", "boiler-note", "boiler-hide", ...VALVE_ORDER]);
+const inExpansionRoom = (point: unknown): point is Vec => {
+  if (!point || typeof point !== "object" || Array.isArray(point)) return false;
+  const { x, z } = point as Partial<Vec>;
+  return typeof x === "number" && Number.isFinite(x) && typeof z === "number" && Number.isFinite(z)
+    && z >= 19 && z < 24 && (x >= 1 && x < 7 || x >= 9 && x < 15);
+};
 type HunterState = "patrol" | "investigate" | "chase" | "search";
 export type Phase = "playing" | "caught" | "lost" | "won";
 export type EscapeSnapshot = {
@@ -63,18 +84,19 @@ export type EscapeSnapshot = {
   phase: Phase; inventory: Item[]; searched: string[]; opened: string[]; unlocked: string[];
   notes: string[]; hidden?: string; power: boolean; drained: boolean; stones: number;
   explored?: number[];
+  expansion?: { enabled: true; valves: string[] };
   pursuit?: { target: Vec; seenHide?: string; unseen: number; wait: number; patrolIndex: number };
 };
 export type EscapeEvent = { type: "message" | "step" | "door" | "item" | "laugh" | "caught" | "won" | "noise"; text?: string };
 const dist = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.z - b.z);
 export const angleDelta = (a: number, b: number) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 const initialOpen = ["bedroom", "infirmary", "laundry", "workshop"];
-const patrol: Vec[] = [{ x: 12.5, z: 9.5 }, { x: 20.5, z: 9.5 }, { x: 19.5, z: 3.5 }, { x: 12.5, z: 9.5 }, { x: 4.5, z: 9.5 }, { x: 4.5, z: 14.5 }];
+const patrol: Vec[] = [{ x: 12.5, z: 9.5 }, { x: 20.5, z: 9.5 }, { x: 19.5, z: 3.5 }, { x: 12.5, z: 9.5 }, { x: 4.5, z: 9.5 }, { x: 4.5, z: 14.5 }, { x: 4.5, z: 21.5 }, { x: 11.5, z: 21.5 }];
 export class EscapeWorld {
   data: EscapeSnapshot = {
     version: 1, player: { x: 3.5, z: 5.5, angle: -Math.PI / 2, pitch: 0, stamina: 100, battery: 100, light: true, crouched: false },
     hunter: { x: 12.5, z: 9.5, angle: 0, state: "patrol" }, elapsed: 0, captures: 0, phase: "playing",
-    inventory: [], searched: [], opened: [...initialOpen], unlocked: [...initialOpen], notes: [], power: false, drained: false, stones: 2,
+    inventory: [], searched: [], opened: [...initialOpen], unlocked: [...initialOpen], notes: [], power: false, drained: false, stones: 2, expansion: { enabled: true, valves: [] },
   };
   events: EscapeEvent[] = [];
   target: Vec = { ...patrol[0] };
@@ -84,6 +106,7 @@ export class EscapeWorld {
   private wait = 0;
   private unseen = 0;
   private footstep = 0;
+  private glassArmed = HAZARDS.map(() => true);
   private hunterStep = 0;
   private laughAt = 0;
   private seenHide?: string;
@@ -112,6 +135,10 @@ export class EscapeWorld {
     if (!d.power) return "将保险丝装入配电室的配电箱";
     if (!d.unlocked.includes("cellar")) return "用钥匙打开走廊东侧的地下检修门";
     if (!d.inventory.includes("cutters")) return "搜索地下检修室工具柜，找到断线钳";
+    if (d.expansion?.enabled) {
+      if (!d.inventory.includes("handwheel")) return "去旧更衣室找生锈手轮";
+      if (d.expansion.valves.length < VALVE_ORDER.length) return "读维修纸条，按顺序转动锅炉房阀门";
+    }
     if (!d.drained) return "转开地下室深处的排水阀";
     return "剪开最南侧的下水道铁网，逃出去";
   }
@@ -121,6 +148,7 @@ export class EscapeWorld {
     const cx = Math.floor(x), cz = Math.floor(z);
     if (MAP[cz]?.[cx] !== 0) return 1;
     const door = DOORS.find(d => d.x === cx && d.z === cz);
+    if (door && EXPANSION_DOORS.has(door.id) && !this.data.expansion?.enabled) return 2;
     if (door && !this.data.opened.includes(door.id) && !(hunter && this.data.unlocked.includes(door.id))) return 2;
     return 0;
   }
@@ -205,6 +233,14 @@ export class EscapeWorld {
         this.footstep = 0; this.events.push({ type: "step" });
         if (!p.crouched) this.noise(p, running ? 7 : 2.4);
       }
+      if (d.expansion?.enabled) HAZARDS.forEach((hazard, index) => {
+        const distance = dist(p, hazard);
+        if (distance > .85) this.glassArmed[index] = true;
+        else if (distance < .34 && this.glassArmed[index]) {
+          this.glassArmed[index] = false;
+          if (!p.crouched) { this.events.push({ type: "noise" }); this.noise(hazard, 11); this.say("脚下的碎玻璃响了！它听见了动静。"); }
+        }
+      });
     }
     if (this.pending) {
       const object = PROPS.find(o => o.id === this.pending!.id)!;
@@ -233,7 +269,8 @@ export class EscapeWorld {
       if (h.state === "patrol") {
         this.wait += dt;
         if (this.wait < 1.8) return;
-        this.wait = 0; this.patrolIndex = (this.patrolIndex + 1) % patrol.length; this.target = { ...patrol[this.patrolIndex] }; this.pathTimer = 0;
+        const patrolLength = d.expansion?.enabled ? patrol.length : 6;
+        this.wait = 0; this.patrolIndex = (this.patrolIndex + 1) % patrolLength; this.target = { ...patrol[this.patrolIndex] }; this.pathTimer = 0;
       } else {
         this.wait -= dt;
         if (this.wait > 0) { h.angle += dt * .55; return; }
@@ -245,7 +282,7 @@ export class EscapeWorld {
     let next = this.path[0];
     if (!next) {
       if (Math.floor(h.x) === Math.floor(this.target.x) && Math.floor(h.z) === Math.floor(this.target.z)) next = this.target;
-      else { h.state = "patrol"; this.patrolIndex = (this.patrolIndex + 1) % patrol.length; this.target = { ...patrol[this.patrolIndex] }; this.pathTimer = 0; return; }
+      else { const patrolLength = d.expansion?.enabled ? patrol.length : 6; h.state = "patrol"; this.patrolIndex = (this.patrolIndex + 1) % patrolLength; this.target = { ...patrol[this.patrolIndex] }; this.pathTimer = 0; return; }
     }
     const distance = dist(h, next);
     if (distance < .08) { this.path.shift(); return; }
@@ -280,8 +317,8 @@ export class EscapeWorld {
     if (this.data.hidden) return { id: "leave-hide", label: "悄悄离开衣柜", position: this.data.player };
     const p = this.data.player;
     const objects = [
-      ...PROPS.map(o => ({ id: o.id, position: o, label: o.kind === "drawer" ? this.data.searched.includes(o.id) ? `已搜过：${o.name}` : `搜索${o.name}` : o.kind === "wardrobe" ? `躲进${o.name}` : o.kind === "note" ? `阅读${o.name}` : o.name })),
-      ...DOORS.map(o => ({ id: o.id, position: { x: o.x + .5, z: o.z + .5 }, label: `${this.data.opened.includes(o.id) ? "关闭" : "打开"}${o.name}` })),
+      ...PROPS.filter(o => this.data.expansion?.enabled || !EXPANSION_PROPS.has(o.id)).map(o => ({ id: o.id, position: o, label: o.kind === "drawer" ? this.data.searched.includes(o.id) ? `已搜过：${o.name}` : `搜索${o.name}` : o.kind === "wardrobe" ? `躲进${o.name}` : o.kind === "note" ? `阅读${o.name}` : o.name })),
+      ...DOORS.filter(o => this.data.expansion?.enabled || !EXPANSION_DOORS.has(o.id)).map(o => ({ id: o.id, position: { x: o.x + .5, z: o.z + .5 }, label: `${this.data.opened.includes(o.id) ? "关闭" : "打开"}${o.name}` })),
     ];
     return objects.filter(o => dist(p, o.position) < 1.7 && Math.abs(p.pitch ?? 0) < 1.05 && Math.abs(angleDelta(Math.atan2(o.position.z - p.z, o.position.x - p.x), p.angle)) < .8 && this.lineOfSight(p, o.position, DOORS.some(d => d.id === o.id)))
       .sort((a, b) => dist(p, a.position) - dist(p, b.position))[0];
@@ -328,8 +365,22 @@ export class EscapeWorld {
       d.power = true; this.noise(object, 16); this.events.push({ type: "door" }); this.say("电源恢复。小心，动静太大了。"); return;
     }
     if (object.kind === "valve") {
+      if (object.id !== "drain" && d.expansion?.enabled) {
+        if (!d.power) { this.say("锅炉管路没有供电。先修好配电箱。"); return; }
+        if (!d.inventory.includes("handwheel")) { this.say("阀杆上缺了手轮，去旧更衣室找找。"); return; }
+        const valves = d.expansion.valves, expected = VALVE_ORDER[valves.length];
+        if (valves.includes(object.id)) { this.say(`${object.name}已经转到位。`); return; }
+        if (object.id !== expected) {
+          d.expansion.valves = [];
+          this.noise(object, 14); this.events.push({ type: "noise" });
+          this.say("阀门顺序错了，管道猛地震响。顺序已重置！"); return;
+        }
+        valves.push(object.id); this.noise(object, 7); this.events.push({ type: "door" });
+        this.say(valves.length === VALVE_ORDER.length ? "最后一股蒸汽散尽，锅炉已泄压。" : `${object.name}转到位。继续按纸条操作。`); return;
+      }
       if (!d.power) { this.say("排水泵没电。"); return; }
       if (d.drained) { this.say("水位已经降下去了。"); return; }
+      if (d.expansion?.enabled && (!d.inventory.includes("handwheel") || d.expansion.valves.length !== VALVE_ORDER.length)) { this.say("锅炉尚未泄压，排水阀也缺少手轮。"); return; }
       d.drained = true; this.noise(object, 16); this.events.push({ type: "noise" }); this.say("水位下降，铁网露出来了。"); return;
     }
     if (!d.drained) { this.say("下水道还在涌水，先转开排水阀。"); return; }
@@ -366,13 +417,18 @@ export class EscapeWorld {
     const d = raw as EscapeSnapshot;
     const number = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
     const ids = (a: unknown, allowed: string[]) => Array.isArray(a) && new Set(a).size === a.length && a.every(id => typeof id === "string" && allowed.includes(id));
-    if (Object.keys(d).some(k => !["version", "player", "hunter", "elapsed", "captures", "phase", "inventory", "searched", "opened", "unlocked", "notes", "hidden", "power", "drained", "stones", "pursuit", "explored"].includes(k))
+    if (Object.keys(d).some(k => !["version", "player", "hunter", "elapsed", "captures", "phase", "inventory", "searched", "opened", "unlocked", "notes", "hidden", "power", "drained", "stones", "pursuit", "explored", "expansion"].includes(k))
       || d.explored !== undefined && (!Array.isArray(d.explored) || d.explored.length > SIZE * SIZE || new Set(d.explored).size !== d.explored.length || !d.explored.every(v => Number.isInteger(v) && v >= 0 && v < SIZE * SIZE))
       || d.version !== 1 || !d.player || !d.hunter || !number(d.elapsed, 0, 86400) || !Number.isInteger(d.captures) || !number(d.captures, 0, 3)
+      || d.pursuit !== undefined && (!d.pursuit || typeof d.pursuit !== "object" || Array.isArray(d.pursuit)
+        || !d.pursuit.target || typeof d.pursuit.target !== "object" || Array.isArray(d.pursuit.target))
       || !["playing", "caught", "lost", "won"].includes(d.phase) || !["patrol", "investigate", "chase", "search"].includes(d.hunter.state)
       || !ids(d.inventory, Object.keys(ITEM_NAMES)) || !ids(d.searched, PROPS.filter(o => o.kind === "drawer").map(o => o.id))
       || !ids(d.opened, DOORS.map(o => o.id)) || !ids(d.unlocked, DOORS.map(o => o.id)) || !d.opened.every(id => d.unlocked.includes(id))
       || !ids(d.notes, PROPS.filter(o => o.kind === "note").map(o => o.id)) || !Number.isInteger(d.stones) || !number(d.stones, 0, 3)
+      || d.expansion !== undefined && (!d.expansion || typeof d.expansion !== "object" || Array.isArray(d.expansion)
+        || Object.keys(d.expansion).some(k => !["enabled", "valves"].includes(k)) || d.expansion.enabled !== true
+        || !ids(d.expansion.valves, [...VALVE_ORDER]) || d.expansion.valves.some((id, index) => id !== VALVE_ORDER[index]))
       || typeof d.power !== "boolean" || typeof d.drained !== "boolean" || typeof d.player.light !== "boolean" || typeof d.player.crouched !== "boolean"
       || !number(d.player.stamina, 0, 100) || !number(d.player.battery, 0, 100) || !number(d.player.angle, -Math.PI, Math.PI) || !number(d.hunter.angle, -Math.PI, Math.PI)
       || d.player.pitch !== undefined && !number(d.player.pitch, -1.3, 1.3)
@@ -380,6 +436,15 @@ export class EscapeWorld {
     if ((d.phase === "lost") !== (d.captures === 3) || d.phase === "caught" && d.captures === 0
       || d.power && !d.inventory.includes("fuse") || d.drained && !d.power
       || d.phase === "won" && (!d.drained || !d.inventory.includes("cutters"))
+      || d.expansion === undefined && (d.inventory.includes("handwheel") || d.searched.some(id => EXPANSION_PROPS.has(id)) || d.notes.includes("boiler-note")
+        || d.opened.some(id => EXPANSION_DOORS.has(id)) || d.unlocked.some(id => EXPANSION_DOORS.has(id))
+        || inExpansionRoom(d.player) || inExpansionRoom(d.hunter)
+        || d.pursuit && inExpansionRoom(d.pursuit.target)
+        || d.pursuit?.seenHide && EXPANSION_PROPS.has(d.pursuit.seenHide)
+        || d.explored?.some(index => inExpansionRoom({ x: index % SIZE + .5, z: Math.floor(index / SIZE) + .5 })))
+      || d.expansion !== undefined && (d.inventory.includes("handwheel") !== d.searched.includes("changing-drawer")
+        || d.expansion.valves.length > 0 && (!d.inventory.includes("handwheel") || !d.power)
+        || d.drained && d.expansion.valves.length !== VALVE_ORDER.length)
       || DOORS.some(door => door.key && d.unlocked.includes(door.id) && !d.inventory.includes(door.key))
       || PROPS.some(o => o.loot && d.searched.includes(o.id) && !d.inventory.includes(o.loot))) throw new Error("逃生存档目标状态不正确");
     const world = new EscapeWorld(); world.data = JSON.parse(JSON.stringify(d));
@@ -393,7 +458,7 @@ export class EscapeWorld {
     if (d.pursuit) {
       const m = d.pursuit;
       if (!m.target || !number(m.target.x, .2, SIZE - .2) || !number(m.target.z, .2, SIZE - .2) || !number(m.unseen, 0, 86400) || !number(m.wait, -10, 86400)
-        || !Number.isInteger(m.patrolIndex) || !number(m.patrolIndex, 0, patrol.length - 1) || m.seenHide !== undefined && !PROPS.some(o => o.id === m.seenHide && o.kind === "wardrobe")) throw new Error("逃生存档追逐状态不正确");
+        || !Number.isInteger(m.patrolIndex) || !number(m.patrolIndex, 0, (d.expansion?.enabled ? patrol.length : 6) - 1) || m.seenHide !== undefined && !PROPS.some(o => o.id === m.seenHide && o.kind === "wardrobe")) throw new Error("逃生存档格式不正确");
       world.target = { ...m.target }; world.seenHide = m.seenHide; world.unseen = m.unseen; world.wait = m.wait; world.patrolIndex = m.patrolIndex;
     }
     world.mapPosition = "";

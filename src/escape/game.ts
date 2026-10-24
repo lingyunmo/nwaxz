@@ -5,7 +5,7 @@ import { SaveWriteError, writeSaveBatch } from "./save.ts";
 import { CinematicPlayer, randomOpeningClip, randomCaughtClip } from "./cinematic.ts";
 import { AudioManager } from "../audio.ts";
 import type { Settings } from "../settings.ts";
-import { EscapeWorld, ITEM_NAMES, type EscapeSnapshot } from "./world.ts";
+import { EscapeWorld, ITEM_NAMES, PROPS, type EscapeSnapshot } from "./world.ts";
 import { EscapeRenderer, type EscapeArt } from "./renderer.ts";
 import { prepareEscape, returnPreparedEscape, takePreparedEscape } from "./preparation.ts";
 import { EscapeLook, type MouseLookMode } from "./look.ts";
@@ -18,7 +18,7 @@ const safe = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&l
 function readBest(raw: unknown): Best | undefined {
   if (!raw || typeof raw !== "object") return;
   const r = raw as Best;
-  if (r.version !== 1 || !Number.isInteger(r.escapes) || r.escapes < 1 || r.escapes > 1e9 || !Number.isInteger(r.bestTimeMs) || r.bestTimeMs < 0 || r.bestTimeMs > 86400_000 || !Number.isInteger(r.fewestCaptures) || r.fewestCaptures < 0 || r.fewestCaptures > 2 || !Number.isInteger(r.mostNotes) || r.mostNotes < 0 || r.mostNotes > 3) return;
+  if (r.version !== 1 || !Number.isInteger(r.escapes) || r.escapes < 1 || r.escapes > 1e9 || !Number.isInteger(r.bestTimeMs) || r.bestTimeMs < 0 || r.bestTimeMs > 86400_000 || !Number.isInteger(r.fewestCaptures) || r.fewestCaptures < 0 || r.fewestCaptures > 2 || !Number.isInteger(r.mostNotes) || r.mostNotes < 0 || r.mostNotes > 4) return;
   return { version: 1, escapes: r.escapes, bestTimeMs: r.bestTimeMs, fewestCaptures: r.fewestCaptures, mostNotes: r.mostNotes };
 }
 export class EscapeGame {
@@ -66,12 +66,12 @@ export class EscapeGame {
     this.root.innerHTML = `<main class="escape-shell" aria-label="极限恐怖逃生"><canvas id="escape-view" tabindex="0" aria-label="3D第一人称逃生。WASD移动，点击画面后移动鼠标转头；手机滑动转头。方向键转身，PageUp和PageDown抬头低头，Shift奔跑，C蹲行，F手电，E交互，Q丢石子，Esc暂停并释放鼠标。"></canvas>
       <header class="escape-hud"><button id="escape-pause" class="escape-round" aria-label="暂停逃生">${icon("pause")}</button><div class="escape-location"><span id="escape-room">${safe(this.world.room)}</span><span id="escape-night">第1夜 · 00:00</span><div id="escape-lives" aria-label="剩余机会"></div></div></header>
       <button id="escape-map" class="escape-map-button" aria-label="查看地图，当前位置：${safe(this.world.room)}"><canvas id="escape-minimap" width="208" height="208" aria-hidden="true"></canvas><span>浴场地图 <kbd>M</kbd></span><small id="escape-map-room">${safe(this.world.room)}</small></button>
+      <div class="escape-inventory" id="escape-inventory" aria-label="随身物品"></div>
       <div class="escape-room-toast" id="escape-room-toast" aria-live="polite" hidden></div>
       <div class="escape-mouse-hint" id="escape-mouse-hint" hidden>点击画面，移动鼠标转头</div>
       <div class="escape-crosshair" aria-hidden="true"></div><div class="escape-danger" id="escape-danger" role="status"></div><div class="escape-notice" id="escape-notice" role="status" aria-live="polite" hidden></div>
       <div class="escape-search" id="escape-search" hidden><span>搜索中</span><progress max="1.15" value="0" aria-label="搜索进度"></progress></div>
       <div class="escape-bottom"><div class="escape-meters"><label title="体力">${icon("run")}<meter id="escape-stamina" aria-label="体力" min="0" max="100" value="100"></meter></label><label title="手电电量">${icon("light")}<meter id="escape-battery" aria-label="手电电量" min="0" max="100" value="100"></meter></label></div>
-      <div class="escape-inventory" id="escape-inventory" aria-label="随身物品"></div>
       <div class="escape-controls"><div class="escape-stick" id="escape-stick" aria-label="移动摇杆"><span></span></div><div class="escape-actions"><button id="escape-light" aria-label="开关手电" title="手电 F">${icon("light")}<kbd>F</kbd></button><button id="escape-crouch" aria-label="切换蹲行" title="蹲行 C">${icon("crouch")}<kbd>C</kbd></button><button id="escape-stone" aria-label="丢石子" title="石子 Q">${icon("stone")}<b id="escape-stones">2</b><kbd>Q</kbd></button><button id="escape-sprint" aria-label="按住奔跑" title="奔跑 Shift">${icon("run")}<kbd>⇧</kbd></button></div></div>
       <button class="escape-interact" id="escape-interact" hidden>${icon("hand")}<span></span><kbd>E</kbd></button></div>
       <div id="escape-panel" class="escape-panel" role="dialog" aria-modal="true" aria-label="逃生菜单"></div><input id="escape-import" type="file" accept=".json,application/json" hidden></main>`;
@@ -202,8 +202,10 @@ export class EscapeGame {
   }
   private help(fromPause: boolean) {
     const touch = matchMedia("(pointer:coarse)").matches;
+    const expanded = !!this.world.data.expansion?.enabled;
     const controls = touch ? [["移动", "左侧摇杆"], ["观察", "滑动右侧画面"], ["互动", "靠近目标后点击手掌"], ["奔跑", "按住奔跑按钮"]] : [["移动", "WASD / 方向键"], ["观察", "点击画面后移动鼠标"], ["抬头 / 低头", "PageUp / PageDown"], ["互动", "E / 空格"], ["奔跑", "Shift"], ["蹲行 / 手电", "C / F"], ["石子 / 地图", "Q / M"], ["暂停 / 释放鼠标", "Esc"]];
-    this.panel(`<h2>操作</h2><dl class="escape-bindings">${controls.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("")}</dl><ul class="escape-help"><li>找齐钥匙和工具，打开下水道铁网。</li><li>奔跑会发出声音，石子可以引开奶蛙。</li><li>先甩掉它的视线，再躲进衣柜。</li><li>被抓后进入下一夜，物品保留。第三次被抓则失败。</li></ul><button id="escape-help-close" class="escape-primary">返回</button>`);
+    const tips = ["找齐钥匙和工具，打开下水道铁网。", ...(expanded ? ["旧更衣室里有缺失的手轮；锅炉房维修纸条记着泄压顺序。", "走廊碎玻璃可以绕开或蹲行通过。"] : []), "奔跑会发出声音，石子可以引开奶蛙。", "先甩掉它的视线，再躲进衣柜。", "被抓后进入下一夜，物品保留。第三次被抓则失败。"];
+    this.panel(`<h2>操作</h2><dl class="escape-bindings">${controls.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("")}</dl><ul class="escape-help">${tips.map(tip => `<li>${tip}</li>`).join("")}</ul><button id="escape-help-close" class="escape-primary">返回</button>`);
     this.button("escape-help-close", () => fromPause ? this.pause() : this.intro());
   }
   private confirmRestart() {
@@ -219,7 +221,8 @@ export class EscapeGame {
     }
     const d = this.world.data;
     if (d.phase === "won") {
-      this.panel(`<p class="escape-eyebrow">下水道逃生</p><h1>逃生成功</h1><div class="escape-result-stats"><span>用时<strong>${time(d.elapsed)}</strong></span><span>被抓<strong>${d.captures} / 3</strong></span><span>纸条<strong>${d.notes.length} / 3</strong></span></div><p class="escape-record">最佳 ${time((this.record?.bestTimeMs ?? d.elapsed * 1000) / 1000)}</p><button id="escape-again" class="escape-primary">再玩一次</button><button id="escape-result-exit" class="escape-secondary">返回首页</button>`);
+      const noteTotal = d.expansion?.enabled ? PROPS.filter(prop => prop.kind === "note").length : 3;
+      this.panel(`<p class="escape-eyebrow">下水道逃生</p><h1>逃生成功</h1><div class="escape-result-stats"><span>用时<strong>${time(d.elapsed)}</strong></span><span>被抓<strong>${d.captures} / 3</strong></span><span>纸条<strong>${d.notes.length} / ${noteTotal}</strong></span></div><p class="escape-record">最佳 ${time((this.record?.bestTimeMs ?? d.elapsed * 1000) / 1000)}</p><button id="escape-again" class="escape-primary">再玩一次</button><button id="escape-result-exit" class="escape-secondary">返回首页</button>`);
       this.button("escape-again", () => void this.start(false)); this.button("escape-result-exit", this.exit);
     } else {
       this.panel(`<p class="escape-eyebrow">${d.phase === "lost" ? "第三次被抓住" : `第 ${d.captures} 次被抓住`}</p><h2>${d.phase === "lost" ? "逃生失败" : "被抓住了"}</h2><p>${d.phase === "lost" ? `坚持了 ${time(d.elapsed)}` : "物品和已打开的锁会保留。"}</p><button id="escape-next" class="escape-primary">${d.phase === "lost" ? "重新开始" : `醒来 · 第 ${d.captures + 1} 夜`}</button><div class="escape-links"><button id="escape-replay-laugh">再听笑声</button><button id="escape-result-exit">保存并退出</button></div>`);
@@ -369,12 +372,13 @@ export class EscapeGame {
     roomCue.hidden = !this.started || this.paused || !!this.cinematic || d.phase !== "playing" || d.elapsed >= this.roomCueUntil;
     const pauseRoom = this.root.querySelector<HTMLElement>("#escape-map-current");
     if (pauseRoom) pauseRoom.textContent = `当前位置：${room}`;
-    const items = ["brass", "cellar", "fuse", "cutters"] as const;
-    const inventoryKey = d.inventory.join(",") + ":" + d.captures;
+    const items = d.expansion?.enabled ? ["brass", "cellar", "fuse", "cutters", "handwheel"] as const : ["brass", "cellar", "fuse", "cutters"] as const;
+    const inventoryKey = d.inventory.join(",") + ":" + d.captures + ":" + !!d.expansion?.enabled;
     if (inventoryKey !== this.inventoryKey) {
       this.inventoryKey = inventoryKey;
+      this.$("#escape-inventory").classList.toggle("expansion-inventory", !!d.expansion?.enabled);
       this.$("#escape-inventory").innerHTML = items.map((item, i) => {
-        const owned = d.inventory.includes(item), glyph = item === "cutters" ? "cutters" : item === "fuse" ? "fuse" : "key";
+        const owned = d.inventory.includes(item), glyph = item === "cutters" ? "cutters" : item === "fuse" ? "fuse" : item === "handwheel" ? "handwheel" : "key";
         return `<span class="escape-slot ${owned ? "owned" : ""}" title="${owned ? ITEM_NAMES[item] : "未找到物品"}" aria-label="${owned ? ITEM_NAMES[item] : "空物品栏"}"><small>${i+1}</small>${owned ? icon(glyph) : ""}</span>`;
       }).join("");
       this.$("#escape-lives").innerHTML = [0,1,2].map(i => `<span class="${i < d.captures ? "lost" : ""}">${icon("heart")}</span>`).join("");

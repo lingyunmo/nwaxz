@@ -36,7 +36,7 @@
 .escape-meters meter { width:85px; height:5px; border:0; background:#1d2219; accent-color:#a9ae7c; }
 .escape-meters meter::-webkit-meter-bar { height:5px; background:#23291ed9; border:0; border-radius:0; }
 .escape-meters meter::-webkit-meter-optimum-value { background:#abb28c; }#escape-battery::-webkit-meter-optimum-value { background:#b9a16c; }
-.escape-inventory { position:static; display:flex; justify-content:center; flex-wrap:nowrap; gap:6px; max-width:none; }
+.escape-inventory { position:absolute; top:auto; bottom:24px; left:50%; transform:translateX(-50%); display:flex; justify-content:center; flex-wrap:nowrap; gap:6px; max-width:none; }
 .escape-inventory .escape-slot { display:grid; position:relative; place-items:center; width:47px; height:47px; padding:0; border:1px solid #8f80613d; border-radius:0; background:#080c09a3; box-shadow:inset 0 0 0 2px #0709077a; }
 .escape-slot small { position:absolute; top:4px; left:5px; font:9px ui-monospace,monospace; color:#857b6259; }
 .escape-inventory .escape-slot.owned { border-color:#c4a572a8; background:#282619b3; }
@@ -54,7 +54,7 @@
 .escape-interact svg { width:20px; height:20px; }.escape-interact kbd { border:1px solid #ccbc8966; padding:3px 5px; color:#ddcba4; }
 .escape-search { top:56%; width:130px; font-size:10px; letter-spacing:3px; }.escape-search progress { height:3px; }
 .escape-panel { background:#030706bc; backdrop-filter:blur(5px); }
-.menu-active>.escape-hud,.menu-active>.escape-map-button,.menu-active>.escape-crosshair,.menu-active>.escape-danger,.menu-active>.escape-notice,.menu-active>.escape-search,.menu-active>.escape-bottom,.menu-active>.escape-room-toast,.intro-active>.escape-room-toast,.capture-active>.escape-room-toast { visibility:hidden; }
+.menu-active>.escape-hud,.menu-active>.escape-map-button,.menu-active>.escape-inventory,.menu-active>.escape-crosshair,.menu-active>.escape-danger,.menu-active>.escape-notice,.menu-active>.escape-search,.menu-active>.escape-bottom,.menu-active>.escape-room-toast,.intro-active>.escape-room-toast,.capture-active>.escape-room-toast { visibility:hidden; }
 .escape-card { border-radius:2px; background:linear-gradient(135deg,#141b15f2,#0a100bf2); }
 .escape-card h1,.escape-card h2 { font-family:Georgia,'SimSun',serif; letter-spacing:5px; color:#d6c39c; }.escape-card p { color:#a8ae9a; }
 .escape-card .escape-primary { background:linear-gradient(100deg,#9d8255,#b39b6b,#9d8255); color:#151a12; border-color:#c5af7e; box-shadow:0 3px 0 #443a24; letter-spacing:3px; }
@@ -74,8 +74,8 @@
 @media (pointer:coarse) {
   .escape-shell .escape-map-button { width:120px; top:max(12px,env(safe-area-inset-top)); right:12px; }.escape-hud { top:max(16px,env(safe-area-inset-top)); left:16px; gap:12px; }
   .escape-stick { display:block; }.escape-actions { display:grid; grid-template-columns:repeat(2,52px); gap:12px; }.escape-actions #escape-sprint { display:grid; }.escape-actions button { width:52px; height:52px; padding:13px; background:#0c120b8c; }.escape-actions svg { width:24px; height:24px; }.escape-actions kbd,.escape-interact kbd { display:none; }
-  .escape-bottom { bottom:max(28px,env(safe-area-inset-bottom)); left:22px; right:22px; }.escape-inventory { position:absolute; top:auto; bottom:0; left:50%; transform:translateX(-50%); gap:4px; }.escape-inventory .escape-slot { width:31px; height:34px; }.escape-slot small { display:none; }.escape-slot.owned svg { width:20px; height:20px; }
-  .escape-meters { left:50%; bottom:45px; transform:translateX(-50%); display:flex; gap:10px; }.escape-meters meter { width:43px; }.escape-meters svg { width:13px; height:13px; }.escape-shell .escape-interact { bottom:90px; font-size:12px; padding:12px 14px; }.escape-danger { top:20%; font-size:10px; }.escape-notice { bottom:29%; }.escape-map-button>span { font-size:8px; }.escape-map-button kbd { display:none; }
+  .escape-bottom { bottom:max(28px,env(safe-area-inset-bottom)); left:22px; right:22px; }.escape-inventory { position:absolute; top:172px; right:12px; bottom:auto; left:auto; transform:none; gap:3px; pointer-events:none; }.escape-inventory .escape-slot { width:28px; height:28px; }.escape-slot small { display:none; }.escape-slot.owned svg { width:18px; height:18px; }
+  .escape-meters { left:50%; bottom:45px; transform:translateX(-50%); display:flex; gap:10px; }.escape-meters meter { width:43px; }.escape-meters svg { width:13px; height:13px; }.escape-shell .escape-interact { bottom:90px; font-size:12px; padding:12px 14px; }.escape-danger { top:20%; font-size:10px; }.escape-notice { bottom:300px; }.escape-map-button>span { font-size:8px; }.escape-map-button kbd { display:none; }
 }
 @media (max-width:620px) {
   .escape-pause-panel .escape-card { padding:20px; width:min(100%,440px); }.escape-pause-layout { grid-template-columns:1fr; gap:20px; }.escape-map-page h2,.escape-map-page .escape-eyebrow { display:none; }#escape-floorplan { width:min(100%,270px); }.escape-pause-menu h2 { font-size:24px; margin:0; }.escape-pause-menu>.escape-eyebrow { display:none; }.escape-journal { margin:12px 0 16px; }.escape-setting-row { margin-top:18px; }.escape-links { gap:4px 14px; margin-top:12px; }.escape-card .escape-storage { margin-bottom:0; }
@@ -85,9 +85,16 @@
 }
 @media (prefers-reduced-motion:reduce) { .escape-notice,.escape-room-toast { animation:none; } }
 @media (pointer:coarse) {
-  .escape-inventory { display:grid; grid-template-columns:repeat(2,28px); gap:3px; left:calc(50% - 6px); }
+  .escape-inventory { display:grid; grid-template-columns:repeat(4,28px); gap:3px; left:auto; right:12px; }
+  .escape-inventory.expansion-inventory { grid-template-columns:repeat(5,28px); }
   .escape-inventory .escape-slot { width:28px; height:28px; }
-  .escape-meters { bottom:80px; gap:6px; left:calc(50% - 6px); }
+  .escape-meters { bottom:185px; gap:6px; left:calc(50% - 6px); }
   .escape-meters label { gap:4px; }.escape-meters meter { width:26px; }
-  .escape-shell .escape-interact { bottom:125px; }
+  .escape-shell .escape-interact { bottom:200px; }
+}
+@media (pointer:coarse) and (max-height:540px) and (min-aspect-ratio:13/10) {
+  .escape-inventory { top:152px; }
+  .escape-meters { bottom:80px; }
+  .escape-notice { top:23%; bottom:auto; }
+  .escape-shell .escape-interact { bottom:120px; }
 }

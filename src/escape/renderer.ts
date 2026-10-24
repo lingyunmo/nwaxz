@@ -26,6 +26,7 @@ export class EscapeRenderer {
   private captureLight: PointLight;
   private height = 1.65;
   private wasHidden = false;
+  private wasExpanded?: boolean;
   private disposed = false;
   private map: EscapeMap;
   constructor(private canvas: HTMLCanvasElement, art: EscapeArt, private reduced: boolean) {
@@ -91,6 +92,8 @@ export class EscapeRenderer {
   draw(world: EscapeWorld, dt = 1 / 60) {
     if (this.disposed || !this.models) return;
     const d = world.data, caught = d.phase === "caught" || d.phase === "lost";
+    const expanded = !!d.expansion?.enabled;
+    if (expanded !== this.wasExpanded) { for (const shard of this.view.glassMeshes) shard.setEnabled(expanded); this.wasExpanded = expanded; }
     this.models.animate(world, dt);
     const desired = d.hidden ? 1.65 : d.player.crouched ? 1.02 : 1.65;
     if (!!d.hidden !== this.wasHidden) this.height = desired;

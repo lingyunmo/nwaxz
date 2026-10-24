@@ -11,7 +11,7 @@ import { PointLight } from "@babylonjs/core/Lights/pointLight.js";
 import { SpotLight } from "@babylonjs/core/Lights/spotLight.js";
 import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture.js";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine.js";
-import { DOORS, MAP, SIZE, type EscapeWorld } from "./world.ts";
+import { DOORS, HAZARDS, MAP, SIZE, type EscapeWorld } from "./world.ts";
 
 export const CELL = 1.5, WALL_HEIGHT = 3.35;
 export type PaintedTextures = { wall?: BaseTexture; floor?: BaseTexture; ceiling?: BaseTexture; wood?: BaseTexture };
@@ -51,8 +51,10 @@ export function createEscapeScene(engine: AbstractEngine, textures: PaintedTextu
   for (const mat of [wallMat, floorMat, ceilingMat]) mat.backFaceCulling = false;
   const wood = colorMaterial(scene, "painted-door", "#8c8170"); wood.diffuseTexture = textures.wood ?? null;
   const iron = colorMaterial(scene, "rusty-trim", "#3f3930");
+  const glass = colorMaterial(scene, "corridor-glass-shards", "#8fa3a0", true);
   const lampMat = colorMaterial(scene, "old-lamp-glass", "#a8ba9b", true);
   const meshes: Mesh[] = [];
+  const glassMeshes: Mesh[] = [];
   function surfaces(name: string, quads: number[][][], material: StandardMaterial) {
     const positions: number[] = [], indices: number[] = [], uvs: number[] = [];
     for (const quad of quads) {
@@ -116,11 +118,18 @@ export function createEscapeScene(engine: AbstractEngine, textures: PaintedTextu
     box("corridor-fluorescent-housing", 1.1, .11, .22, x * CELL, 3.22, 9.5 * CELL, iron);
     box("corridor-fluorescent-glass", .95, .03, .13, x * CELL, 3.15, 9.5 * CELL, lampMat);
   }
+  HAZARDS.forEach((hazard, index) => {
+    for (let shard = 0; shard < 5; shard += 1) {
+      const piece = box(`broken-glass:${index}:${shard}`, .24 - shard % 2 * .07, .018, .07, (hazard.x + (shard - 2) * .11) * CELL, .018, (hazard.z + (shard % 2 ? .12 : -.12)) * CELL, glass);
+      piece.rotation.y = (shard * .67 + index * .4) % Math.PI;
+      glassMeshes.push(piece);
+    }
+  });
   const corridorLamp = new PointLight("failing-corridor-lamp", new Vector3(11.5 * CELL, 2.8, 9.5 * CELL), scene);
   corridorLamp.diffuse = new Color3(.44, .64, .49); corridorLamp.range = 8; corridorLamp.intensity = .35;
   const sewerGlow = new PointLight("sewer-opening-light", new Vector3(20.5 * CELL, .55, 22.8 * CELL), scene);
   sewerGlow.diffuse = new Color3(.15, .42, .34); sewerGlow.intensity = .24; sewerGlow.range = 4;
-  return { scene, camera, torch, ambient, eyeFill, corridorLamp, sewerGlow, doors, meshes, iron };
+  return { scene, camera, torch, ambient, eyeFill, corridorLamp, sewerGlow, doors, meshes, glassMeshes, iron };
 }
 export type EscapeScene = ReturnType<typeof createEscapeScene>;
 

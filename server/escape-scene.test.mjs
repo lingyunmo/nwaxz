@@ -57,7 +57,7 @@ test("real 3D camera can look up/down while world UVs and geometry stay fixed", 
       assert.deepEqual(walls.getVerticesData("position"), positions);
       assert.deepEqual(walls.getVerticesData("uv"), uv);
     }
-    assert.equal(view.doors.size, 6);
+    assert.equal(view.doors.size, 8);
     for (const hinge of view.doors.values()) assert.ok(hinge.getChildMeshes().length >= 3);
     assert.equal(walls.billboardMode, 0);
     assert.equal(view.camera.position.y, 1.65);
@@ -72,7 +72,7 @@ test("solid cabinets coexist with upright original-art frog and the canonical be
     const bytes = await fs.readFile(new URL("../public/assets/models/escape-props-v1.glb", import.meta.url));
     props = await LoadAssetContainerAsync(bytes, view.scene, { pluginExtension: ".glb", pluginOptions: { gltf: { skipMaterials: true, animationStartMode: 0 } } });
     models = installEscapeModels(view.scene, props, { original: new Texture(null, view.scene), actions: new Texture(null, view.scene) });
-    assert.equal(models.cabinets.size, 5);
+    assert.equal(models.cabinets.size, 7);
     const w = new EscapeWorld(); models.animate(w, .3);
     assert.equal(models.actorRoot.position.x, w.data.hunter.x * CELL);
     for (const mesh of models.actorMeshes) {
@@ -91,7 +91,7 @@ test("solid cabinets coexist with upright original-art frog and the canonical be
     w.nextNight(); models.animate(w, 1/60);
     assert.equal(view.scene.getMeshByName("solid-tile-walls").isVisible, true);
     assert.notEqual(models.actor.pose.motion, "laugh");
-    assert.ok(view.scene.meshes.filter(m => m.isEnabled()).length < 240);
+    assert.ok(view.scene.meshes.filter(m => m.isEnabled()).length < 320);
   } finally { models?.dispose(); props?.dispose(); view.scene.dispose(); engine.dispose(); }
   assert.equal(engine.scenes.length, 0);
 });

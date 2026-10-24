@@ -7,12 +7,19 @@ import type { Texture } from "@babylonjs/core/Materials/Textures/texture.js";
 import { Vector3, Color3 } from "@babylonjs/core/Maths/math.js";
 import { PaintedFrog } from "./frog.ts";
 import { CELL, colorMaterial } from "./scene.ts";
-import { PROPS, type EscapeWorld } from "./world.ts";
+import { PROPS, VALVE_ORDER, type EscapeWorld } from "./world.ts";
+
+const EXPANSION_PROP_IDS = new Set(["changing-drawer", "changing-hide", "boiler-note", "boiler-hide", ...VALVE_ORDER]);
 
 export function installEscapeModels(scene: Scene, props: AssetContainer, textures: { original: Texture; actions: Texture }, reduced = false) {
   const propRoots = new Map<string, TransformNode>();
   const cabinets = new Map<string, { left: TransformNode; right: TransformNode }>();
-  let wheel: TransformNode | undefined;
+  const wheels = new Map<string, TransformNode>();
+  let drainWheel: TransformNode | undefined;
+  const valveLamps = new Map<string, ReturnType<typeof MeshBuilder.CreateSphere>>();
+  const lampColors: Record<string, string> = { "valve-cold": "#74b9ce", "valve-return": "#d2a655", "valve-vent": "#c6c8b6" };
+  const readyLamp = colorMaterial(scene, "valve-state-ready", "#52bf75", true);
+  const idleLamps = new Map(Object.entries(lampColors).map(([id, color]) => [id, colorMaterial(scene, `valve-state-${id}`, color, true)]));
   const sources = [...props.transformNodes, ...props.meshes];
   for (const object of PROPS) {
     if (object.kind === "note") continue;
@@ -36,7 +43,16 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, texture
       left.rotationQuaternion = right.rotationQuaternion = null;
       cabinets.set(object.id, { left, right });
     }
-    if (object.kind === "valve") { wheel = descendants.find(n => n.name.includes("valve_wheel")); if (wheel) wheel.rotationQuaternion = null; }
+    if (object.kind === "valve" && object.id === "drain") {
+      drainWheel = descendants.find(n => n.name.includes("valve_wheel")); if (drainWheel) drainWheel.rotationQuaternion = null;
+    }
+    if (object.kind === "valve" && object.id !== "drain") {
+      const wheel = descendants.find(n => n.name.includes("valve_wheel"));
+      if (wheel) { wheel.rotationQuaternion = null; wheels.set(object.id, wheel); }
+      const lamp = MeshBuilder.CreateSphere(`valve-state:${object.id}`, { diameter: .12 }, scene);
+      lamp.position.set(object.x * CELL, 1.15, object.z * CELL - .3); lamp.material = idleLamps.get(object.id)!;
+      lamp.isPickable = false; valveLamps.set(object.id, lamp);
+    }
   }
   const pipe = sources.find(n => n.name === "pipe")!;
   for (const [i, x, z] of [[0, 1.1, 5.5], [1, 9.1, 5.5], [2, 17.1, 15.5], [3, 22.8, 20.5]]) {
@@ -85,8 +101,13 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, texture
         doors.left.rotation.y += (-ajar - doors.left.rotation.y) * blend;
         doors.right.rotation.y += (ajar - doors.right.rotation.y) * blend;
       }
-      if (wheel && d.drained) wheel.rotation.z += dt * 1.7;
-      for (const [id, root] of propRoots) if (id.endsWith("note")) root.setEnabled(!d.notes.includes(id));
+      for (const [id, wheel] of wheels) if (d.expansion?.valves.includes(id)) wheel.rotation.z += dt * 1.7;
+      if (drainWheel && d.drained) drainWheel.rotation.z += dt * 1.7;
+      for (const [id, lamp] of valveLamps) lamp.material = d.expansion?.valves.includes(id) ? readyLamp : idleLamps.get(id)!;
+      for (const [id, root] of propRoots) {
+        const expansionProp = EXPANSION_PROP_IDS.has(id);
+        root.setEnabled((!expansionProp || !!d.expansion?.enabled) && (!id.endsWith("note") || !d.notes.includes(id)));
+      }
       const powerMat = props.materials.find(m => m.name === "fuse_on_green");
       if (powerMat && "emissiveColor" in powerMat) (powerMat.emissiveColor as Color3).set(0, d.power ? .6 : .015, 0);
     },

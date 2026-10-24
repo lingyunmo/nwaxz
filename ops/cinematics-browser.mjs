@@ -61,7 +61,7 @@ try {
   await page.keyboard.press('Escape'); await page.locator('#escape-exit').click();
   const selected=[];
   for(let n=0;n<3;n++) {
-    const world=new EscapeWorld();
+    const world=new EscapeWorld(42);
     for(let prior=0;prior<n;prior++){world.capture();world.nextNight();}
     Object.assign(world.data.hunter,{x:3.6,z:5.5,state:'chase'});
     await page.evaluate(({key,snapshot,rng})=>{localStorage.setItem(key,JSON.stringify(snapshot));Math.random=()=>rng;},{key:sessionKey,snapshot:world.snapshot(),rng:(n+.1)/3});

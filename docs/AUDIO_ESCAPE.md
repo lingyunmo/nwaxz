@@ -1,5 +1,7 @@
 # Sewer escape music
 
+Version 0.18.0 adds a procedural breathing effect without replacing these recordings: a 0.42-second mono noise buffer with a smooth envelope passes through a band-pass filter and the existing effect gain. It follows the sound setting, gesture unlock, pause/background cleanup and source lifecycle. Browser checks verify a non-zero output signal, muted suppression and pause silence; physical iPhone/WeChat speakers remain a separate validation boundary.
+
 `public/assets/audio/sewer-escape-v1.mp3` is an original, loopable instrumental bed for the standalone first-person sewer escape horror mode. It uses a subdued low drone, a slow pulse, restrained filtered noise texture, and four distant metallic resonances. It contains no lyrics and does not replace or modify the existing `haunted-laugh-v1.mp3` character laugh.
 
 The source is generated deterministically from PCM in `ops/generate-escape-audio.mjs`, using a fixed random seed, then encoded with the repository machine's FFmpeg `libmp3lame` encoder at 128 kb/s, 48 kHz stereo. Run `node ops/generate-escape-audio.mjs` to reproduce the asset. The intermediate WAV is written under `.local/escape-audio/`.

@@ -32,7 +32,7 @@ try {
   await page.keyboard.press('Escape'); await page.locator('#escape-exit').click();
   const current=JSON.parse(await page.evaluate(()=>localStorage.getItem('nwaxz-escape-session-v1')));
   if(!(current.player.pitch>0)) throw new Error('vertical look did not save');
-  const standing = new EscapeWorld();
+  const standing = new EscapeWorld(42);
   Object.assign(standing.data.player,{x:3.5,z:5.5,angle:0,pitch:0});
   Object.assign(standing.data.hunter,{x:5.8,z:5.5,angle:Math.PI});
   await page.evaluate(save=>localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(save)),standing.snapshot());
@@ -43,7 +43,7 @@ try {
   if(await page.locator('#escape-stick').isVisible()) throw new Error('desktop joystick should be hidden');
   if(await page.locator('#escape-goal').count()) throw new Error('objective should appear only in pause journal');
   await page.keyboard.press('Escape'); await page.locator('#escape-exit').click();
-  const caught=new EscapeWorld(); caught.capture();
+  const caught=new EscapeWorld(42); caught.capture();
   await page.evaluate(save=>localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(save)),caught.snapshot());
   await page.reload(); await page.locator('#extreme').click(); await page.locator('#escape-continue').click();
   await page.locator('.capture-active').waitFor({timeout:60000});
@@ -57,7 +57,7 @@ try {
   const save=JSON.parse(await page.evaluate(()=>localStorage.getItem('nwaxz-escape-session-v1')));
   if(save.phase!=='playing'||save.captures!==1) throw new Error('next night failed');
   await page.locator('#escape-exit').click();
-  const hiding = new EscapeWorld();
+  const hiding = new EscapeWorld(42);
   Object.assign(hiding.data.player,{x:5.5,z:3.5,angle:-Math.PI/2});
   hiding.interact();
   await page.evaluate(save=>localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(save)),hiding.snapshot());

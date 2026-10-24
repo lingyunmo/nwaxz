@@ -1,9 +1,9 @@
-import { DOORS, HAZARDS, MAP, PROPS, SIZE, type EscapeWorld, type Prop, type Vec } from "./world.ts";
+import { CRYSTALS, DOORS, HAZARDS, MAP, PROPS, SIZE, type EscapeWorld, type Prop, type Vec } from "./world.ts";
 
 export type MapReveal = "explored" | "near" | "fog";
 export type MapTerrain = "floor" | "wall" | "outside";
 export type MapDoor = { id: string; open: boolean; locked: boolean };
-export type MapFeature = { id: string; kind: Prop["kind"] | "hazard" };
+export type MapFeature = { id: string; kind: Prop["kind"] | "hazard" | "crystal-freeze" | "crystal-reveal" };
 export type MapTile = {
   x: number;
   z: number;
@@ -63,7 +63,11 @@ export function visibleTiles(world: EscapeWorld, compact = false): MapTile[] {
         }
         const feature = PROPS.find(candidate => Math.floor(candidate.x) === x && Math.floor(candidate.z) === z && (d.expansion?.enabled || !EXPANSION_FEATURE_IDS.has(candidate.id)));
         if (feature) tile.feature = { id: feature.id, kind: feature.kind };
-        else if (d.expansion?.enabled && HAZARDS.some(candidate => Math.floor(candidate.x) === x && Math.floor(candidate.z) === z)) tile.feature = { id: `glass-${x}`, kind: "hazard" };
+        else {
+          const crystal = CRYSTALS.find(c => Math.floor(c.x) === x && Math.floor(c.z) === z && !d.hunt?.collected.includes(c.id));
+          if (crystal) tile.feature = { id: crystal.id, kind: `crystal-${crystal.kind}` };
+        }
+        if (!tile.feature && d.expansion?.enabled && HAZARDS.some(candidate => Math.floor(candidate.x) === x && Math.floor(candidate.z) === z)) tile.feature = { id: `glass-${x}`, kind: "hazard" };
       }
       result.push(tile);
     }
@@ -136,6 +140,16 @@ export class EscapeMap {
     const arrowX = left + (playerX - view.x + .5) * cell;
     const arrowY = top + (playerZ - view.z + .5) * cell;
     this.drawPlayer(ctx, arrowX, arrowY, cell, world.data.player.angle);
+    if ((world.data.hunt?.reveal ?? 0) > 0) {
+      const hunterX = Math.floor(world.data.hunter.x), hunterZ = Math.floor(world.data.hunter.z);
+      const hx = left + (hunterX - view.x + .5) * cell, hy = top + (hunterZ - view.z + .5) * cell;
+      if (compact && (hx < left || hx > left + mapWidth || hy < top || hy > top + mapHeight)) {
+        const cx = left + mapWidth / 2, cy = top + mapHeight / 2, angle = Math.atan2(hy - cy, hx - cx), r = mapWidth * .43;
+        ctx.save(); ctx.translate(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r); ctx.rotate(angle); ctx.fillStyle = "#f49cff"; ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-4, -4); ctx.lineTo(-4, 4); ctx.closePath(); ctx.fill(); ctx.restore();
+      } else if (hx >= left && hx <= left + mapWidth && hy >= top && hy <= top + mapHeight) {
+        ctx.fillStyle = "#ff85f4"; ctx.shadowColor = "#e14cff"; ctx.shadowBlur = compact ? 7 : 14; ctx.beginPath(); ctx.arc(hx, hy, Math.max(3, cell * .28), 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+      }
+    }
     this.drawCompass(ctx, width, height, compact, padding);
     ctx.imageSmoothingEnabled = previousSmoothing;
     ctx.restore();
@@ -300,6 +314,10 @@ export class EscapeMap {
       ctx.beginPath(); ctx.moveTo(centerX, y + inset); ctx.lineTo(x + cell - inset, centerY + inset / 2);
       ctx.lineTo(centerX + inset / 3, y + cell - inset); ctx.lineTo(x + inset, centerY - inset / 3); ctx.closePath(); ctx.fill(); ctx.stroke();
       return;
+    }
+    if (feature.kind === "crystal-freeze" || feature.kind === "crystal-reveal") {
+      ctx.fillStyle = feature.kind === "crystal-freeze" ? "#8be5ff" : "#e49aff"; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 7;
+      ctx.beginPath(); ctx.moveTo(centerX, y + inset); ctx.lineTo(x + cell - inset, centerY); ctx.lineTo(centerX, y + cell - inset); ctx.lineTo(x + inset, centerY); ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0; return;
     }
     if (feature.kind === "note") {
       this.drawAtlas(ctx, 3, x + inset, y + inset, size, size, () => {

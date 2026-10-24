@@ -11,7 +11,7 @@ import { PointLight } from "@babylonjs/core/Lights/pointLight.js";
 import { SpotLight } from "@babylonjs/core/Lights/spotLight.js";
 import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture.js";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine.js";
-import { DOORS, HAZARDS, MAP, SIZE, type EscapeWorld } from "./world.ts";
+import { DOORS, HAZARDS, MAP, SIZE, TORCH_CONE, TORCH_RANGE, type EscapeWorld } from "./world.ts";
 
 export const CELL = 1.5, WALL_HEIGHT = 3.35;
 export type PaintedTextures = { wall?: BaseTexture; floor?: BaseTexture; ceiling?: BaseTexture; wood?: BaseTexture };
@@ -39,8 +39,8 @@ export function createEscapeScene(engine: AbstractEngine, textures: PaintedTextu
   const ambient = new HemisphericLight("dim-bath-ambient", new Vector3(0, 1, 0), scene);
   ambient.diffuse = new Color3(.49, .59, .57);
   ambient.groundColor = new Color3(.18, .13, .09); ambient.intensity = .26;
-  const torch = new SpotLight("hand-flashlight", camera.position.clone(), new Vector3(1, 0, 0), .94, 4, scene);
-  torch.diffuse = new Color3(1, .89, .65); torch.intensity = 5; torch.range = 22;
+  const torch = new SpotLight("hand-flashlight", camera.position.clone(), new Vector3(1, 0, 0), TORCH_CONE, 4, scene);
+  torch.diffuse = new Color3(1, .89, .65); torch.intensity = 5; torch.range = TORCH_RANGE;
   const eyeFill = new PointLight("near-dark-adaptation", camera.position.clone(), scene);
   eyeFill.diffuse = new Color3(.31, .39, .41); eyeFill.intensity = .13; eyeFill.range = 3.2;
   const wallMat = colorMaterial(scene, "painted-tile", "#c3c1a7"); wallMat.diffuseTexture = textures.wall ?? null;

@@ -1,10 +1,11 @@
+import { playEscapeRoute } from "./escape-player.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EscapeWorld, PROPS, DOORS, MAP, SIZE, roomAt } from "../src/escape/world.ts";
+import { EscapeWorld, PROPS, DOORS, MAP, SIZE, roomAt, CRYSTALS } from "../src/escape/world.ts";
 
 const frames = (w, seconds, input = {}) => { for (let i = 0; i < Math.ceil(seconds * 60); i++) w.advance(1 / 60, input); };
 test("exploration respects closed doors, persists visited tiles and accepts legacy v1 saves", () => {
-  const w = new EscapeWorld(), tile = (x, z) => z * SIZE + x;
+  const w = new EscapeWorld(42), tile = (x, z) => z * SIZE + x;
   const original = [...w.data.explored];
   assert.ok(original.includes(tile(3, 5)));
   assert.ok(!original.includes(tile(12, 2)), "another room is not revealed through walls");
@@ -27,7 +28,7 @@ function placeFor(w, id) {
 }
 
 test("escape walls and doors really block motion and vision", () => {
-  const w = new EscapeWorld();
+  const w = new EscapeWorld(42);
   assert.equal(w.wall(11.5, 7.5), 2);
   assert.equal(w.lineOfSight({ x: 11.5, z: 8.5 }, { x: 11.5, z: 6.5 }), false);
   Object.assign(w.data.player, { x: 11.5, z: 8.5, angle: -Math.PI / 2 });
@@ -47,7 +48,7 @@ test("escape walls and doors really block motion and vision", () => {
 });
 
 test("search takes time, cancels on movement, and pickup cannot be duplicated", () => {
-  const w = new EscapeWorld(); placeFor(w, "bed-drawer"); w.interact();
+  const w = new EscapeWorld(42); placeFor(w, "bed-drawer"); w.interact();
   assert.ok(w.pending); assert.deepEqual(w.data.inventory, []); frames(w, .5);
   assert.deepEqual(w.data.inventory, []);
   w.data.player.z += 2; frames(w, .1); assert.equal(w.pending, undefined);
@@ -57,9 +58,9 @@ test("search takes time, cancels on movement, and pickup cannot be duplicated", 
 });
 
 test("hunter hears sprinting but not crouching, and walls block sight", () => {
-  const w = new EscapeWorld(); w.data.elapsed = 19;
+  const w = new EscapeWorld(42); w.data.elapsed = 19;
   Object.assign(w.data.player, { x: 9.5, z: 9.5, angle: Math.PI, crouched: true, light: false });
-  Object.assign(w.data.hunter, { x: 12.5, z: 9.5, angle: 0 });
+  Object.assign(w.data.hunter, { x: 13.5, z: 9.5, angle: 0 });
   frames(w, .8, { forward: 1 }); assert.equal(w.data.hunter.state, "patrol");
   w.data.player.crouched = false; frames(w, .5, { forward: 1, sprint: true });
   assert.ok(["investigate", "chase"].includes(w.data.hunter.state));
@@ -69,19 +70,19 @@ test("hunter hears sprinting but not crouching, and walls block sight", () => {
 });
 
 test("patrol recomputes its route at each stop and actually enters multiple rooms", () => {
-  const w = new EscapeWorld(), visited = new Set();
+  const w = new EscapeWorld(42), visited = new Set();
   placeFor(w, "bed-hide"); w.interact();
   for (let i = 0; i < 120 * 60; i++) {
     w.advance(1 / 60);
     const h = w.data.hunter;
-    if (h.x > 17 && h.z < 7) visited.add("infirmary");
-    if (h.x < 7 && h.z > 12) visited.add("laundry");
+    const room = roomAt(h);
+    if (!["回声长廊", "门口"].includes(room)) visited.add(room);
   }
-  assert.ok(visited.has("infirmary")); assert.ok(visited.has("laundry"));
+  assert.ok(visited.size >= 3, `dynamic patrol should visit several rooms: ${[...visited]}`);
 });
 
 test("hiding unseen is safe, hiding in plain sight is remembered across save/resume", () => {
-  const w = new EscapeWorld(); w.data.elapsed = 30;
+  const w = new EscapeWorld(42); w.data.elapsed = 30;
   placeFor(w, "bed-hide"); Object.assign(w.data.hunter, { x: 12.5, z: 9.5, angle: 0 });
   const cabinet = PROPS.find(p => p.id === "bed-hide");
   w.interact(); assert.equal(w.data.hidden, "bed-hide"); assert.equal(w.seesPlayer(), false);
@@ -103,18 +104,18 @@ test("hiding unseen is safe, hiding in plain sight is remembered across save/res
 });
 
 test("look pitch is backward-compatible, clamped, and independent of yaw", () => {
-  const original = new EscapeWorld().snapshot();
+  const original = new EscapeWorld(42).snapshot();
   delete original.player.pitch;
   const restored = EscapeWorld.restore(original);
   assert.equal(restored.data.player.pitch, 0, "legacy v1 saves default missing pitch to level");
 
   for (const pitch of [1.3001, -1.3001, NaN]) {
-    const invalid = new EscapeWorld().snapshot();
+    const invalid = new EscapeWorld(42).snapshot();
     invalid.player.pitch = pitch;
     assert.throws(() => EscapeWorld.restore(invalid), "invalid pitch is rejected");
   }
 
-  const w = new EscapeWorld(), yaw = 2.1;
+  const w = new EscapeWorld(42), yaw = 2.1;
   w.data.player.angle = yaw;
   frames(w, 2, { look: 1 });
   assert.equal(w.data.player.pitch, 1.3, "looking up clamps at the upper pitch limit");
@@ -133,7 +134,7 @@ test("hunter routes around drawers and wardrobes and can investigate furniture s
   });
 
   for (const id of ["bed-drawer", "bed-hide"]) {
-    const w = new EscapeWorld(), obstacle = PROPS.find(p => p.id === id);
+    const w = new EscapeWorld(42), obstacle = PROPS.find(p => p.id === id);
     Object.assign(w.data.hunter, { x: 3.5, z: 5.5 });
     const route = w.route(w.data.hunter, obstacle, true);
     assert.ok(route.length, `hunter can route to an interaction point at ${id}`);
@@ -142,7 +143,7 @@ test("hunter routes around drawers and wardrobes and can investigate furniture s
       `hunter route ends within reach of ${id}`);
   }
 
-  const w = new EscapeWorld(), wardrobe = PROPS.find(p => p.id === "bed-hide");
+  const w = new EscapeWorld(42), wardrobe = PROPS.find(p => p.id === "bed-hide");
   w.data.elapsed = 20;
   Object.assign(w.data.player, { x: 20.5, z: 20.5, light: false });
   Object.assign(w.data.hunter, { x: 3.5, z: 5.5, state: "patrol" });
@@ -165,7 +166,7 @@ test("hunter routes around drawers and wardrobes and can investigate furniture s
 });
 
 test("capture preserves objective items, resets position, and ends on the third capture", () => {
-  const oldPatrol = new EscapeWorld().snapshot(); oldPatrol.pursuit.patrolIndex = 3;
+  const oldPatrol = new EscapeWorld(42).snapshot(); oldPatrol.pursuit.patrolIndex = 3;
   const w = EscapeWorld.restore(oldPatrol); w.data.inventory = ["brass", "cellar"]; w.data.power = true;
   w.capture(); assert.equal(w.data.phase, "caught"); w.nextNight();
   assert.equal(w.data.phase, "playing"); assert.deepEqual(w.data.inventory, ["brass", "cellar"]); assert.ok(w.data.power);
@@ -175,7 +176,7 @@ test("capture preserves objective items, resets position, and ends on the third 
 });
 
 test("stamina, battery and distractions are finite resources", () => {
-  const w = new EscapeWorld(); Object.assign(w.data.player, { x: 3.5, z: 5.5, angle: -Math.PI / 2 });
+  const w = new EscapeWorld(42); Object.assign(w.data.player, { x: 3.5, z: 5.5, angle: -Math.PI / 2 });
   frames(w, 4, { forward: 1, sprint: true }); assert.ok(w.data.player.stamina < 30);
   frames(w, 4); assert.ok(w.data.player.stamina > 50);
   w.data.player.battery = .01; frames(w, 1); assert.equal(w.data.player.battery, 0); assert.equal(w.data.player.light, false);
@@ -183,21 +184,21 @@ test("stamina, battery and distractions are finite resources", () => {
 });
 
 test("escape snapshots round-trip and reject invalid worlds without touching bath saves", () => {
-  const w = new EscapeWorld(); assert.deepEqual(EscapeWorld.restore(w.snapshot()).snapshot(), w.snapshot());
+  const w = new EscapeWorld(42); assert.deepEqual(EscapeWorld.restore(w.snapshot()).snapshot(), w.snapshot());
   for (const edit of [d => d.player.x = NaN, d => d.player.z = 0, d => d.inventory.push("root"), d => d.opened.push("cellar"), d => d.hidden = "bed-drawer", d => d.pursuit.seenHide = "missing", d => d.player.stamina = -1, d => d.captures = 4, d => d.phase = "won", d => d.power = true, d => d.debug = true]) {
     const data = w.snapshot(); edit(data); assert.throws(() => EscapeWorld.restore(data));
   }
 });
 
 test("the exit requires drained water and real cutters, not just reaching the south wall", () => {
-  const w = new EscapeWorld(); placeFor(w, "exit"); w.data.player.z = 21.65; face(w, PROPS.find(p => p.id === "exit"));
+  const w = new EscapeWorld(42); placeFor(w, "exit"); w.data.player.z = 21.65; face(w, PROPS.find(p => p.id === "exit"));
   w.interact(); assert.equal(w.data.phase, "playing"); assert.match(w.message, /排水/);
   w.data.drained = true; w.interact(); assert.match(w.message, /断线钳/);
   w.data.inventory.push("cutters"); w.interact(); assert.equal(w.data.phase, "won");
 });
 
 test("the expansion requires the handwheel and the exact powered boiler sequence", () => {
-  const w = new EscapeWorld();
+  const w = new EscapeWorld(42);
   w.data.inventory.push("fuse"); w.data.power = true;
   for (const id of ["valve-cold", "valve-return", "valve-vent"]) {
     placeFor(w, id); w.interact(); assert.match(w.message, /手轮/);
@@ -217,7 +218,7 @@ test("the expansion requires the handwheel and the exact powered boiler sequence
 });
 
 test("legacy v1 saves retain the original valve requirement and new state IDs are exact", () => {
-  const fresh = new EscapeWorld().snapshot(); delete fresh.expansion;
+  const fresh = new EscapeWorld(42).snapshot(); delete fresh.expansion;
   const legacy = EscapeWorld.restore(fresh);
   assert.equal(legacy.snapshot().expansion, undefined);
   Object.assign(legacy.data.player, { x: 4.5, z: 17.5, angle: Math.PI / 2 });
@@ -231,14 +232,14 @@ test("legacy v1 saves retain the original valve requirement and new state IDs ar
   legacy.data.inventory.push("fuse", "cutters"); legacy.data.power = true;
   placeFor(legacy, "drain"); legacy.interact(); assert.equal(legacy.data.drained, true, "a legacy save can use its original drain valve condition");
   for (const item of ["hand-wheel", "rusty-wheel", "valve-cold"]) {
-    const invalid = new EscapeWorld().snapshot(); invalid.inventory.push(item); assert.throws(() => EscapeWorld.restore(invalid));
+    const invalid = new EscapeWorld(42).snapshot(); invalid.inventory.push(item); assert.throws(() => EscapeWorld.restore(invalid));
   }
   const invalidLegacy = { ...fresh, searched: ["changing-drawer"] };
   assert.throws(() => EscapeWorld.restore(invalidLegacy), "new expansion evidence cannot be stripped into a legacy session");
 });
 
 test("malformed optional save extensions fail with the normal format error", () => {
-  const base = new EscapeWorld().snapshot();
+  const base = new EscapeWorld(42).snapshot();
   const invalidExpansion = structuredClone(base); invalidExpansion.expansion = null;
   assert.throws(() => EscapeWorld.restore(invalidExpansion), /逃生存档格式不正确/);
   const legacy = structuredClone(base); delete legacy.expansion; legacy.pursuit.target = null;
@@ -246,71 +247,29 @@ test("malformed optional save extensions fail with the normal format error", () 
 });
 
 test("glass hazards trigger once on walking, stay quiet when crouched and rearm after leaving", () => {
-  const w = new EscapeWorld(); w.data.elapsed = 20;
+  const w = new EscapeWorld(42); w.data.elapsed = 20;
   Object.assign(w.data.player, { x: 6.9, z: 9.5, angle: 0, light: false });
   w.data.hunter.x = 12.5; w.data.hunter.z = 9.5;
   frames(w, .5, { forward: 1 });
   assert.match(w.message, /碎玻璃/); assert.ok(["investigate", "chase"].includes(w.data.hunter.state));
   const events = w.drainEvents(); assert.equal(events.filter(e => e.type === "noise").length, 1);
   frames(w, .5, { forward: 1 }); assert.equal(w.drainEvents().filter(e => e.type === "noise").length, 0);
-  Object.assign(w.data.player, { x: 6.9, z: 9.5, angle: 0, crouched: true }); w.data.hunter.state = "patrol"; w.data.elapsed = 17;
-  frames(w, .5, { forward: 1 }); assert.doesNotMatch(w.message, /碎玻璃/); assert.equal(w.data.hunter.state, "patrol");
+  const quiet = new EscapeWorld(42);
+  Object.assign(quiet.data.player, { x: 6.9, z: 9.5, angle: 0, crouched: true, light: false });
+  Object.assign(quiet.data.hunter, { x: 13.5, z: 14.5, state: "patrol" }); quiet.data.elapsed = 17;
+  frames(quiet, .95, { forward: 1 }); assert.ok(quiet.data.player.x > 7.5);
+  assert.equal(quiet.drainEvents().filter(e => e.type === "noise").length, 0); assert.equal(quiet.data.hunter.state, "patrol");
 });
 
-// Continuous control input with active patrol/vision/hearing; no teleporting or
-// enemy suppression. The same driver proves both the expanded and legacy chains.
-function continuousRoute(w, order) {
-  w.toggleLight();
-  function approach(point) {
-    const candidates = [[0, 1], [0, -1], [1, 0], [-1, 0]].map(([dx, dz]) => ({ x: point.x + dx, z: point.z + dz })).filter(p => !w.wall(p.x, p.z));
-    const routes = candidates.map(target => ({ target, path: w.route(w.data.player, target) })).filter(r => r.path.length || Math.floor(w.data.player.x) === Math.floor(r.target.x) && Math.floor(w.data.player.z) === Math.floor(r.target.z)).sort((a, b) => a.path.length - b.path.length);
-    assert.ok(routes.length, `no legal path to ${JSON.stringify(point)}`);
-    const route = routes[0];
-    for (const target of [...route.path, route.target]) {
-      for (let i = 0; i < 500 && Math.hypot(w.data.player.x - target.x, w.data.player.z - target.z) > .08; i++) {
-        if (w.data.phase !== "playing") return false;
-        face(w, target); w.advance(1 / 60, { forward: 1, sprint: w.data.hunter.state === "chase" });
-      }
-    }
-    face(w, point); return true;
-  }
-  for (const id of order) {
-    let done = false;
-    for (let attempt = 0; attempt < 3 && !done; attempt++) {
-      if (w.data.phase === "caught") w.nextNight();
-      assert.notEqual(w.data.phase, "lost", `lost before ${id}`);
-      const object = PROPS.find(o => o.id === id), door = DOORS.find(o => o.id === id), point = object ?? { x: door.x + .5, z: door.z + .5 };
-      if (!approach(point)) continue;
-      assert.equal(w.nearest()?.id, id, `wrong interaction near ${id}`);
-      w.interact(); if (object?.kind === "drawer") frames(w, 1.2);
-      done = w.data.phase === "playing" || w.data.phase === "won";
-    }
-    assert.ok(done, `did not finish ${id}`);
-    if (id === "power") {
-      const cabinet = PROPS.find(p => p.id === "workshop-hide");
-      if (approach(cabinet)) {
-        w.interact();
-        if (w.data.hidden) {
-          for (let i = 0; i < 3600; i++) {
-            w.advance(1 / 60);
-            if (w.data.hunter.state === "patrol" && Math.hypot(w.data.hunter.x - w.data.player.x, w.data.hunter.z - w.data.player.z) > 5) break;
-          }
-          w.interact();
-        }
-      }
-    }
-  }
-  return w;
+// Test both objectives with the same physical player policy and independently chosen seeds.
+for (const seed of [101, 202, 303]) for (const expanded of [false, true]) {
+  test(`continuous ${expanded ? "expanded" : "legacy"} escape with active hunter, seed ${seed}`, () => {
+    const initial = new EscapeWorld(seed).snapshot();
+    if (!expanded) delete initial.expansion;
+    const {world:w} = playEscapeRoute(EscapeWorld.restore(initial), expanded);
+    assert.equal(w.data.phase, "won");
+    assert.ok(w.data.captures < 3);
+    assert.ok(w.data.elapsed > 30);
+    assert.deepEqual(w.data.inventory.sort(), expanded ? ["brass","cellar","cutters","fuse","handwheel"] : ["brass","cellar","cutters","fuse"]);
+  });
 }
-test("a complete continuous expansion route can escape with the hunter active", () => {
-  const w = continuousRoute(new EscapeWorld(), ["bed-drawer", "study", "study-drawer", "laundry-drawer", "power", "cellar", "cellar-drawer", "changing", "changing-drawer", "boiler", "boiler-note", "valve-cold", "valve-return", "valve-vent", "drain", "exit"]);
-  assert.equal(w.data.phase, "won"); assert.deepEqual(w.data.inventory.sort(), ["brass", "cellar", "cutters", "fuse", "handwheel"]);
-  assert.ok(w.data.elapsed > 30); assert.ok(w.data.captures < 3); assert.ok(MAP[22][20] === 0);
-});
-test("an old v1 session can still complete its original route with the hunter active", () => {
-  const old = new EscapeWorld().snapshot(); delete old.expansion;
-  const w = continuousRoute(EscapeWorld.restore(old), ["bed-drawer", "study", "study-drawer", "laundry-drawer", "power", "cellar", "cellar-drawer", "drain", "exit"]);
-  assert.equal(w.data.phase, "won"); assert.equal(w.data.expansion, undefined);
-  assert.deepEqual(w.data.inventory.sort(), ["brass", "cellar", "cutters", "fuse"]);
-  assert.ok(w.data.elapsed > 30); assert.ok(w.data.captures < 3);
-});

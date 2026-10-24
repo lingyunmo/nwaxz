@@ -36,8 +36,8 @@ test("walking effort follows actual displacement; rest recovers and panting emit
 });
 
 test("glare needs the real torch cone and clear wall path, then disarms until it fades", () => {
-  const setup = () => { const w = new EscapeWorld(4); takeCrystal(w, "freeze"); w.data.player.light = false; w.useCrystal("freeze"); w.data.elapsed = 8; Object.assign(w.data.player, { x: 4.5, z: 9.5, angle: 0, pitch: 0, light: true, battery: 100 }); Object.assign(w.data.hunter, { x: 8.5, z: 9.5, angle: 0, state: "patrol" }); return w; };
-  const aimed = setup(); frames(aimed, 5); assert.ok(aimed.data.hunt.glare >= 99); assert.equal(aimed.data.hunter.state, "investigate");
+  const setup = () => { const w = new EscapeWorld(4); w.data.elapsed = 8; Object.assign(w.data.player, { x: 1.5, z: 9.5, angle: 0, pitch: 0, light: true, battery: 100 }); Object.assign(w.data.hunter, { x: 15.5, z: 9.5, angle: 0, state: "patrol" }); w.target={x:1.5,z:9.5}; return w; };
+  const aimed = setup(); frames(aimed, 5); assert.ok(aimed.data.hunt.glare >= 99); assert.equal(aimed.data.hunter.state, "chase");
   aimed.drainEvents(); frames(aimed, 1); assert.equal(aimed.drainEvents().filter(e => e.type === "message").length, 0);
   const away = setup(); away.data.player.angle = Math.PI; frames(away, 3); assert.equal(away.data.hunt.glare, 0);
   const pitch = setup(); pitch.data.player.pitch = -1.2; frames(pitch, 3); assert.equal(pitch.data.hunt.glare, 0);

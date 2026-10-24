@@ -9,7 +9,8 @@ export function playEscapeRoute(w,expanded=true,trace=false){
  const step=1/30,log=[];
  const advance=(input={})=>{w.advance(step,input);};
  const defend=()=>{
-  if(w.data.hunter.state==='chase'&&w.data.hunt.freeze<=0&&w.crystalCharges('freeze')>0)w.useCrystal('freeze');
+  const risk=w.perception.total,distance=w.hearing.distance;
+  if((w.data.hunter.state==='chase'||risk>=70||distance<2)&&w.data.hunt.freeze<=0&&w.crystalCharges('freeze')>0)w.useCrystal('freeze');
  };
  const pickup=()=>{
   for(const crystal of CRYSTALS)if(!w.data.hunt.collected.includes(crystal.id)&&distance(w.data.player,crystal)<1.65){
@@ -17,7 +18,7 @@ export function playEscapeRoute(w,expanded=true,trace=false){
   }
  };
  const rest=()=>{
-  if(w.data.hunt.effort<65||w.data.hunter.state==='chase')return;
+  if(w.data.hunt.effort<65||w.data.hunter.state==='chase'||w.data.hunt.freeze>0||w.data.hunt.alert>0)return;
   for(let n=0;n<150&&w.data.hunt.effort>20&&w.data.phase==='playing';n++){
    advance();defend();if(w.data.hunter.state==='chase')break;
   }
@@ -29,7 +30,7 @@ export function playEscapeRoute(w,expanded=true,trace=false){
    const path=w.route(w.data.player,target);
    const next=path.find(p=>distance(w.data.player,p)>.09)??target;
    face(w,next);
-   const sprint=w.data.hunter.state==='chase'&&w.data.player.stamina>5;
+   const sprint=(w.data.hunter.state==='chase'||w.data.hunt.freeze>0)&&w.data.player.stamina>5;
    w.data.player.crouched=!sprint;
    const speed=sprint?3:.95;
    advance({forward:Math.min(1,distance(w.data.player,next)/speed/step),sprint});

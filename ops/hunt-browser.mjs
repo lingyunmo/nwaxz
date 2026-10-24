@@ -100,11 +100,11 @@ print(json.dumps({'revealMean':sum(ImageStat.Stat(d).mean)/3,'expiredMean':sum(I
  const breath=await page.evaluate(()=>window.__breaths.at(-1));assert.ok(breath.nonzero);await exit();
  const resting=seed();Object.assign(resting.data.hunt,{effort:90,panting:true,breathIn:1});await enter(resting);const mutedStart=await page.evaluate(()=>window.__breaths.length);
  await page.waitForFunction(()=>Number(document.querySelector('#escape-effort-value')?.textContent)<35,{},{timeout:5000});
- assert.equal(await page.locator('.escape-hunt').getAttribute('class'),'escape-hunt');assert.equal(await page.evaluate(()=>window.__breaths.length),mutedStart);await pause();await exit();
- // Shine from behind the frozen actor; five seconds in the real cone raises the glare to 100.
- const lit=seed();charge(lit,'freeze');lit.useCrystal('freeze');Object.assign(lit.data.player,{x:4.5,z:9.5,angle:0,pitch:0});Object.assign(lit.data.hunter,{x:10.5,z:9.5,angle:0,state:'patrol'});lit.data.elapsed=25;
- await enter(lit);await page.waitForFunction(()=>{const h=JSON.parse(localStorage.getItem('nwaxz-escape-session-v1'))?.hunt;return document.querySelector('#escape-glare-value')?.textContent==='100'&&h?.glare===100&&!h.lightArmed;},{},{timeout:6500});
- const glare=await pause();assert.equal(glare.hunt.lightArmed,false);assert.equal(glare.hunter.state,'investigate');
+ assert.equal(await page.locator('.escape-meters').evaluate(e=>e.classList.contains('panting')),false);assert.equal(await page.evaluate(()=>window.__breaths.length),mutedStart);await pause();await exit();
+ // Track a live pursuer in the real cone; frozen perception is deliberately suspended.
+ const lit=seed();Object.assign(lit.data.player,{x:1.5,z:9.5,angle:0,pitch:0});Object.assign(lit.data.hunter,{x:15.5,z:9.5,angle:0,state:'patrol'});lit.target={x:1.5,z:9.5};lit.data.elapsed=25;
+ await enter(lit);await page.waitForFunction(()=>document.querySelector('#escape-glare').value>=100,{},{timeout:6500});
+ const glare=await pause();assert.equal(glare.hunt.lightArmed,false);assert.equal(glare.hunter.state,'chase');
  await page.locator('#escape-resume').tap();await page.keyboard.press('f');await page.waitForTimeout(1800);const dimmed=await pause();assert.ok(dimmed.hunt.glare<65);assert.equal(dimmed.hunt.lightArmed,true);await exit();
  const layouts=[];
  const layout=seed();layout.data.hunt.collected=['crystal-hall-east','crystal-hall-west'];layout.data.player.pitch=-.2;await enter(layout);

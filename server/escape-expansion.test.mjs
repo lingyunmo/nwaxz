@@ -8,12 +8,12 @@ const face=(w,id)=>{
   Object.assign(w.data.player,{x:p.x,z:p.z+1,angle:-Math.PI/2,pitch:0});
 };
 const powered=()=>{
-  const w=new EscapeWorld();w.data.inventory=['fuse','handwheel'];
+  const w=new EscapeWorld(42);w.data.inventory=['fuse','handwheel'];
   w.data.searched=['laundry-drawer','changing-drawer'];w.data.power=true;return w;
 };
 
 test('legacy pursuit cannot reference new patrol stops or unavailable hiding places',()=>{
-  const legacy=new EscapeWorld().snapshot();delete legacy.expansion;
+  const legacy=new EscapeWorld(42).snapshot();delete legacy.expansion;
   for(const change of [p=>p.patrolIndex=6,p=>p.seenHide='boiler-hide']){
     const s=structuredClone(legacy);change(s.pursuit);
     assert.throws(()=>EscapeWorld.restore(s),/逃生存档/);
@@ -22,7 +22,7 @@ test('legacy pursuit cannot reference new patrol stops or unavailable hiding pla
 
 test('new room doors do not shelter the player from a hunter investigating a real sound',()=>{
   for(const [door,room,x] of [['changing','旧更衣室',4.5],['boiler','锅炉房',11.5]]){
-    const w=new EscapeWorld();w.data.elapsed=25;w.data.unlocked.push(door);
+    const w=new EscapeWorld(42);w.data.elapsed=25;w.data.unlocked.push(door);
     w.data.hidden='bed-hide';Object.assign(w.data.player,{x:5.5,z:2.58,light:false});
     Object.assign(w.data.hunter,{x,z:9.5,state:'patrol'});
     w.noise({x,z:21.5},20);assert.equal(w.data.hunter.state,'investigate');
@@ -62,14 +62,14 @@ test('capture and a new night preserve a partially solved pressure puzzle and it
 });
 
 test('glass does not repeatedly ring while standing on it and rearms only after leaving',()=>{
-  const w=new EscapeWorld();w.data.elapsed=25;
+  const w=new EscapeWorld(42);w.data.elapsed=25;
   Object.assign(w.data.player,{x:6.9,z:9.5,angle:0,light:false});
   Object.assign(w.data.hunter,{x:20.5,z:3.5});
   frames(w,.3,{forward:1});assert.equal(w.drainEvents().filter(e=>e.type==='noise').length,1);
   frames(w,.3);assert.equal(w.drainEvents().filter(e=>e.type==='noise').length,0);
   frames(w,.55,{forward:-1});assert.equal(w.drainEvents().filter(e=>e.type==='noise').length,0);
   frames(w,.55,{forward:1});assert.equal(w.drainEvents().filter(e=>e.type==='noise').length,1);
-  const quiet=new EscapeWorld();quiet.data.elapsed=25;
+  const quiet=new EscapeWorld(42);quiet.data.elapsed=25;
   Object.assign(quiet.data.player,{x:6.9,z:9.5,angle:0,crouched:true,light:false});
   Object.assign(quiet.data.hunter,{x:13.5,z:14.5,angle:0});
   frames(quiet,.95,{forward:1});assert.ok(quiet.data.player.x>7.5);

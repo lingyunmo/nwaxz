@@ -19,7 +19,7 @@ try{
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base);await page.locator('#extreme').waitFor({timeout:300000});
   const seed=(wheel=false)=>{
-    const w=new EscapeWorld();w.data.inventory=['brass','cellar','fuse','cutters',...(wheel?['handwheel']:[])];
+    const w=new EscapeWorld(42);w.data.inventory=['brass','cellar','fuse','cutters',...(wheel?['handwheel']:[])];
     w.data.searched=PROPS.filter(p=>p.loot&&w.data.inventory.includes(p.loot)).map(p=>p.id);
     w.data.power=true;w.data.opened=DOORS.map(d=>d.id);w.data.unlocked=[...w.data.opened];
     Object.assign(w.data.hunter,{x:20.5,z:3.5,angle:0});return w;

@@ -1,4 +1,5 @@
 import { Mesh } from "@babylonjs/core/Meshes/mesh.js";
+import { Engine } from "@babylonjs/core/Engines/engine.js";
 import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData.js";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer.js";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode.js";
@@ -28,6 +29,7 @@ export function frogPose(world: EscapeWorld, clock: number, moving: boolean): Fr
 export class PaintedFrog {
   readonly root: TransformNode;
   readonly meshes: Mesh[] = [];
+  private overlays: { mesh: Mesh; material: StandardMaterial }[] = [];
   pose: FrogPose = { sheet: "original", frame: 0, motion: "idle" };
   private layers: { mesh: Mesh; material: StandardMaterial; original: Texture; actions: Texture; pose: FrogPose }[] = [];
   private base: number[] = [];
@@ -65,6 +67,11 @@ export class PaintedFrog {
       mesh.material = material; mesh.visibility = i === 0 ? 1 : 0;
       this.layers.push({ mesh, material, original, actions, pose: this.pose }); this.meshes.push(mesh);
       this.frame(i, this.pose);
+      const overlay = mesh.clone(`hunter-reveal-overlay-${i}`, this.root, false)!;
+      const overlayMaterial = material.clone(`hunter-reveal-material-${i}`)!;
+      overlayMaterial.depthFunction = Engine.ALWAYS; overlayMaterial.disableDepthWrite = true; overlayMaterial.forceDepthWrite = false; overlayMaterial.alpha = .56;
+      overlay.material = overlayMaterial; overlay.renderingGroupId = 1; overlay.visibility = 0;
+      this.overlays.push({ mesh: overlay, material: overlayMaterial });
     }
   }
   private frame(layer: number, pose: FrogPose) {
@@ -79,32 +86,46 @@ export class PaintedFrog {
     l.material.diffuseTexture = texture; l.pose = pose;
   }
   animate(world: EscapeWorld, dt: number, moving: boolean) {
-    this.clock += Math.min(.1, Math.max(0, dt));
-    const next = frogPose(world, this.clock, moving);
-    if (next.sheet !== this.pose.sheet || next.frame !== this.pose.frame) {
-      this.active = 1 - this.active; this.frame(this.active, next); this.fade = 0;
-    }
-    this.pose = next; this.fade = Math.min(1, this.fade + dt / .12);
-    const d = world.data, distance = Math.hypot(d.hunter.x - d.player.x, d.hunter.z - d.player.z);
-    const brightness = next.motion === "laugh" ? 1 : d.hidden ? .24 : d.player.light ? Math.max(.28, 1 - distance * .055) : .25;
-    for (let i = 0; i < this.layers.length; i++) {
-      const l = this.layers[i]; l.mesh.visibility = i === this.active ? this.fade : 1 - this.fade;
-      l.material.emissiveColor.set(brightness, brightness, brightness);
-      const laugh = next.motion === "laugh", gait = next.motion === "run" ? 10 : next.motion === "walk" ? 6.8 : 0;
-      const amplitude = this.reduced ? .003 : laugh ? .018 : .008;
-      const pulse = Math.sin(this.clock * (laugh ? 13 : 2.1));
-      const data = this.base.slice();
-      for (let v = 0; v < data.length; v += 3) {
-        const y = this.base[v + 1] / 2.55, belly = Math.sin(y * Math.PI);
-        data[v] += this.base[v] * belly * pulse * amplitude;
-        data[v + 1] += belly * pulse * amplitude * (laugh ? 1.8 : .6);
+    const d = world.data, frozen = d.phase === "playing" && (d.hunt?.freeze ?? 0) > 0;
+    if (!frozen) {
+      this.clock += Math.min(.1, Math.max(0, dt));
+      const next = frogPose(world, this.clock, moving);
+      if (next.sheet !== this.pose.sheet || next.frame !== this.pose.frame) {
+        this.active = 1 - this.active; this.frame(this.active, next); this.fade = 0;
       }
-      l.mesh.position.y = gait && !this.reduced ? .035 * (1 - Math.cos(this.clock * gait * 2)) : 0;
-      l.mesh.updateVerticesData(VertexBuffer.PositionKind, data, false, false);
+      this.pose = next; this.fade = Math.min(1, this.fade + dt / .12);
+    }
+    const distance = Math.hypot(d.hunter.x - d.player.x, d.hunter.z - d.player.z);
+    const brightness = this.pose.motion === "laugh" ? 1 : d.hidden ? .24 : d.player.light ? Math.max(.28, 1 - distance * .055) : .25;
+    for (let i = 0; i < this.layers.length; i++) {
+      const l = this.layers[i];
+      if (!frozen) {
+        l.mesh.visibility = i === this.active ? this.fade : 1 - this.fade;
+        const laugh = this.pose.motion === "laugh", gait = this.pose.motion === "run" ? 10 : this.pose.motion === "walk" ? 6.8 : 0;
+        const amplitude = this.reduced ? .003 : laugh ? .018 : .008;
+        const pulse = Math.sin(this.clock * (laugh ? 13 : 2.1));
+        const data = this.base.slice();
+        for (let v = 0; v < data.length; v += 3) {
+          const y = this.base[v + 1] / 2.55, belly = Math.sin(y * Math.PI);
+          data[v] += this.base[v] * belly * pulse * amplitude;
+          data[v + 1] += belly * pulse * amplitude * (laugh ? 1.8 : .6);
+        }
+        l.mesh.position.y = gait && !this.reduced ? .035 * (1 - Math.cos(this.clock * gait * 2)) : 0;
+        l.mesh.updateVerticesData(VertexBuffer.PositionKind, data, false, false);
+      }
+      const frozenTint = frozen && this.pose.motion !== "laugh";
+      l.material.emissiveColor.set(brightness * (frozenTint ? .48 : 1), brightness * (frozenTint ? .86 : 1), brightness);
+      const overlay = this.overlays[i];
+      overlay.mesh.position.y = l.mesh.position.y;
+      overlay.material.diffuseTexture = l.material.diffuseTexture;
+      overlay.mesh.visibility = (world.data.hunt?.reveal ?? 0) > 0 && world.data.phase === "playing" && i === this.active ? .56 : 0;
+      overlay.material.emissiveColor.set(.82, .36, 1);
+      overlay.material.alpha = .56;
     }
   }
   setReducedMotion(reduced: boolean) { this.reduced = reduced; }
   dispose() {
+    for (const overlay of this.overlays) { overlay.mesh.dispose(); overlay.material.dispose(); }
     for (const l of this.layers) { l.mesh.dispose(); l.material.dispose(); l.original.dispose(); l.actions.dispose(); }
     this.root.dispose();
   }

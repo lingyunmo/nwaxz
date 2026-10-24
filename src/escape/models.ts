@@ -7,7 +7,7 @@ import type { Texture } from "@babylonjs/core/Materials/Textures/texture.js";
 import { Vector3, Color3 } from "@babylonjs/core/Maths/math.js";
 import { PaintedFrog } from "./frog.ts";
 import { CELL, colorMaterial } from "./scene.ts";
-import { PROPS, VALVE_ORDER, type EscapeWorld } from "./world.ts";
+import { CRYSTALS, PROPS, VALVE_ORDER, type EscapeWorld } from "./world.ts";
 
 const EXPANSION_PROP_IDS = new Set(["changing-drawer", "changing-hide", "boiler-note", "boiler-hide", ...VALVE_ORDER]);
 
@@ -17,6 +17,14 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, texture
   const wheels = new Map<string, TransformNode>();
   let drainWheel: TransformNode | undefined;
   const valveLamps = new Map<string, ReturnType<typeof MeshBuilder.CreateSphere>>();
+  const crystals = new Map<string, ReturnType<typeof MeshBuilder.CreatePolyhedron>>();
+  const crystalMaterials = new Map<string, ReturnType<typeof colorMaterial>>();
+  for (const [kind, color] of [["freeze", "#8be5ff"], ["reveal", "#e49aff"]] as const) crystalMaterials.set(kind, colorMaterial(scene, `crystal-${kind}`, color, true));
+  for (const crystal of CRYSTALS) {
+    const mesh = MeshBuilder.CreatePolyhedron(`crystal:${crystal.id}`, { type: 1, size: .36 }, scene);
+    mesh.position.set(crystal.x * CELL, .66, crystal.z * CELL); mesh.material = crystalMaterials.get(crystal.kind)!; mesh.isPickable = false;
+    crystals.set(crystal.id, mesh);
+  }
   const lampColors: Record<string, string> = { "valve-cold": "#74b9ce", "valve-return": "#d2a655", "valve-vent": "#c6c8b6" };
   const readyLamp = colorMaterial(scene, "valve-state-ready", "#52bf75", true);
   const idleLamps = new Map(Object.entries(lampColors).map(([id, color]) => [id, colorMaterial(scene, `valve-state-${id}`, color, true)]));
@@ -82,6 +90,11 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, texture
     actorRoot, actorMeshes, cabinets, propRoots, actor,
     animate(world: EscapeWorld, dt: number) {
       const d = world.data, caught = d.phase === "caught" || d.phase === "lost", h = d.hunter;
+      for (const crystal of CRYSTALS) {
+        const mesh = crystals.get(crystal.id)!;
+        mesh.setEnabled(!d.hunt?.collected.includes(crystal.id));
+        mesh.rotation.y += dt * 1.2; mesh.position.y = .66 + Math.sin(d.elapsed * 2.4 + crystal.x) * .055;
+      }
       if (caught !== captured) {
         captured = caught;
         for (const mesh of environment) {

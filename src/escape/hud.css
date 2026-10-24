@@ -98,3 +98,50 @@
   .escape-notice { top:23%; bottom:auto; }
   .escape-shell .escape-interact { bottom:120px; }
 }
+.escape-hunt { position:absolute; z-index:2; top:68px; left:50%; transform:translateX(-50%); display:flex; gap:10px; width:min(250px,46vw); color:#d4ccb5; text-shadow:0 1px 4px #000; pointer-events:none; }
+.escape-hunt label { display:grid; grid-template-columns:1fr auto; align-items:center; gap:2px 5px; flex:1; min-width:0; font-size:10px; letter-spacing:.4px; }
+.escape-hunt label span { grid-column:1/-1; white-space:nowrap; }
+.escape-hunt meter { width:100%; height:5px; accent-color:#a5ad86; }
+.escape-hunt label:nth-child(2) meter { accent-color:#c5a36a; }
+.escape-hunt b { font:10px ui-monospace,monospace; min-width:18px; text-align:right; }
+.escape-hunt.panting label:first-child { color:#e8b18a; }
+.escape-hunt.alert label:nth-child(2) { color:#edaa87; }
+.escape-crystals { position:fixed; z-index:3; top:112px; left:50%; transform:translateX(-50%); display:flex; gap:7px; pointer-events:auto; }
+.escape-crystals button { position:relative; display:flex; align-items:center; gap:5px; width:auto; min-width:80px; min-height:30px; padding:4px 8px; border-radius:3px; background:#091014bd; font-size:9px; }
+.escape-crystals button:disabled { opacity:.58; }
+.escape-crystals button.active { border-color:#c6e4ef; box-shadow:0 0 12px #8cd5ff88; }
+.escape-crystals button b,.escape-crystals button small { font:9px ui-monospace,monospace; color:#d8d2bb; }
+.escape-crystals button small { position:absolute; top:-4px; right:-4px; padding:1px 3px; background:#080c0e; }
+.crystal-icon { font-style:normal; font-size:14px; line-height:1; }
+.crystal-icon.freeze { color:#9ce7ff; text-shadow:0 0 7px #48baff; }.crystal-icon.reveal { color:#efaaff; text-shadow:0 0 7px #ca65ff; }
+.escape-hunter-bearing { position:absolute; z-index:2; top:46%; right:8px; padding:6px 8px; color:#f4a5f3; border-right:2px solid #f087ec; background:#14091a99; font-size:10px; text-shadow:0 0 9px #e34cff; pointer-events:none; }
+.escape-hunter-bearing.left { right:auto; left:8px; border-right:0; border-left:2px solid #f087ec; }
+.escape-crystals button.active.freeze { color:#bcf2ff; }
+.escape-shell.freeze-active #escape-view { filter:saturate(.75) hue-rotate(155deg); }
+.escape-shell.freeze-active::before { content:''; position:absolute; z-index:1; inset:0; pointer-events:none; background:linear-gradient(135deg,#68d5f018,#b6eff012); box-shadow:inset 0 0 70px #70d8ff26; }
+.escape-shell>.escape-hunt,.escape-shell>.escape-crystals { pointer-events:none; }.escape-crystals button { pointer-events:auto; }
+.menu-active>.escape-hunt,.menu-active>.escape-crystals,.menu-active>.escape-hunter-bearing,.intro-active>.escape-hunt,.intro-active>.escape-crystals,.intro-active>.escape-hunter-bearing,.capture-active>.escape-hunt,.capture-active>.escape-crystals,.capture-active>.escape-hunter-bearing { visibility:hidden; }
+@media(pointer:coarse) {
+ .escape-controls { margin-bottom:0; }
+ .escape-hunt { top:102px; left:16px; right:auto; transform:none; display:grid; grid-template-columns:1fr; width:146px; gap:5px; }
+ .escape-hunt label { display:grid; grid-template-columns:66px minmax(0,1fr) 19px; gap:3px; align-items:center; font-size:10px; }
+ .escape-hunt label span { grid-column:auto; }
+ .escape-hunt meter { min-width:0; }
+ .escape-crystals { display:contents; }
+ .escape-actions { grid-template-columns:repeat(2,52px); grid-template-rows:repeat(3,52px); gap:7px 12px; }
+ .escape-crystals button { width:52px; min-width:0; height:52px; min-height:52px; padding:8px; justify-content:center; }
+ .escape-crystals button span { display:none; }
+ .escape-crystals button .crystal-icon { font-size:24px; }
+ .escape-crystals button b { top:-4px; right:-4px; }
+ .escape-crystals button small { top:auto; right:2px; bottom:1px; padding:0; background:transparent; font-size:8px; }
+}
+@media(pointer:coarse) and (max-width:350px) {
+ .escape-hunt { top:100px; left:12px; width:142px; }
+ .escape-actions { grid-template-columns:repeat(2,48px); grid-template-rows:repeat(3,48px); gap:6px 8px; }
+ .escape-actions button,.escape-crystals button { width:48px; height:48px; min-height:48px; }
+}
+@media(pointer:coarse) and (orientation:landscape) and (max-height:540px) {
+ .escape-hunt { top:86px; left:14px; width:146px; }
+ .escape-actions { grid-template-columns:repeat(2,44px); grid-template-rows:repeat(3,44px); gap:4px 7px; }
+ .escape-actions button,.escape-crystals button { width:44px; height:44px; min-height:44px; padding:6px; }
+}

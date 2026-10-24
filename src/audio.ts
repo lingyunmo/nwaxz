@@ -1,7 +1,7 @@
 import { parseSettings, type Settings } from "./settings.ts";
 import { PlaybackSession } from "./ios-audio.ts";
 
-type Effect = "tap" | "coin" | "win" | "dig" | "step" | "door" | "heartbeat" | "noise";
+type Effect = "tap" | "coin" | "win" | "dig" | "step" | "door" | "heartbeat" | "noise" | "breath";
 type Voice = { oscillator: OscillatorNode; gain: GainNode };
 type Recording = "normal" | "horror" | "escape" | "laugh";
 const recordingPaths: Record<Recording, string> = {
@@ -20,6 +20,7 @@ const effectNotes: Record<Effect, { frequencies: number[]; step: number; type: O
   door: { frequencies: [94, 72, 48], step: .09, type: "triangle" },
   heartbeat: { frequencies: [52, 36], step: .10, type: "sine" },
   noise: { frequencies: [240, 90, 170, 55], step: .07, type: "triangle" },
+  breath: { frequencies: [120], step: .38, type: "triangle" },
 };
 
 export class AudioManager {
@@ -205,6 +206,16 @@ export class AudioManager {
     const context = this.context;
     if (!context || context.state !== "running" || this.disposed || document.hidden) return;
     this.playback.activate();
+    if (effect === "breath") {
+      const length = Math.floor(context.sampleRate * .42), buffer = context.createBuffer(1, length, context.sampleRate), data = buffer.getChannelData(0);
+      for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * i / length) ** .7;
+      const source = context.createBufferSource(), filter = context.createBiquadFilter(), gain = context.createGain();
+      source.buffer = buffer; filter.type = "bandpass"; filter.frequency.value = 820; filter.Q.value = .65;
+      gain.gain.setValueAtTime(.0001, context.currentTime); gain.gain.linearRampToValueAtTime(.11, context.currentTime + .07); gain.gain.exponentialRampToValueAtTime(.0001, context.currentTime + .4);
+      source.connect(filter); filter.connect(gain); gain.connect(context.destination); this.sampledVoices.set(source, gain);
+      source.onended = () => { this.sampledVoices.delete(source); source.disconnect(); filter.disconnect(); gain.disconnect(); this.releasePlaybackIfIdle(); };
+      source.start(); return;
+    }
     const spec = effectNotes[effect], now = context.currentTime,
       duration = spec.frequencies.length * spec.step, volume = effect === "dig" ? .07 : effect === "step" ? .055 : effect === "heartbeat" ? .09 : .12;
     const oscillator = context.createOscillator(), gain = context.createGain();

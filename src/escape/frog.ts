@@ -12,6 +12,7 @@ import type { Scene } from "@babylonjs/core/scene.js";
 import type { EscapeWorld } from "./world.ts";
 import { frogViewDirection } from "./facing.ts";
 import { DIRECTIONAL_ART } from "./directional-art.ts";
+import { floorAt } from "./basement-map.ts";
 
 export type FrogPose = { sheet: "original" | "actions" | "directionIdle" | "directionWalk"; frame: number; mirror?: boolean; direction?: number; motion: "idle" | "walk" | "run" | "search" | "peek" | "lunge" | "laugh" };
 export type FrogTextures = Record<FrogPose["sheet"], Texture>;
@@ -156,7 +157,7 @@ export class PaintedFrog {
       this.bob = gait && !this.reduced ? .018 * (1 - Math.cos(this.clock * gait * 2)) : 0;
     }
     const distance = Math.hypot(d.hunter.x - d.player.x, d.hunter.z - d.player.z);
-    const brightness = this.pose.motion === "laugh" ? 1 : d.hidden ? .24 : d.player.light ? Math.max(.28, 1 - distance * .055) : .25;
+    const brightness = this.pose.motion === "laugh" ? 1 : world.lightPerception.illuminated ? Math.max(.28, 1 - distance * .055) : .06;
     for (let i = 0; i < this.layers.length; i++) {
       const l = this.layers[i];
       if (updateVisibility) {
@@ -182,7 +183,8 @@ export class PaintedFrog {
       overlay.mesh.position.y = l.mesh.position.y;
       overlay.mesh.scaling.copyFrom(l.mesh.scaling);
       overlay.material.diffuseTexture = l.material.diffuseTexture;
-      overlay.mesh.visibility = (world.data.hunt?.reveal ?? 0) > 0 && world.data.phase === "playing" && i === this.active ? .56 : 0;
+      overlay.mesh.visibility = (world.data.hunt?.reveal ?? 0) > 0 && world.data.phase === "playing"
+        && floorAt(d.player) === floorAt(d.hunter) && i === this.active ? .56 : 0;
       overlay.material.emissiveColor.set(.82, .36, 1);
       overlay.material.alpha = .56;
     }

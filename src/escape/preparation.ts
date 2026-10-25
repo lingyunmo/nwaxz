@@ -33,8 +33,8 @@ export async function prepareEscape(settings: Settings, onStage: (stage: string)
   prepared?.renderer.dispose(); prepared = undefined;
   pending = (async () => {
     onStage("正在铺好浴室地图…");
-    const [materials, map] = await Promise.all([loadImage("/assets/scenes/escape-materials-v1.webp"), loadImage("/assets/ui/escape-map-atlas-v1.webp")]);
-    const canvas = document.createElement("canvas"), art = { materials, map };
+    const [materials, map, basement] = await Promise.all([loadImage("/assets/scenes/escape-materials-v1.webp"), loadImage("/assets/ui/escape-map-atlas-v1.webp"), loadImage("/assets/scenes/escape-basement-atlas-v1.webp")]);
+    const canvas = document.createElement("canvas"), art = { materials, map, basement };
     // Keep one mounted canvas: swapping a WebGL context to another canvas is impossible.
     parking ??= document.createElement("div");
     parking.style.cssText = "position:fixed;left:-200vw;top:0;width:100vw;height:100vh;pointer-events:none;visibility:hidden";

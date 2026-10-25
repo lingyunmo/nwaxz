@@ -12,11 +12,17 @@ const powered=()=>{
   w.data.searched=['laundry-drawer','changing-drawer'];w.data.power=true;return w;
 };
 
-test('legacy pursuit cannot reference new patrol stops or unavailable hiding places',()=>{
-  const legacy=new EscapeWorld(42).snapshot();delete legacy.expansion;
-  for(const change of [p=>p.patrolIndex=6,p=>p.seenHide='boiler-hide']){
-    const s=structuredClone(legacy);change(s.pursuit);
-    assert.throws(()=>EscapeWorld.restore(s),/逃生存档/);
+test('v2 restore requires the live basement systems and rejects invalid patrol or hiding references',()=>{
+  const base=new EscapeWorld(42).snapshot();
+  for(const mutate of [
+    s=>{s.version=1;},
+    s=>{delete s.basement;},
+    s=>{delete s.abilities;},
+    s=>{s.pursuit.patrolIndex=99;},
+    s=>{s.pursuit.seenHide='missing-wardrobe';},
+  ]){
+    const invalid=structuredClone(base);mutate(invalid);
+    assert.throws(()=>EscapeWorld.restore(invalid),/逃生存档/);
   }
 });
 

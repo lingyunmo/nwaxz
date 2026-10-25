@@ -1,4 +1,5 @@
-import { CRYSTALS, DOORS, HAZARDS, MAP, PROPS, SIZE, type EscapeWorld, type Prop, type Vec } from "./world.ts";
+import { CRYSTALS, DOORS, HAZARDS, MAP, PROPS, SIZE, HEIGHT, type EscapeWorld, type Prop, type Vec } from "./world.ts";
+import { floorAt, stairsAt } from "./basement-map.ts";
 
 export type MapReveal = "explored" | "near" | "fog";
 export type MapTerrain = "floor" | "wall" | "outside";
@@ -19,8 +20,8 @@ type ExploredData = EscapeWorld["data"] & { explored?: number[] };
 const EXPANSION_FEATURE_IDS = new Set(["changing-drawer", "changing-hide", "boiler-note", "boiler-hide", "valve-cold", "valve-return", "valve-vent"]);
 
 /** Map grid coordinates to the fixed whole-map view or player-centered 13x13 crop. */
-export function mapWindow(player: Vec, compact = false): MapWindow {
-  if (!compact) return { x: 0, z: 0, columns: SIZE, rows: SIZE };
+export function mapWindow(player: Vec, compact = false, floor: 0 | -1 = floorAt(player)): MapWindow {
+  if (!compact) return floor === -1 ? { x: 0, z: 24, columns: SIZE, rows: HEIGHT - 24 } : { x: 0, z: 0, columns: SIZE, rows: SIZE };
   const columns = 13;
   return {
     x: Math.floor(player.x) - Math.floor(columns / 2),
@@ -31,10 +32,10 @@ export function mapWindow(player: Vec, compact = false): MapWindow {
 }
 
 /** Return display-safe map samples; unexplored doors and objects are never included. */
-export function visibleTiles(world: EscapeWorld, compact = false): MapTile[] {
+export function visibleTiles(world: EscapeWorld, compact = false, floor: 0 | -1 = floorAt(world.data.player)): MapTile[] {
   const d = world.data as ExploredData;
   const p = d.player;
-  const window = mapWindow(p, compact);
+  const window = mapWindow(p, compact, floor);
   const explored = new Set(Array.isArray(d.explored) ? d.explored : []);
   const playerX = Math.floor(p.x), playerZ = Math.floor(p.z);
   const result: MapTile[] = [];
@@ -43,7 +44,8 @@ export function visibleTiles(world: EscapeWorld, compact = false): MapTile[] {
     for (let column = 0; column < window.columns; column += 1) {
       const x = window.x + column, z = window.z + row;
       const index = z * SIZE + x;
-      const inBounds = x >= 0 && z >= 0 && x < SIZE && z < SIZE;
+      const inBounds = x >= 0 && z >= 0 && x < SIZE && z < HEIGHT
+        && (floor === floorAt({ x, z }) || stairsAt(p) && stairsAt({ x, z }));
       const seen = inBounds && (explored.has(index) || x === playerX && z === playerZ);
       const nearby = inBounds && Math.abs(x - playerX) <= 2 && Math.abs(z - playerZ) <= 2;
       const reveal: MapReveal = seen ? "explored" : nearby ? "near" : "fog";
@@ -101,14 +103,14 @@ export class EscapeMap {
     this.art = art;
   }
 
-  draw(canvas: HTMLCanvasElement, world: EscapeWorld, compact = false): void {
+  draw(canvas: HTMLCanvasElement, world: EscapeWorld, compact = false, floor: 0 | -1 = floorAt(world.data.player)): void {
     const context = canvas.getContext("2d");
     if (!context || !canvas.width || !canvas.height) return;
     const ctx = context;
     const width = canvas.width, height = canvas.height;
     const panel = compact ? Math.min(width, height) : Math.min(width, height);
     const padding = compact ? Math.max(10, Math.round(panel * .075)) : Math.max(24, Math.round(panel * .06));
-    const view = mapWindow(world.data.player, compact);
+    const view = mapWindow(world.data.player, compact, floor);
     const cell = Math.floor(Math.min((panel - padding * 2) / view.columns,
       (panel - padding * 2) / view.rows));
     const mapWidth = cell * view.columns, mapHeight = cell * view.rows;
@@ -119,7 +121,7 @@ export class EscapeMap {
     ctx.imageSmoothingEnabled = false;
     this.drawFrame(ctx, width, height, padding, compact);
 
-    const tiles = visibleTiles(world, compact);
+    const tiles = visibleTiles(world, compact, floor);
     for (const tile of tiles) {
       const column = tile.x - view.x, row = tile.z - view.z;
       const x = left + column * cell, y = top + row * cell;
@@ -139,8 +141,8 @@ export class EscapeMap {
     const playerX = Math.floor(world.data.player.x), playerZ = Math.floor(world.data.player.z);
     const arrowX = left + (playerX - view.x + .5) * cell;
     const arrowY = top + (playerZ - view.z + .5) * cell;
-    this.drawPlayer(ctx, arrowX, arrowY, cell, world.data.player.angle);
-    if ((world.data.hunt?.reveal ?? 0) > 0) {
+    if (floorAt(world.data.player) === floor) this.drawPlayer(ctx, arrowX, arrowY, cell, world.data.player.angle);
+    if ((world.data.hunt?.reveal ?? 0) > 0 && floorAt(world.data.hunter) === floor) {
       const hunterX = Math.floor(world.data.hunter.x), hunterZ = Math.floor(world.data.hunter.z);
       const hx = left + (hunterX - view.x + .5) * cell, hy = top + (hunterZ - view.z + .5) * cell;
       if (compact && (hx < left || hx > left + mapWidth || hy < top || hy > top + mapHeight)) {

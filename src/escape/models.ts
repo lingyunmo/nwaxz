@@ -7,6 +7,7 @@ import { Vector3, Color3 } from "@babylonjs/core/Maths/math.js";
 import { PaintedFrog, type FrogTextures } from "./frog.ts";
 import { CELL, colorMaterial } from "./scene.ts";
 import { CRYSTALS, PROPS, VALVE_ORDER, type EscapeWorld } from "./world.ts";
+import { floorAt, floorYAt } from "./basement-map.ts";
 
 const EXPANSION_PROP_IDS = new Set(["changing-drawer", "changing-hide", "boiler-note", "boiler-hide", ...VALVE_ORDER]);
 
@@ -21,7 +22,7 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, texture
   for (const [kind, color] of [["freeze", "#8be5ff"], ["reveal", "#e49aff"]] as const) crystalMaterials.set(kind, colorMaterial(scene, `crystal-${kind}`, color, true));
   for (const crystal of CRYSTALS) {
     const mesh = MeshBuilder.CreatePolyhedron(`crystal:${crystal.id}`, { type: 1, size: .36 }, scene);
-    mesh.position.set(crystal.x * CELL, .66, crystal.z * CELL); mesh.material = crystalMaterials.get(crystal.kind)!; mesh.isPickable = false;
+    mesh.position.set(crystal.x * CELL, floorYAt(crystal) + .66, crystal.z * CELL); mesh.material = crystalMaterials.get(crystal.kind)!; mesh.isPickable = false;
     crystals.set(crystal.id, mesh);
   }
   const lampColors: Record<string, string> = { "valve-cold": "#74b9ce", "valve-return": "#d2a655", "valve-vent": "#c6c8b6" };
@@ -34,7 +35,8 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, texture
     const source = sources.find(n => n.name === name);
     if (!source) throw new Error(`Missing solid prop ${name}`);
     const clone = source.clone(`prop:${object.id}`, null, false) as TransformNode;
-    clone.position.set(object.x * CELL, object.kind === "power" ? .75 : object.kind === "valve" ? .35 : 0, object.z * CELL);
+    const ground = floorYAt(object);
+    clone.position.set(object.x * CELL, ground + (object.kind === "power" ? .75 : object.kind === "valve" ? .35 : 0), object.z * CELL);
     if (object.kind === "exit") {
       clone.rotation.y = Math.PI; clone.position.z = 23 * CELL - .04;
       // The source prop also supports a closed decorative grate. Here its
@@ -57,20 +59,20 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, texture
       const wheel = descendants.find(n => n.name.includes("valve_wheel"));
       if (wheel) { wheel.rotationQuaternion = null; wheels.set(object.id, wheel); }
       const lamp = MeshBuilder.CreateSphere(`valve-state:${object.id}`, { diameter: .12 }, scene);
-      lamp.position.set(object.x * CELL, 1.15, object.z * CELL - .3); lamp.material = idleLamps.get(object.id)!;
+      lamp.position.set(object.x * CELL, ground + 1.15, object.z * CELL - .3); lamp.material = idleLamps.get(object.id)!;
       lamp.isPickable = false; valveLamps.set(object.id, lamp);
     }
   }
   const pipe = sources.find(n => n.name === "pipe")!;
-  for (const [i, x, z] of [[0, 1.1, 5.5], [1, 9.1, 5.5], [2, 17.1, 15.5], [3, 22.8, 20.5]]) {
+  for (const [i, x, z] of [[0, 1.1, 5.5], [1, 9.1, 5.5], [2, 17.1, 15.5], [3, 22.8, 20.5], [4, 18.4, 33.5], [5, 7.5, 42.2]]) {
     const clone = pipe.clone(`pipe:${i}`, null, false) as TransformNode;
-    clone.position.set(x * CELL, 0, z * CELL);
+    clone.position.set(x * CELL, floorYAt({ x, z }), z * CELL);
   }
   const paper = colorMaterial(scene, "old-readable-paper", "#bdb38b");
   const ink = colorMaterial(scene, "paper-ink", "#39392f");
   for (const note of PROPS.filter(p => p.kind === "note")) {
     const root = new TransformNode(`note:${note.id}`, scene);
-    root.position.set(note.x * CELL, .08, note.z * CELL);
+    root.position.set(note.x * CELL, floorYAt(note) + .08, note.z * CELL);
     const page = MeshBuilder.CreateBox("paper-sheet", { width: .22, height: .006, depth: .31 }, scene);
     page.parent = root; page.material = paper;
     for (let i = 0; i < 6; i++) {
@@ -92,7 +94,7 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, texture
       for (const crystal of CRYSTALS) {
         const mesh = crystals.get(crystal.id)!;
         mesh.setEnabled(!d.hunt?.collected.includes(crystal.id));
-        mesh.rotation.y += dt * 1.2; mesh.position.y = .66 + Math.sin(d.elapsed * 2.4 + crystal.x) * .055;
+        mesh.rotation.y += dt * 1.2; mesh.position.y = floorYAt(crystal) + .66 + Math.sin(d.elapsed * 2.4 + crystal.x) * .055;
       }
       if (caught !== captured) {
         captured = caught;
@@ -101,7 +103,7 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, texture
           else mesh.isVisible = oldVisibility.get(mesh) ?? mesh.isVisible;
         }
       }
-      actorRoot.position.set(h.x * CELL, 0, h.z * CELL);
+      actorRoot.position.set(h.x * CELL, floorYAt(h), h.z * CELL);
       stillFor = Vector3.DistanceSquared(actorRoot.position, previous) > .000001 ? 0 : stillFor + dt;
       // A path waypoint may cost one simulation frame. Keep the walking cycle
       // through those brief gaps instead of restarting idle/walk at each tile.

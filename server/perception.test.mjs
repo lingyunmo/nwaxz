@@ -39,7 +39,7 @@ test('fair contributions sum to the authoritative total, preserve symmetry and d
  assert.ok(combinePerception({noise:50,glare:50,sight:50}).total-half.total<25);
 });
 
-test('actual footsteps use distinct modes and metric distance; distant running is inaudible but near crouching is audible',()=>{
+test('footsteps use measured mode ranges, metric distance, and report audible near crouching',()=>{
  const rates={};
  for(const mode of ['walk','crouch','sprint']){
   const w=hall(.9);w.data.player.crouched=mode==='crouch';w.advance(1/60,{forward:1,sprint:mode==='sprint'});
@@ -47,14 +47,17 @@ test('actual footsteps use distinct modes and metric distance; distant running i
   near(w.hearing.distance,Math.hypot(w.data.player.x-w.data.hunter.x,w.data.player.z-w.data.hunter.z)*1.5);
  }
  assert.ok(rates.sprint>rates.walk&&rates.walk>rates.crouch);
- const far=hall(12);far.advance(.1,{forward:1,sprint:true});assert.equal(far.hearing.audible,false);assert.equal(far.data.hunt.noise,0);
+ const tenMetreRun=hall(10/1.5);tenMetreRun.advance(1/60,{forward:1,sprint:true});assert.equal(tenMetreRun.hearing.audible,true);assert.ok(tenMetreRun.hearing.rate>0);
+ const beyondRunRange=hall(24.5/1.5);beyondRunRange.advance(1/60,{forward:1,sprint:true});assert.equal(beyondRunRange.hearing.audible,false);assert.equal(beyondRunRange.data.hunt.noise,0);
+ const nearCrouch=hall(4/1.5);nearCrouch.data.player.crouched=true;nearCrouch.advance(1/60,{forward:1});assert.equal(nearCrouch.hearing.action,'crouch');assert.ok(nearCrouch.hearing.rate>0);
  const blocked=hall(8);Object.assign(blocked.data.player,{x:1.18,z:9.5,angle:Math.PI});blocked.advance(.1,{forward:1,sprint:true});
  assert.equal(blocked.hearing.action,'still');assert.equal(blocked.data.hunt.noise,0);
 });
 
-test('a closed door attenuates the same hearing model that the HUD reads',()=>{
+test('a closed door attenuates hearing and a ten-metre run remains audible through it',()=>{
  const w=hall();Object.assign(w.data.player,{x:11.5,z:6.5,angle:Math.PI/2});Object.assign(w.data.hunter,{x:11.5,z:9.5,angle:0});
- w.advance(.05,{forward:1});assert.equal(w.hearing.occluded,true);assert.equal(w.hearing.audible,false);
+ Object.assign(w.data.player,{z:3.5});w.data.hunter.z=10.5;
+ w.advance(1/60,{forward:1,sprint:true});assert.equal(w.hearing.occluded,true);assert.equal(w.hearing.audible,true);assert.ok(w.hearing.range<24);assert.ok(w.data.hunt.noise>0);
  w.data.inventory.push('brass');w.data.unlocked.push('study');w.data.opened.push('study');w.advance(.05,{forward:1});
  assert.equal(w.hearing.occluded,false);assert.equal(w.hearing.audible,true);assert.ok(w.data.hunt.noise>0);
 });
@@ -113,9 +116,15 @@ test('standing is default, stance and sprint toggle mutually, leaving a cabinet 
  frames(tired,2.6,{forward:1});assert.equal(tired.data.player.sprinting,true);assert.equal(tired.movementMode,'sprint');
 });
 
-test('legacy saves migrate and invalid perception extensions are rejected',()=>{
- const old=new EscapeWorld(42).snapshot();for(const key of ['noise','sight','exposure','alert','traces'])delete old.hunt[key];delete old.player.sprinting;delete old.player.winded;
- const w=EscapeWorld.restore(old);assert.equal(w.perception.total,0);assert.equal(w.movementMode,'walk');
+test('version 2 perception saves round-trip and reject legacy missing state',()=>{
+ const current=new EscapeWorld(42).snapshot();assert.deepEqual(EscapeWorld.restore(current).snapshot(),current);
+ const v1=structuredClone(current);v1.version=1;assert.throws(()=>EscapeWorld.restore(v1),/逃生存档/);
+ for(const key of ['basement','abilities','interference','expansion','hunt','explored']){
+  const old=structuredClone(current);delete old[key];assert.throws(()=>EscapeWorld.restore(old),/逃生存档/);
+ }
+ for(const key of ['pitch','sprinting','winded']){
+  const old=structuredClone(current);delete old.player[key];assert.throws(()=>EscapeWorld.restore(old),/逃生存档/);
+ }
  for(const mutate of [s=>s.hunt.noise=101,s=>s.hunt.sight=-1,s=>s.hunt.alert=6.1,s=>s.hunt.traces={noise:{x:-1,z:3}},s=>s.hunt.traces={noise:{x:3,z:3,secret:1}},s=>s.player.sprinting='yes',s=>{s.player.crouched=true;s.player.sprinting=true}]){
   const bad=new EscapeWorld(42).snapshot();mutate(bad);assert.throws(()=>EscapeWorld.restore(bad),/逃生存档/);
  }

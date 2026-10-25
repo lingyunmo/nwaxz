@@ -1,5 +1,12 @@
 import "./style.css";
 import "./hud.css";
+import "./ability-hud.css";
+import { AbilityHud } from "./ability-hud.ts";
+import { floorAt } from "./basement-map.ts";
+import { SAVE_GENERATION } from "../save-generation.ts";
+import { displayPerception } from "./interference.ts";
+import { NoteDialog } from "./note-dialog.ts";
+import "./note-dialog.css";
 import { icon } from "./icons.ts";
 import { SaveWriteError, writeSaveBatch } from "./save.ts";
 import { CinematicPlayer, randomOpeningClip, randomCaughtClip } from "./cinematic.ts";
@@ -13,14 +20,14 @@ export { prepareEscape } from "./preparation.ts";
 
 const SESSION = "nwaxz-escape-session-v1", RECORD = "nwaxz-escape-record-v1", SOUND = "nwaxz-escape-sound-v1";
 const HUD = "nwaxz-escape-hud-v1";
-type Best = { version: 1; escapes: number; bestTimeMs: number; fewestCaptures: number; mostNotes: number };
+type Best = { version: 2; escapes: number; bestTimeMs: number; fewestCaptures: number; mostNotes: number };
 const time = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 const safe = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 function readBest(raw: unknown): Best | undefined {
   if (!raw || typeof raw !== "object") return;
   const r = raw as Best;
-  if (r.version !== 1 || !Number.isInteger(r.escapes) || r.escapes < 1 || r.escapes > 1e9 || !Number.isInteger(r.bestTimeMs) || r.bestTimeMs < 0 || r.bestTimeMs > 86400_000 || !Number.isInteger(r.fewestCaptures) || r.fewestCaptures < 0 || r.fewestCaptures > 2 || !Number.isInteger(r.mostNotes) || r.mostNotes < 0 || r.mostNotes > 4) return;
-  return { version: 1, escapes: r.escapes, bestTimeMs: r.bestTimeMs, fewestCaptures: r.fewestCaptures, mostNotes: r.mostNotes };
+  if (r.version !== 2 || !Number.isInteger(r.escapes) || r.escapes < 1 || r.escapes > 1e9 || !Number.isInteger(r.bestTimeMs) || r.bestTimeMs < 0 || r.bestTimeMs > 86400_000 || !Number.isInteger(r.fewestCaptures) || r.fewestCaptures < 0 || r.fewestCaptures > 2 || !Number.isInteger(r.mostNotes) || r.mostNotes < 0 || r.mostNotes > PROPS.filter(p => p.kind === "note").length) return;
+  return { version: 2, escapes: r.escapes, bestTimeMs: r.bestTimeMs, fewestCaptures: r.fewestCaptures, mostNotes: r.mostNotes };
 }
 export class EscapeGame {
   world = new EscapeWorld();
@@ -54,11 +61,18 @@ export class EscapeGame {
   private music = true;
   private sound = true;
   private hudDetails = false;
+  private abilityHud: AbilityHud;
+  private noteDialog: NoteDialog;
+  private noteActive = false;
+  private noteReturnToJournal = false;
   private readonly signal = this.controller.signal;
   constructor(private root: HTMLElement, private audio: AudioManager, private settings: Settings, private exit: () => void) {
     try {
       const session = localStorage.getItem(SESSION);
-      if (session) this.saved = EscapeWorld.restore(JSON.parse(session)).snapshot();
+      if (session) {
+        try { this.saved = EscapeWorld.restore(JSON.parse(session)).snapshot(); }
+        catch { localStorage.removeItem(SESSION); localStorage.removeItem(RECORD); this.storageWarning = "存档格式已更新，重新开始逃生。"; }
+      }
       const record = localStorage.getItem(RECORD); if (record) this.record = readBest(JSON.parse(record));
       const sound = JSON.parse(localStorage.getItem(SOUND) ?? "null");
       if (sound && typeof sound.music === "boolean" && typeof sound.sound === "boolean") { this.music = sound.music; this.sound = sound.sound; }
@@ -68,7 +82,7 @@ export class EscapeGame {
       <header class="escape-hud"><button id="escape-pause" class="escape-round" aria-label="暂停逃生">${icon("pause")}</button><div class="escape-location"><span id="escape-room">${safe(this.world.room)}</span><span id="escape-night">第1夜 · 00:00</span><div id="escape-lives" aria-label="剩余机会"></div></div></header>
       <button id="escape-map" class="escape-map-button" aria-label="查看地图，当前位置：${safe(this.world.room)}"><canvas id="escape-minimap" width="208" height="208" aria-hidden="true"></canvas><span>浴场地图 <kbd>M</kbd></span><small id="escape-map-room">${safe(this.world.room)}</small></button>
       <div class="escape-inventory" id="escape-inventory" aria-label="随身物品"></div>
-      <section class="escape-hunt" aria-label="奶蛙追击状态"><div class="escape-exposure"><div class="escape-exposure-heading"><strong>暴露值</strong><b id="escape-exposure-value">0</b><span>/100</span><strong id="escape-hunt-state">平静</strong><button id="escape-hud-toggle" aria-expanded="false" aria-controls="escape-source-details"><span>详情</span><kbd>Tab</kbd></button><button id="escape-hud-help" aria-label="暴露规则说明" title="暴露规则说明">?</button></div><meter id="escape-exposure" aria-label="暴露值" min="0" max="100" value="0"></meter><p id="escape-exposure-hint">保持安静，留意周围。</p></div><div class="escape-secondary-meters" id="escape-source-details"><div class="escape-source"><div><strong>声音</strong><b id="escape-noise-value">0</b></div><meter id="escape-noise" aria-label="声音暴露" min="0" max="100" value="0"></meter><small id="escape-noise-info">静止</small><em id="escape-noise-contribution">+0分 · 0%</em></div><div class="escape-source"><div><strong>灯光</strong><b id="escape-glare-value">0</b></div><meter id="escape-glare" aria-label="灯光暴露" min="0" max="100" value="0"></meter><small id="escape-glare-info">未照中</small><em id="escape-glare-contribution">+0分 · 0%</em></div><div class="escape-source"><div><strong>视觉</strong><b id="escape-sight-value">0</b></div><meter id="escape-sight" aria-label="视觉暴露" min="0" max="100" value="0"></meter><small id="escape-sight-info">未被看到</small><em id="escape-sight-contribution">+0分 · 0%</em></div></div></section>
+      <section class="escape-hunt" aria-label="奶蛙追击状态"><div class="escape-exposure"><div class="escape-exposure-heading"><strong id="escape-exposure-label">暴露值</strong><b id="escape-exposure-value">0</b><span>/100</span><strong id="escape-hunt-state">平静</strong><button id="escape-hud-toggle" aria-expanded="false" aria-controls="escape-source-details"><span>详情</span><kbd>Tab</kbd></button><button id="escape-hud-help" aria-label="暴露规则说明" title="暴露规则说明">?</button></div><meter id="escape-exposure" aria-label="暴露值" min="0" max="100" value="0"></meter><p id="escape-exposure-hint">保持安静，留意周围。</p></div><div class="escape-secondary-meters" id="escape-source-details"><div class="escape-source"><div><strong>声音</strong><b id="escape-noise-value">0</b></div><meter id="escape-noise" aria-label="声音暴露" min="0" max="100" value="0"></meter><small id="escape-noise-info">静止</small><em id="escape-noise-contribution">+0分 · 0%</em></div><div class="escape-source"><div><strong>灯光</strong><b id="escape-glare-value">0</b></div><meter id="escape-glare" aria-label="灯光暴露" min="0" max="100" value="0"></meter><small id="escape-glare-info">未照中</small><em id="escape-glare-contribution">+0分 · 0%</em></div><div class="escape-source"><div><strong>视觉</strong><b id="escape-sight-value">0</b></div><meter id="escape-sight" aria-label="视觉暴露" min="0" max="100" value="0"></meter><small id="escape-sight-info">未被看到</small><em id="escape-sight-contribution">+0分 · 0%</em></div></div></section>
       <div class="escape-hunter-bearing" id="escape-hunter-bearing" aria-label="奶蛙方向" hidden>‹ 奶蛙</div>
       <div class="escape-room-toast" id="escape-room-toast" aria-live="polite" hidden></div>
       <div class="escape-mouse-hint" id="escape-mouse-hint" hidden>点击画面，移动鼠标转头</div>
@@ -78,6 +92,12 @@ export class EscapeGame {
       <div class="escape-controls"><div class="escape-stick" id="escape-stick" aria-label="移动摇杆"><span></span></div><div class="escape-actions"><button id="escape-light" aria-label="开关手电" title="手电 F">${icon("light")}<span>手电</span><kbd>F</kbd></button><button id="escape-crouch" aria-label="切换蹲行，按 C 切换" title="蹲行 C：切换">${icon("crouch")}<span>蹲行</span><kbd>C</kbd></button><button id="escape-stone" aria-label="丢石子" title="石子 Q">${icon("stone")}<span>石子</span><b id="escape-stones">2</b><kbd>Q</kbd></button><button id="escape-sprint" aria-label="切换奔跑" title="奔跑 Shift：切换">${icon("run")}<span>奔跑</span><kbd>Shift</kbd></button><div class="escape-crystals"><button id="escape-freeze" aria-label="使用冻结晶，快捷键1"><i class="crystal-icon freeze">❄</i><span>冻结</span><b id="escape-freeze-count">0</b><small id="escape-freeze-time">余 0s</small><kbd>1</kbd></button><button id="escape-reveal" aria-label="使用显形晶，快捷键2"><i class="crystal-icon reveal">◇</i><span>显形</span><b id="escape-reveal-count">0</b><small id="escape-reveal-time">余 0s</small><kbd>2</kbd></button></div></div></div>
       <button class="escape-interact" id="escape-interact" hidden>${icon("hand")}<span></span><kbd>E</kbd></button></div>
       <div id="escape-panel" class="escape-panel" role="dialog" aria-modal="true" aria-label="逃生菜单"></div><input id="escape-import" type="file" accept=".json,application/json" hidden></main>`;
+    this.abilityHud = new AbilityHud(this.$(".escape-shell"));
+    this.noteDialog = new NoteDialog(this.$(".escape-shell"), () => {
+      if (!this.noteActive) return;
+      this.noteActive = false;
+      if (this.noteReturnToJournal) this.showJournal(); else this.resume();
+    });
     try { this.hudDetails = localStorage.getItem(HUD) === "expanded"; } catch { /* Keep compact without storage. */ }
     this.applyHudDetails();
     this.adoptPrepared();
@@ -98,10 +118,11 @@ export class EscapeGame {
   }
   private button(id: string, fn: () => void) { this.$(`#${id}`).addEventListener("click", fn, { signal: this.signal }); }
   private panel(html: string) {
+    this.abilityHud.update({ ...this.world.data.abilities, floor: floorAt(this.world.data.player) }, false, this.settings.reducedMotion);
     this.look?.suspend();
     this.$(".escape-shell").classList.remove("intro-active");
     this.$(".escape-shell").classList.remove("capture-active");
-    this.$("#escape-panel").classList.remove("escape-intro", "escape-pause-panel");
+    this.$("#escape-panel").classList.remove("escape-intro", "escape-pause-panel", "escape-map-panel");
     this.$(".escape-shell").classList.add("menu-active");
     this.$("#escape-panel").hidden = false;
     this.$("#escape-panel").innerHTML = `<section class="escape-card">${html}</section>`;
@@ -200,28 +221,56 @@ export class EscapeGame {
   }
   private clearInput() { this.keys.clear(); this.stick = { x: 0, y: 0 }; this.look?.clear(); this.$("#escape-stick span").style.transform = "translate(0,0)"; }
   private pause(map = false) {
+    if (map) { this.showMap(); return; }
     if (!this.started || this.world.data.phase !== "playing") return;
     if (document.pointerLockElement === this.root.querySelector("#escape-view")) this.unlockAt = performance.now();
     this.paused = true; this.clearInput(); this.audio.setPlaying(false); this.save();
-    this.panel(`<div class="escape-pause-layout"><div class="escape-map-page"><p class="escape-eyebrow">地下浴场</p><h2>浴场地图</h2><canvas id="escape-floorplan" width="500" height="500" aria-label="浴场地图，箭头是你，暗处尚未探索"></canvas><p class="escape-map-legend"><i class="map-you"></i>你 <i class="map-door"></i>门 <i class="map-hide"></i>衣柜 <i class="map-fog"></i>未探索</p><p class="escape-map-current" id="escape-map-current">当前位置：${safe(this.world.room)}</p></div>
-      <div class="escape-pause-menu"><p class="escape-eyebrow">已暂停</p><h2>暂停</h2><div class="escape-journal"><small>线索</small><p id="escape-goal">${safe(this.world.objective)}</p></div><button id="escape-resume" class="escape-primary">继续逃生</button>
+    this.panel(`<div class="escape-pause-menu"><p class="escape-eyebrow">已暂停</p><h2>暂停</h2><div class="escape-journal"><small>线索</small><p id="escape-goal">${safe(this.world.objective)}</p></div><button id="escape-resume" class="escape-primary">继续逃生</button>
       <div class="escape-setting-row"><label><input id="escape-music" type="checkbox" ${this.music ? "checked" : ""}>音乐</label><label><input id="escape-sound" type="checkbox" ${this.sound ? "checked" : ""}>音效</label><button id="escape-audio-recover">恢复声音</button></div>
-      <div class="escape-links"><button id="escape-backup">备份存档</button><button id="escape-help">操作说明</button><button id="escape-restart">重新开始</button><button id="escape-exit">保存并退出</button></div><p class="escape-storage" id="escape-save-status">${this.storageWarning || "进度已保存"}</p></div></div>`);
+      <div class="escape-links"><button id="escape-journal">纸条</button><button id="escape-backup">备份存档</button><button id="escape-help">操作说明</button><button id="escape-restart">重新开始</button><button id="escape-exit">保存并退出</button></div><p class="escape-storage" id="escape-save-status">${this.storageWarning || "进度已保存"}</p></div>`);
     this.$("#escape-panel").classList.add("escape-pause-panel");
-    this.renderer?.drawMap(this.$("#escape-floorplan"), this.world);
-    if (map) this.$("#escape-resume").focus();
+    this.button("escape-journal", () => this.showJournal());
     this.button("escape-resume", () => this.resume()); this.button("escape-help", () => this.help(true)); this.button("escape-restart", () => this.confirmRestart());
     this.button("escape-exit", () => { this.save(); this.exit(); }); this.button("escape-backup", () => this.exportSave());
     this.$<HTMLInputElement>("#escape-music").onchange = e => { this.music = (e.target as HTMLInputElement).checked; this.saveSound(); if (this.music) void this.audio.preview("music"); };
     this.$<HTMLInputElement>("#escape-sound").onchange = e => { this.sound = (e.target as HTMLInputElement).checked; this.saveSound(); };
     this.button("escape-audio-recover", () => { void this.audio.recover().then(ok => { const el = this.root.querySelector("#escape-save-status"); if (el) el.textContent = ok ? "音效试听中" : "声音未开启，请重试。"; }); });
   }
+  private showMap() {
+    if (!this.started || this.world.data.phase !== "playing") return;
+    this.paused = true; this.clearInput(); this.audio.setPlaying(false); this.save();
+    this.panel(`<section class="escape-map-page"><p class="escape-eyebrow">浴场地图</p><h2>探索记录</h2><div class="escape-floor-tabs" aria-label="地图楼层"><button id="escape-map-ground" aria-pressed="false">地面</button><button id="escape-map-basement" aria-pressed="false">负一楼</button></div><canvas id="escape-floorplan" width="560" height="560" aria-label="探索地图，箭头是你，暗处尚未探索"></canvas><p class="escape-map-legend"><i class="map-you"></i>你 <i class="map-door"></i>门 <i class="map-hide"></i>衣柜 <i class="map-fog"></i>未探索</p><p id="escape-map-current">当前位置：${safe(this.world.room)}</p><button id="escape-map-close" class="escape-secondary">返回游戏 <kbd>M</kbd></button></section>`);
+    this.$("#escape-panel").classList.add("escape-map-panel");
+    const draw = (floor: 0 | -1) => {
+      this.$("#escape-map-ground").setAttribute("aria-pressed", String(floor === 0));
+      this.$("#escape-map-basement").setAttribute("aria-pressed", String(floor === -1));
+      this.renderer?.drawMap(this.$("#escape-floorplan"), this.world, false, floor);
+    };
+    this.button("escape-map-ground", () => draw(0)); this.button("escape-map-basement", () => draw(-1));
+    this.button("escape-map-close", () => this.resume()); draw(floorAt(this.world.data.player));
+  }
+  private showJournal() {
+    this.paused = true; this.clearInput(); this.audio.setPlaying(false);
+    const notes = this.world.data.notes.map(id => PROPS.find(p => p.id === id)!).filter(Boolean);
+    this.panel(`<p class="escape-eyebrow">已找到的纸条</p><h2>纸条</h2>${notes.length ? notes.map(note => `<button class="escape-secondary" data-note-id="${safe(note.id)}">${safe(note.name)}</button>`).join("") : "<p>还没有找到纸条。</p>"}<button id="escape-journal-back" class="escape-secondary">返回</button>`);
+    this.root.querySelectorAll<HTMLElement>("[data-note-id]").forEach(button => button.onclick = () => this.openNote(button.dataset.noteId!, true));
+    this.button("escape-journal-back", () => this.pause());
+  }
+  private openNote(id: string, fromJournal = false) {
+    const note = PROPS.find(p => p.id === id && p.kind === "note");
+    if (!note || !this.started || this.world.data.phase !== "playing") return;
+    this.noteActive = true; this.noteReturnToJournal = fromJournal;
+    this.paused = true; this.clearInput(); this.look?.suspend(); this.audio.setPlaying(false); this.save();
+    this.$("#escape-panel").hidden = true; this.$(".escape-shell").classList.add("menu-active");
+    this.abilityHud.update({ ...this.world.data.abilities, floor: floorAt(this.world.data.player) }, false, this.settings.reducedMotion);
+    this.noteDialog.show(note.name, note.text ?? "");
+  }
   private help(fromPause: boolean) {
     const touch = matchMedia("(pointer:coarse)").matches;
     const expanded = !!this.world.data.expansion?.enabled;
     const controls = touch ? [["移动", "左侧摇杆"], ["观察", "滑动右侧画面"], ["互动", "靠近目标后点击手掌"], ["奔跑", "点击切换奔跑"], ["蹲行", "点击切换蹲行"], ["冻结 / 显形", "屏幕晶体按钮"]] : [["移动", "WASD / 方向键"], ["观察", "点击画面后移动鼠标"], ["抬头 / 低头", "PageUp / PageDown"], ["互动", "E / 空格"], ["奔跑", "Shift 切换"], ["蹲行", "C 切换"], ["手电", "F"], ["石子 / 地图", "Q / M"], ["警戒详情", "Tab 展开 / 收起"], ["冻结 / 显形", "1 / 2"], ["暂停 / 释放鼠标", "Esc"]];
-    const tips = ["找齐钥匙和工具，打开下水道铁网。", ...(expanded ? ["旧更衣室里有缺失的手轮；锅炉房维修纸条记着泄压顺序。", "走廊碎玻璃可以绕开或蹲行通过。"] : []), "连续移动会积累疲劳，到100会喘息引来奶蛙；停下休息可恢复。", "持续照中奶蛙会增加警觉，达到100会引来调查；移开光束后下降。", "冻结晶和显形晶各持续10秒；按1/2使用，激活时不会重复消耗。", "被抓后进入下一夜，物品保留。第三次被抓则失败。"];
-    this.panel(`<h2>操作</h2><dl class="escape-bindings">${controls.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("")}</dl><ul class="escape-help">${tips.map(tip => `<li>${tip}</li>`).join("")}</ul><details class="escape-perception-help"><summary>暴露值与追击规则</summary><p>声音、灯光、视觉分别累积 0–100。总分由三路共同计算：</p><p class="escape-formula">100 × [1 − (1 − 声音/100)(1 − 灯光/100)(1 − 视觉/100)]</p><p>例：声音50、灯光50为75；三路各50为87.5；声音和灯光各99会封顶100；任一路100也为100。原始分达到99.5即封顶并进入追击。</p><p>总分达到45会警觉，感知速度变为×1.5。蹲行、步行、跑步的基础听距为3、7.5、15米，喘息18米；墙门缩短听距，离得越近涨分越快。贡献按线索重叠程度公平分摊，相加等于总分；显示值四舍五入。追击时总分锁定100，贡献按比例显示，甩开视线和声光线索后转为搜查。</p></details><button id="escape-help-close" class="escape-primary">返回</button>`);
+    const tips = ["地下的感官干扰会污染全部暴露读数30秒，紫色条倒计时可信，数值不可信。消退后正常10秒，再逐秒尝试施加，第30秒必发动。","负一楼每轮等待30秒后抽选感测或瞬移，再逐秒提高发动概率，第30秒必发动。三秒预警后执行，独立冷却35／45秒。", "感测时静止命中20%，移动80%；定身会暂停技能。感测命中会填满位置线索并追击，普通视线仍受墙体遮挡。", "瞬移按周围高斯权重选择合法落脚点，至少离你4.5米。地下秘密记录和水晶能帮助你规划路线。","找齐钥匙和工具，打开下水道铁网。", ...(expanded ? ["旧更衣室里有缺失的手轮；锅炉房维修纸条记着泄压顺序。", "走廊碎玻璃可以绕开或蹲行通过。"] : []), "连续移动会积累疲劳，到100会喘息引来奶蛙；停下休息可恢复。", "持续照中奶蛙会增加警觉，达到100会引来调查；移开光束后下降。", "冻结晶和显形晶各持续10秒；按1/2使用，激活时不会重复消耗。", "被抓后进入下一夜，物品保留。第三次被抓则失败。"];
+    this.panel(`<h2>操作</h2><dl class="escape-bindings">${controls.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("")}</dl><ul class="escape-help">${tips.map(tip => `<li>${tip}</li>`).join("")}</ul><details class="escape-perception-help"><summary>暴露值与追击规则</summary><p>声音、灯光、视觉分别累积 0–100。总分由三路共同计算：</p><p class="escape-formula">100 × [1 − (1 − 声音/100)(1 − 灯光/100)(1 − 视觉/100)]</p><p>例：声音50、灯光50为75；三路各50为87.5；声音和灯光各99会封顶100；任一路100也为100。原始分达到99.5即封顶并进入追击。</p><p>总分达到45会警觉，感知速度变为×1.5。蹲行、步行、跑步的基础听距为5、13、24米，喘息22米；墙门缩短听距，离得越近涨分越快。贡献按线索重叠程度公平分摊，相加等于总分；显示值四舍五入。追击时总分锁定100，贡献按比例显示，甩开视线和声光线索后转为搜查。</p></details><button id="escape-help-close" class="escape-primary">返回</button>`);
     this.button("escape-help-close", () => fromPause ? this.pause() : this.intro());
   }
   private confirmRestart() {
@@ -259,12 +308,12 @@ export class EscapeGame {
   }
   private recordWin() {
     const d = this.world.data, ms = Math.round(d.elapsed * 1000), previous = this.record;
-    this.record = { version: 1, escapes: Math.min(1e9, (previous?.escapes ?? 0) + 1), bestTimeMs: Math.min(previous?.bestTimeMs ?? ms, ms), fewestCaptures: Math.min(previous?.fewestCaptures ?? d.captures, d.captures), mostNotes: Math.max(previous?.mostNotes ?? 0, d.notes.length) };
+    this.record = { version: 2, escapes: Math.min(1e9, (previous?.escapes ?? 0) + 1), bestTimeMs: Math.min(previous?.bestTimeMs ?? ms, ms), fewestCaptures: Math.min(previous?.fewestCaptures ?? d.captures, d.captures), mostNotes: Math.max(previous?.mostNotes ?? 0, d.notes.length) };
     try { localStorage.setItem(RECORD, JSON.stringify(this.record)); } catch { this.storageWarning = "纪录未能写入，请备份存档。"; }
   }
   private exportSave() {
     const data = this.started ? this.world.snapshot() : this.saved;
-    const blob = new Blob([JSON.stringify({ format: "nwaxz-escape", version: 1, session: data, record: this.record }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ format: "nwaxz-escape", version: 2, generation: SAVE_GENERATION, session: data, record: this.record }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob), link = document.createElement("a"); link.href = url; link.download = "nwaxz-escape-save.json"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   private bind() {
@@ -287,7 +336,16 @@ export class EscapeGame {
     this.button("escape-sprint", () => { if (!this.paused) this.world.toggleSprint(); });
     document.addEventListener("keydown", e => {
       if (this.cinematic) return;
+      if (this.noteActive) {
+        e.preventDefault();
+        if (!e.repeat && ["escape", "e", " "].includes(e.key.toLowerCase())) this.noteDialog.close();
+        if (e.key === "Tab") this.$(".escape-note-close").focus();
+        return;
+      }
       if (this.$("#escape-panel").hidden === false) {
+        if (e.key.toLowerCase() === "m" && !e.repeat && this.started && this.world.data.phase === "playing") {
+          e.preventDefault(); if (this.$("#escape-panel").classList.contains("escape-map-panel")) this.resume(); else this.showMap(); return;
+        }
         if (e.key === "Escape" && this.started && this.world.data.phase === "playing") { e.preventDefault(); if (!e.repeat && performance.now() - this.unlockAt > 250) this.resume(); }
         if (e.key === "Tab") {
           const buttons = [...this.$("#escape-panel").querySelectorAll<HTMLElement>("button,input")], at = buttons.indexOf(document.activeElement as HTMLElement), next = (at + (e.shiftKey ? -1 : 1) + buttons.length) % buttons.length;
@@ -320,9 +378,9 @@ export class EscapeGame {
       let validated = false;
       try {
         if (file.size > 64000) throw new Error("too large");
-        const raw = JSON.parse(await file.text()); if (raw.format !== "nwaxz-escape" || raw.version !== 1) throw new Error("bad format");
+        const raw = JSON.parse(await file.text()); if (raw.format !== "nwaxz-escape" || raw.version !== 2 || raw.generation !== SAVE_GENERATION) throw new Error("旧版存档不可用于当前游戏");
         const saved = EscapeWorld.restore(raw.session).snapshot(), record = readBest(raw.record);
-        const best: Best | undefined = record ? this.record ? { version: 1, escapes: Math.max(record.escapes, this.record.escapes), bestTimeMs: Math.min(record.bestTimeMs, this.record.bestTimeMs), fewestCaptures: Math.min(record.fewestCaptures, this.record.fewestCaptures), mostNotes: Math.max(record.mostNotes, this.record.mostNotes) } : record : this.record;
+        const best: Best | undefined = record ? this.record ? { version: 2, escapes: Math.max(record.escapes, this.record.escapes), bestTimeMs: Math.min(record.bestTimeMs, this.record.bestTimeMs), fewestCaptures: Math.min(record.fewestCaptures, this.record.fewestCaptures), mostNotes: Math.max(record.mostNotes, this.record.mostNotes) } : record : this.record;
         validated = true;
         const entries: [string, string][] = best ? [[RECORD, JSON.stringify(best)], [SESSION, JSON.stringify(saved)]] : [[SESSION, JSON.stringify(saved)]];
         writeSaveBatch(localStorage, entries);
@@ -369,6 +427,7 @@ export class EscapeGame {
         if (["step", "door", "noise"].includes(event.type)) this.audio.effect(event.type as "step" | "door" | "noise");
         if (event.type === "item") this.audio.effect("coin");
         if (event.type === "breath") this.audio.effect("breath");
+        if (event.type === "note" && event.id) this.openNote(event.id);
         if (["item", "door", "message"].includes(event.type)) this.save();
       }
       if (d.hunter.state === "chase" && d.elapsed - this.heartbeatAt > .72) { this.heartbeatAt = d.elapsed; this.audio.effect("heartbeat"); }
@@ -384,6 +443,8 @@ export class EscapeGame {
   private updateHud() {
     this.updateMouseHint();
     const d = this.world.data;
+    const interfered = d.interference.stage === "corrupt";
+    this.abilityHud.update({ ...d.abilities, floor: floorAt(d.player) }, this.started && !this.cinematic && d.phase === "playing" && floorAt(d.player) === -1, this.settings.reducedMotion);
     const room = this.world.room;
     if (room !== this.lastRoom) { this.lastRoom = room; this.roomCueUntil = d.elapsed + 1.6; }
     this.$("#escape-room").textContent = room;
@@ -396,13 +457,13 @@ export class EscapeGame {
     roomCue.hidden = !this.started || this.paused || !!this.cinematic || d.phase !== "playing" || d.elapsed >= this.roomCueUntil;
     const pauseRoom = this.root.querySelector<HTMLElement>("#escape-map-current");
     if (pauseRoom) pauseRoom.textContent = `当前位置：${room}`;
-    const items = d.expansion?.enabled ? ["brass", "cellar", "fuse", "cutters", "handwheel"] as const : ["brass", "cellar", "fuse", "cutters"] as const;
+    const items = ["brass", "cellar", "fuse", "cutters", "handwheel", "relay"] as const;
     const inventoryKey = d.inventory.join(",") + ":" + d.captures + ":" + !!d.expansion?.enabled;
     if (inventoryKey !== this.inventoryKey) {
       this.inventoryKey = inventoryKey;
       this.$("#escape-inventory").classList.toggle("expansion-inventory", !!d.expansion?.enabled);
       this.$("#escape-inventory").innerHTML = items.map((item, i) => {
-        const owned = d.inventory.includes(item), glyph = item === "cutters" ? "cutters" : item === "fuse" ? "fuse" : item === "handwheel" ? "handwheel" : "key";
+        const owned = d.inventory.includes(item), glyph = item === "cutters" ? "cutters" : item === "fuse" || item === "relay" ? "fuse" : item === "handwheel" ? "handwheel" : "key";
         return `<span class="escape-slot ${owned ? "owned" : ""}" title="${owned ? ITEM_NAMES[item] : "未找到物品"}" aria-label="${owned ? ITEM_NAMES[item] : "空物品栏"}"><small>${i+1}</small>${owned ? icon(glyph) : ""}</span>`;
       }).join("");
       this.$("#escape-lives").innerHTML = [0,1,2].map(i => `<span class="${i < d.captures ? "lost" : ""}">${icon("heart")}</span>`).join("");
@@ -426,13 +487,13 @@ export class EscapeGame {
     this.$("#escape-battery-value").textContent = String(Math.round(d.player.battery));
     const hunt = d.hunt;
     const effort = hunt?.effort ?? 0;
-    const perception = this.world.perception;
+    const perception = displayPerception(this.world.perception, d.interference);
     const exposure = perception.total;
     this.$<HTMLMeterElement>("#escape-exposure").value = exposure;
     this.$("#escape-exposure-value").textContent = Number(exposure.toFixed(1)).toString();
-    this.$("#escape-exposure-hint").textContent = `${this.world.hunterDecision} · ${this.world.exposureHint}`;
+    this.$("#escape-exposure-hint").textContent = this.world.hunterDecision;
     const huntState = d.hidden ? "藏匿" : hunt?.freeze ? "冻结" : d.hunter.state === "chase" ? "追击" : hunt?.alert && hunt.alert > 0 ? `警觉 · 感知×${this.world.perceptionMultiplier}` : d.hunter.state !== "patrol" ? this.world.hunterDecision : "平静";
-    this.$("#escape-hunt-state").textContent = huntState;
+    this.$("#escape-hunt-state").textContent = interfered ? "被干扰" : huntState;
     this.$<HTMLMeterElement>("#escape-effort").value = effort; this.$("#escape-effort-value").textContent = String(Math.round(effort));
     for (const [id, source] of [["noise", perception.contributions.noise], ["glare", perception.contributions.glare], ["sight", perception.contributions.sight]] as const) {
       this.$<HTMLMeterElement>(`#escape-${id}`).value = source.score;
@@ -444,7 +505,7 @@ export class EscapeGame {
     const hearingDetail = `${actionNames[hearing.action]} · 距${hearing.distance.toFixed(1)}米\n${hunt?.freeze ? "感知暂停" : hearing.audible ? `可闻 +${hearing.rate.toFixed(1)}/秒` : "未听见"}${hearing.breathing ? " · 喘息" : ""}`;
     this.$("#escape-noise-info").textContent = hearingDetail;
     const vision = this.world.vision;
-    this.$("#escape-sight-info").textContent = `${vision.visible ? `被看到 · ${vision.distance.toFixed(1)}米` : "未被看到"}${vision.rate > 0 ? `\n+${vision.rate.toFixed(1)}/秒` : ""}`;
+    this.$("#escape-sight-info").textContent = d.abilities.notice?.kind === "exposed" ? "技能感测 · 位置暴露" : `${vision.visible ? `被看到 · ${vision.distance.toFixed(1)}米` : "未被看到"}${vision.rate > 0 ? `\n+${vision.rate.toFixed(1)}/秒` : ""}`;
     const light = this.world.lightPerception;
     this.$("#escape-glare-info").textContent = `${light.illuminated ? "正照中奶蛙" : "未照中奶蛙"}${light.rate > 0 ? ` · +${light.rate.toFixed(1)}/秒` : ""}`;
     const modeNames = { walk: "步行", crouch: "蹲行", sprint: "奔跑", recover: "步行恢复体力", hidden: "藏匿中" };
@@ -471,6 +532,15 @@ export class EscapeGame {
     this.$("#escape-reveal-time").textContent = reveal > 0 ? `剩 ${reveal.toFixed(1)}s` : "持续10秒";
     freezeButton.classList.toggle("active", freeze > 0); revealButton.classList.toggle("active", reveal > 0);
     this.$("#escape-night").textContent = `第${Math.min(3, d.captures + 1)}夜 · ${time(d.elapsed)}`;
+    this.$(".escape-hunt").classList.toggle("interfered", interfered);
+    this.$("#escape-exposure-label").textContent = interfered ? "被干扰" : "暴露值";
+    if (interfered) {
+      this.$("#escape-exposure-hint").textContent = "被干扰";
+      for (const name of ["noise", "glare", "sight"]) this.$(`#escape-${name}-info`).textContent = "信号受污染\n读数不可信";
+      this.$("#escape-danger").hidden = true;
+      this.$(".escape-shell").classList.remove("being-chased");
+      if (/警觉|暴露|视线|脚步/.test(this.world.message)) this.$("#escape-notice").hidden = true;
+    }
     this.$("#escape-crouch").setAttribute("aria-pressed", String(d.player.crouched));
     this.$("#escape-sprint").setAttribute("aria-pressed", String(d.player.sprinting ?? false));
     this.$("#escape-crouch").setAttribute("aria-label", d.player.crouched ? "切换站立，按 C 切换" : "切换蹲行，按 C 切换");
@@ -489,6 +559,6 @@ export class EscapeGame {
   destroy() {
     if (this.disposed) return; this.save(); this.disposed = true; this.cinematic?.close(); this.controller.abort(); cancelAnimationFrame(this.raf); this.audio.setPlaying(false); this.audio.stopPreview();
     if (this.renderer && this.art) returnPreparedEscape({ renderer: this.renderer, art: this.art, canvas: this.$("#escape-view") });
-    this.renderer = undefined;
+    this.renderer = undefined; this.abilityHud.destroy(); this.noteDialog.destroy();
   }
 }

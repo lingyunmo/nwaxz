@@ -1,4 +1,5 @@
 import { levels } from "./game/levels.ts";
+import { SAVE_GENERATION } from "./save-generation.ts";
 
 export type LevelRecord = {
   completed: boolean;
@@ -8,6 +9,8 @@ export type LevelRecord = {
 };
 export type Record = LevelRecord;
 export type Progress = { version: 1; levels: { [id: string]: Record } };
+export type SaveBackup = { generation: string; progress: Progress };
+export class ProgressFormatError extends Error {}
 const levelIds = new Set(levels.map(({ id }) => id));
 const poisonedIds = new Set(["__proto__", "prototype", "constructor"]);
 const recordKeys = ["completed", "collected", "bestScore", "bestTimeMs"];
@@ -16,7 +19,7 @@ const hasOwn = (value: object, key: PropertyKey) =>
 export const emptyProgress = (): Progress => ({ version: 1, levels: {} });
 export function parseProgress(value: unknown): Progress {
   if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("存档格式不正确");
+    throw new ProgressFormatError("存档格式不正确");
   const raw = value as { version?: unknown; levels?: unknown };
   if (
     raw.version !== 1 ||
@@ -25,7 +28,7 @@ export function parseProgress(value: unknown): Progress {
     Array.isArray(raw.levels) ||
     Object.keys(raw).some((key) => !["version", "levels"].includes(key))
   )
-    throw new Error("存档版本不支持");
+    throw new ProgressFormatError("存档版本不支持");
   const result = emptyProgress();
   for (const [id, record] of Object.entries(raw.levels)) {
     if (
@@ -35,7 +38,7 @@ export function parseProgress(value: unknown): Progress {
       typeof record !== "object" ||
       Array.isArray(record)
     )
-      throw new Error("存档关卡不正确");
+      throw new ProgressFormatError("存档关卡不正确");
     const r = record as Partial<LevelRecord>;
     if (
       typeof r.completed !== "boolean" ||
@@ -57,7 +60,7 @@ export function parseProgress(value: unknown): Progress {
           (r.bestTimeMs as number) < 0 ||
           (r.bestTimeMs as number) > 3_600_000))
     )
-      throw new Error("存档记录不正确");
+      throw new ProgressFormatError("存档记录不正确");
     result.levels[id] = {
       completed: r.completed,
       collected: r.collected,
@@ -66,6 +69,19 @@ export function parseProgress(value: unknown): Progress {
     };
   }
   return result;
+}
+export function createSaveBackup(progress: Progress): SaveBackup {
+  return { generation: SAVE_GENERATION, progress: parseProgress(progress) };
+}
+export function parseSaveBackup(value: unknown): Progress {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("存档格式不正确");
+  const raw = value as { generation?: unknown; progress?: unknown };
+  if (raw.generation !== SAVE_GENERATION)
+    throw new Error("这份存档属于旧版本，请重新开始。");
+  if (Object.keys(raw).some((key) => !["generation", "progress"].includes(key)))
+    throw new Error("存档格式不正确");
+  return parseProgress(raw.progress);
 }
 export function mergeProgress(left: Progress, right: Progress) {
   const a = parseProgress(left),
@@ -146,7 +162,22 @@ export async function loadProgress(): Promise<Progress> {
             : parseProgress(read.result),
         );
       } catch (error) {
-        reject(error);
+        if (!(error instanceof ProgressFormatError)) {
+          reject(error);
+          return;
+        }
+        // A same-generation but incompatible/corrupt progress record is old
+        // game data. Replace only this owned key; transaction and permission
+        // failures remain errors and are surfaced to startup for retry.
+        try {
+          const reset = database.transaction("state", "readwrite");
+          reset.objectStore("state").put(emptyProgress(), "progress");
+          reset.oncomplete = () => resolve(emptyProgress());
+          reset.onabort = reset.onerror = () =>
+            reject(reset.error ?? new Error("旧进度无法重置，请重试。"));
+        } catch (resetError) {
+          reject(resetError);
+        }
       }
     };
     tx.onabort = () => reject(tx.error);

@@ -4,6 +4,8 @@
 
 ## 当前功能
 
+0.21.0：负一楼禁区通过16级楼梯连接地面，增加秘密档案、泵房和污水闸任务。场景更暗，手电承担主要照明；奶蛙会感测位置、瞬移，并污染暴露仪表。扫描与冷却只用短警报和进度条，机制线索放在纸条里。脚步听距和声源调查增强，M独立查看两层地图，Esc仅显示功能菜单。整个游戏采用当前存档代际，不匹配的旧记录自动重置，旧备份拒绝导入。[玩法与实现](docs/BASEMENT_GAME.md) · [验收](docs/VERIFICATION.md) · [发布状态](https://github.com/lingyunmo/nwaxz/issues/62)。
+
 0.20.0：恐怖奶蛙新增八方向站立与交替行走原画，侧面和背面随真实朝向显示；冻结后绕行也能看清背影。转头边界防抖，动作过渡保持实体遮挡，正面站立和经典捧腹大笑沿用原素材。追击时视觉也遵守前方视野，声音、光源和追捕记忆继续生效。[美术与提示词](docs/art/escape-directions-v1.md) · [验证](docs/VERIFICATION.md) · [发布状态](https://github.com/lingyunmo/nwaxz/issues/60)。
 
 0.19.0：极限恐怖由声音、灯光和视觉非线性叠加总暴露值，基础0分；45起警觉、感知变为1.5倍，100追击。HUD默认精简，Tab或“详情”展开三路分数、贡献和实际感知状态；水晶、条和数字放大。短按Shift/C切换奔跑/蹲行，离柜和重生站立。[规则](docs/PERCEPTION.md) · [验证](docs/VERIFICATION.md) · [发布状态](https://github.com/lingyunmo/nwaxz/issues/58)。

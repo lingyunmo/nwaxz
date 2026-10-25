@@ -46,6 +46,7 @@ test("built preload covers revisioned game resources, including all whole videos
     "assets/audio/sewer-escape-v1.mp3",
     "assets/scenes/escape-cover-v1.webp",
     "assets/scenes/escape-materials-v1.webp",
+    "assets/scenes/escape-basement-atlas-v1.webp",
     "assets/models/escape-props-v1.glb",
     "assets/character/haunted-frog-actions-v2.webp",
     "assets/character/haunted-frog-directions-idle-v1.webp",

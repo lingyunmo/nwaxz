@@ -9,12 +9,14 @@ import { canEnter, modeIndices, modeOf, nextLevel, type GameMode } from "./game/
 import { BathGame, type RunResult } from "./game/renderer";
 import { artworkPaths, loadArtwork, type Artwork } from "./artwork";
 import { AudioManager } from "./audio";
-import { loadSettings, saveSettings, type Settings } from "./settings";
+import { defaultSettings, loadSettings, saveSettings, type Settings } from "./settings";
+import { prepareSaveGeneration } from "./save-generation.ts";
 import {
+  createSaveBackup,
   emptyProgress,
   loadProgress,
   mergeProgress,
-  parseProgress,
+  parseSaveBackup,
   saveProgress,
   starCount,
   scoreRun,
@@ -24,8 +26,9 @@ import {
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 let progress: Progress = emptyProgress(),
-  settings = loadSettings(),
+  settings: Settings = defaultSettings(),
   art: Artwork;
+let saveReady = false;
 let mode: GameMode = "normal";
 let escapeGame: EscapeGame | undefined;
 let game: BathGame | undefined,
@@ -517,7 +520,7 @@ function openHelp(fromPause = false) {
 }
 function exportSave() {
   const url = URL.createObjectURL(
-    new Blob([JSON.stringify(progress, null, 2)], { type: "application/json" }),
+    new Blob([JSON.stringify(createSaveBackup(progress), null, 2)], { type: "application/json" }),
   );
   const link = document.createElement("a");
   link.href = url;
@@ -536,18 +539,16 @@ async function importSave(event: Event) {
   if (!file) return;
   try {
     if (file.size > 16384) throw new Error("too large");
-    progress = mergeProgress(
-      progress,
-      parseProgress(JSON.parse(await file.text())),
-    );
+    progress = mergeProgress(progress, parseSaveBackup(JSON.parse(await file.text())));
     if (await persist(progress)) toast("存档已导入。");
-  } catch {
-    toast("存档格式不正确，现有进度仍保留。");
+  } catch (error) {
+    toast(error instanceof Error ? `${error.message}现有进度仍保留。` : "存档格式不正确，现有进度仍保留。");
   } finally {
     input.value = "";
   }
 }
 channel?.addEventListener("message", () => {
+  if (!saveReady) return;
   void loadProgress()
     .then((value) => {
       progress = mergeProgress(progress, value);
@@ -605,7 +606,14 @@ function applyUpdate() {
   gameUpdater.apply();
 }
 async function boot(enterNow = false) {
+  let startupStage: "saves" | "assets" = "saves";
   try {
+    await prepareSaveGeneration();
+    settings = loadSettings();
+    audio.setSettings(settings);
+    progress = await loadProgress();
+    saveReady = true;
+    startupStage = "assets";
     const loading = $(".boot-loading");
     loading.innerHTML = '<small id="boot-label">正在准备浴室…</small><progress id="boot-progress" max="100" aria-label="游戏加载进度"></progress><small id="boot-detail">初次进入会准备视频、地图和音乐</small>';
     if (!enterNow && !import.meta.env.DEV) {
@@ -623,23 +631,21 @@ async function boot(enterNow = false) {
       const escape = await import("./escape/game.ts");
       await escape.prepareEscape(settings, stage => { $("#boot-detail").textContent = stage; });
     } })();
-    let saveReadFailed = false;
-    const saved = loadProgress().catch(() => {
-      saveReadFailed = true;
-      return emptyProgress();
-    });
-    [art, progress] = await Promise.all([artwork, saved, scene]);
+    [art] = await Promise.all([artwork, scene]);
     applySettings();
     renderHome();
-    if (saveReadFailed) toast("存档读取失败，请稍后重试。");
   } catch (error) {
     const loading = app.querySelector<HTMLElement>(".boot-loading");
     if (loading) {
-      loading.innerHTML =
-        '<p id="boot-error"></p><button id="retry-load">继续准备</button><button id="enter-now">先进入游戏</button>';
-      $("#boot-error").textContent = error instanceof Error ? error.message : "浴室准备失败，请重试。";
-      $("#retry-load").onclick = () => location.reload();
-      $("#enter-now").onclick = () => void boot(true);
+      loading.innerHTML = startupStage === "saves"
+        ? '<p id="boot-error"></p><button id="retry-load">重试读取存档</button>'
+        : '<p id="boot-error"></p><button id="retry-load">继续准备</button><button id="enter-now">先进入游戏</button>';
+      $("#boot-error").textContent = error instanceof Error
+        ? error.message
+        : startupStage === "saves" ? "存档读取失败，请重试。" : "浴室准备失败，请重试。";
+      $("#retry-load").onclick = () => void boot(enterNow);
+      const enter = app.querySelector<HTMLButtonElement>("#enter-now");
+      if (enter) enter.onclick = () => void boot(true);
     }
   }
 }

@@ -1,10 +1,9 @@
-import { playEscapeRoute } from "./escape-player.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EscapeWorld, PROPS, DOORS, MAP, SIZE, roomAt, CRYSTALS } from "../src/escape/world.ts";
 
 const frames = (w, seconds, input = {}) => { for (let i = 0; i < Math.ceil(seconds * 60); i++) w.advance(1 / 60, input); };
-test("exploration respects closed doors, persists visited tiles and accepts legacy v1 saves", () => {
+test("exploration respects closed doors, persists current tiles and rejects incomplete old saves", () => {
   const w = new EscapeWorld(42), tile = (x, z) => z * SIZE + x;
   const original = [...w.data.explored];
   assert.ok(original.includes(tile(3, 5)));
@@ -16,9 +15,8 @@ test("exploration respects closed doors, persists visited tiles and accepts lega
   for (const id of original) assert.ok(w.data.explored.includes(id));
   const saved = w.snapshot(); assert.deepEqual(EscapeWorld.restore(saved).snapshot(), saved);
   const legacy = structuredClone(saved); delete legacy.explored;
-  const restored = EscapeWorld.restore(legacy);
-  assert.deepEqual(restored.data.inventory, ["brass"]); assert.ok(restored.data.explored.length > 0);
-  for (const explored of [[-1], [SIZE * SIZE], [2, 2], [1.5], "all"]) assert.throws(() => EscapeWorld.restore({ ...saved, explored }));
+  assert.throws(() => EscapeWorld.restore(legacy));
+  for (const explored of [[-1], [SIZE * 54], [2, 2], [1.5], "all"]) assert.throws(() => EscapeWorld.restore({ ...saved, explored }));
 });
 function face(w, point) { w.data.player.angle = Math.atan2(point.z - w.data.player.z, point.x - w.data.player.x); }
 function placeFor(w, id) {
@@ -103,11 +101,10 @@ test("hiding unseen is safe, hiding in plain sight is remembered across save/res
   frames(resumed, 6); assert.equal(resumed.data.phase, "caught");
 });
 
-test("look pitch is backward-compatible, clamped, and independent of yaw", () => {
+test("look pitch is required in current saves, clamped, and independent of yaw", () => {
   const original = new EscapeWorld(42).snapshot();
   delete original.player.pitch;
-  const restored = EscapeWorld.restore(original);
-  assert.equal(restored.data.player.pitch, 0, "legacy v1 saves default missing pitch to level");
+  assert.throws(() => EscapeWorld.restore(original), "old saves are not silently migrated");
 
   for (const pitch of [1.3001, -1.3001, NaN]) {
     const invalid = new EscapeWorld(42).snapshot();
@@ -194,7 +191,8 @@ test("the exit requires drained water and real cutters, not just reaching the so
   const w = new EscapeWorld(42); placeFor(w, "exit"); w.data.player.z = 21.65; face(w, PROPS.find(p => p.id === "exit"));
   w.interact(); assert.equal(w.data.phase, "playing"); assert.match(w.message, /排水/);
   w.data.drained = true; w.interact(); assert.match(w.message, /断线钳/);
-  w.data.inventory.push("cutters"); w.interact(); assert.equal(w.data.phase, "won");
+  w.data.inventory.push("cutters"); w.interact(); assert.equal(w.data.phase, "playing"); assert.match(w.message, /负一楼/);
+  w.data.basement.sluice = true; w.interact(); assert.equal(w.data.phase, "won");
 });
 
 test("the expansion requires the handwheel and the exact powered boiler sequence", () => {
@@ -217,25 +215,11 @@ test("the expansion requires the handwheel and the exact powered boiler sequence
   }
 });
 
-test("legacy v1 saves retain the original valve requirement and new state IDs are exact", () => {
-  const fresh = new EscapeWorld(42).snapshot(); delete fresh.expansion;
-  const legacy = EscapeWorld.restore(fresh);
-  assert.equal(legacy.snapshot().expansion, undefined);
-  Object.assign(legacy.data.player, { x: 4.5, z: 17.5, angle: Math.PI / 2 });
-  legacy.interact();
-  assert.equal(legacy.nearest(), undefined, "legacy saves cannot open newly added expansion doors");
-  assert.equal(legacy.wall(4.5, 18.5), 2, "sealed expansion doors stay physically closed");
-  assert.deepEqual(EscapeWorld.restore(legacy.snapshot()).snapshot(), legacy.snapshot(), "an old save round-trips after legal interaction near the sealed door");
-  Object.assign(legacy.data.player, { x: 9.5, z: 21.5, angle: -Math.PI / 2 });
-  legacy.interact(); assert.equal(legacy.data.drained, false, "boiler valves are not mistaken for the legacy drain valve");
-  assert.equal(legacy.nearest(), undefined, "legacy saves have no expansion valve interaction");
-  legacy.data.inventory.push("fuse", "cutters"); legacy.data.power = true;
-  placeFor(legacy, "drain"); legacy.interact(); assert.equal(legacy.data.drained, true, "a legacy save can use its original drain valve condition");
-  for (const item of ["hand-wheel", "rusty-wheel", "valve-cold"]) {
-    const invalid = new EscapeWorld(42).snapshot(); invalid.inventory.push(item); assert.throws(() => EscapeWorld.restore(invalid));
-  }
-  const invalidLegacy = { ...fresh, searched: ["changing-drawer"] };
-  assert.throws(() => EscapeWorld.restore(invalidLegacy), "new expansion evidence cannot be stripped into a legacy session");
+test("only current snapshots are accepted, including the complete basement objective state", () => {
+  const fresh=new EscapeWorld(42).snapshot();assert.equal(fresh.version,2);assert.deepEqual(EscapeWorld.restore(fresh).snapshot(),fresh);
+  assert.throws(()=>EscapeWorld.restore({...fresh,version:1}));
+  for(const key of ["expansion","hunt","abilities","basement"]){const invalid=structuredClone(fresh);delete invalid[key];assert.throws(()=>EscapeWorld.restore(invalid));}
+  for(const item of ["hand-wheel","rusty-wheel","valve-cold"]){const invalid=structuredClone(fresh);invalid.inventory.push(item);assert.throws(()=>EscapeWorld.restore(invalid));}
 });
 
 test("malformed optional save extensions fail with the normal format error", () => {
@@ -261,15 +245,4 @@ test("glass hazards trigger once on walking, stay quiet when crouched and rearm 
   assert.equal(quiet.drainEvents().filter(e => e.type === "noise").length, 0); assert.equal(quiet.data.hunter.state, "patrol");
 });
 
-// Test both objectives with the same physical player policy and independently chosen seeds.
-for (const seed of [101, 202, 303]) for (const expanded of [false, true]) {
-  test(`continuous ${expanded ? "expanded" : "legacy"} escape with active hunter, seed ${seed}`, () => {
-    const initial = new EscapeWorld(seed).snapshot();
-    if (!expanded) delete initial.expansion;
-    const {world:w} = playEscapeRoute(EscapeWorld.restore(initial), expanded);
-    assert.equal(w.data.phase, "won");
-    assert.ok(w.data.captures < 3);
-    assert.ok(w.data.elapsed > 30);
-    assert.deepEqual(w.data.inventory.sort(), expanded ? ["brass","cellar","cutters","fuse","handwheel"] : ["brass","cellar","cutters","fuse"]);
-  });
-}
+// Complete current v2 active-AI routes live in basement-play.test.mjs.

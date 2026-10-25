@@ -1,5 +1,7 @@
 # 极限恐怖：原创逃生美术
 
+0.21.0新增独立地下2×2手绘材质/秘密档案图集`public/assets/scenes/escape-basement-atlas-v1.webp`，1024×1024、399810字节。分地面/地下固定UV材质，壁画只放在指定墙面；不以代码平色替代背景。内置imagegen的参考、完整提示及制作流程见 [地下美术记录](art/escape-basement-v1.md)。
+
 本批原创浴场封面、材质与道具图集构成极限恐怖 v1 的绘制美术来源；旧恐怖奶蛙图集继续作为专用恐怖角色参考，保留经典捧腹大笑造型。普通模式的 Cute turnaround 不用于恐怖角色建模。未复制《恐怖奶奶》的地图、图像或声音。FFmpeg 仅做缩放及 WebP 编码，PNG 母版保留本地生成目录，不进入运行缓存。
 
 已发布的 0.11.0 逃生篇采用 Canvas 2D 光线投射，以绘制纹理和透明道具图集表现立体投影；0.11.0 的准确发布证据见[GitHub记录](https://github.com/lingyunmo/nwaxz/pull/34#issuecomment-6343588123)。0.12.0 已发布 Babylon.js 9.32 / WebGL 真3D场景，加入可开合的双门衣柜与真实柜内藏身空间、木柜和抽屉 UV 木纹、金属阀门、配电箱、铁网与管道。[0.12.0 发布证据及精确 main SHA `f6f4dee296eb280aa387dbfc440b33024b2287a0`](https://github.com/lingyunmo/nwaxz/pull/38#issuecomment-6349588315)。普通12关和恐怖洗澡6关的美术不变。

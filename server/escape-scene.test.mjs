@@ -12,7 +12,7 @@ import "@babylonjs/loaders/glTF/2.0/glTFLoader.js";
 import "@babylonjs/loaders/glTF/2.0/Extensions/KHR_materials_emissive_strength.js";
 import { createEscapeScene, aimCamera, CELL } from "../src/escape/scene.ts";
 import { installEscapeModels } from "../src/escape/models.ts";
-import { EscapeWorld } from "../src/escape/world.ts";
+import { EscapeWorld, PROPS } from "../src/escape/world.ts";
 
 test("flashlight projection stays centered after moving, turning and looking up/down", () => {
   const engine = new NullEngine(), view = createEscapeScene(engine), world = new EscapeWorld();
@@ -72,7 +72,7 @@ test("solid cabinets coexist with upright original-art frog and the canonical be
     const bytes = await fs.readFile(new URL("../public/assets/models/escape-props-v1.glb", import.meta.url));
     props = await LoadAssetContainerAsync(bytes, view.scene, { pluginExtension: ".glb", pluginOptions: { gltf: { skipMaterials: true, animationStartMode: 0 } } });
     models = installEscapeModels(view.scene, props, { original: new Texture(null, view.scene), actions: new Texture(null, view.scene), directionIdle: new Texture(null, view.scene), directionWalk: new Texture(null, view.scene) });
-    assert.equal(models.cabinets.size, 7);
+    assert.equal(models.cabinets.size, PROPS.filter(prop => prop.kind === "wardrobe").length);
     const w = new EscapeWorld(); models.animate(w, .3);
     assert.equal(models.actorRoot.position.x, w.data.hunter.x * CELL);
     for (const mesh of models.actorMeshes) {
@@ -91,7 +91,10 @@ test("solid cabinets coexist with upright original-art frog and the canonical be
     w.nextNight(); models.animate(w, 1/60);
     assert.equal(view.scene.getMeshByName("solid-tile-walls").isVisible, true);
     assert.notEqual(models.actor.pose.motion, "laugh");
-    assert.ok(view.scene.meshes.filter(m => m.isEnabled()).length < 320);
+    const activeExpansionMeshes = view.scene.meshes.filter(m => m.isEnabled()).length;
+    w.data.expansion.enabled = false; models.animate(w, 1/60);
+    assert.ok(view.scene.meshes.filter(m => m.isEnabled()).length < activeExpansionMeshes,
+      "disabling the expansion removes its props from the active scene");
   } finally { models?.dispose(); props?.dispose(); view.scene.dispose(); engine.dispose(); }
   assert.equal(engine.scenes.length, 0);
 });

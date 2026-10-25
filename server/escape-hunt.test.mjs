@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EscapeWorld, CRYSTALS } from "../src/escape/world.ts";
+import { EscapeWorld, CRYSTALS, SIZE, HEIGHT } from "../src/escape/world.ts";
 
 const frames = (w, seconds, input = {}) => { for (let i = 0; i < Math.ceil(seconds * 60); i++) w.advance(1 / 60, input); };
 function face(w, point) { w.data.player.angle = Math.atan2(point.z - w.data.player.z, point.x - w.data.player.x); }
@@ -64,12 +64,19 @@ test("reveal is a timed effect; pickup and consumption history survive capture a
   assert.equal(w.crystalCharges("reveal"), 0); assert.equal(w.data.hunt.revealUsed, 1);
 });
 
-test("legacy snapshots migrate safely and malformed hunt state is rejected", () => {
-  const old = new EscapeWorld(9).snapshot(); delete old.hunt;
-  const migrated = EscapeWorld.restore(old); assert.deepEqual(migrated.data.hunt.collected, []);
-  assert.equal(migrated.data.pursuit.target.x, old.pursuit.target.x);
+test("version 2 snapshots round-trip exactly and reject missing current-format state", () => {
   const good = new EscapeWorld(10).snapshot();
-  for (const mutate of [d => d.hunt.effort = 101, d => d.hunt.freeze = 11, d => d.hunt.collected.push("unknown"), d => d.hunt.freezeUsed = 1, d => d.hunt.rng = -1, d => d.hunt.recent = [625]]) {
+  assert.equal(good.version, 2);
+  assert.deepEqual(EscapeWorld.restore(good).snapshot(), good);
+  for (const key of ["basement", "abilities", "interference", "expansion", "hunt", "explored"]) {
+    const old = structuredClone(good); delete old[key];
+    assert.throws(() => EscapeWorld.restore(old), /逃生存档/);
+  }
+  for (const key of ["pitch", "sprinting", "winded"]) {
+    const old = structuredClone(good); delete old.player[key];
+    assert.throws(() => EscapeWorld.restore(old), /逃生存档/);
+  }
+  for (const mutate of [d => d.hunt.effort = 101, d => d.hunt.freeze = 11, d => d.hunt.collected.push("unknown"), d => d.hunt.freezeUsed = 99, d => d.hunt.rng = -1, d => d.hunt.recent = [SIZE * HEIGHT]]) {
     const bad = structuredClone(good); mutate(bad); assert.throws(() => EscapeWorld.restore(bad), /逃生存档/);
   }
 });

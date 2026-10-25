@@ -4,10 +4,101 @@ import { levels } from "../src/game/levels.ts";
 import {
   emptyProgress,
   formatTime,
+  ProgressFormatError,
+  createSaveBackup,
   mergeProgress,
+  parseSaveBackup,
   parseProgress,
   scoreRun,
 } from "../src/progress.ts";
+import { prepareSaveGeneration, SAVE_GENERATION, SAVE_GENERATION_KEY } from "../src/save-generation.ts";
+
+function memoryStorage(entries = {}) {
+  const values = new Map(Object.entries(entries));
+  return {
+    get length() { return values.size; },
+    key(index) { return [...values.keys()][index] ?? null; },
+    getItem(key) { return values.get(key) ?? null; },
+    setItem(key, value) { values.set(key, String(value)); },
+    removeItem(key) { values.delete(key); },
+    values,
+  };
+}
+
+function memoryIndexedDB({ stores = { state: [] }, blockedDelete = false } = {}) {
+  const removed = { value: false };
+  const database = {
+    objectStoreNames: { contains: name => name in stores, [Symbol.iterator]: function* () { yield* Object.keys(stores); } },
+    close() {},
+    transaction(names) {
+      const tx = { objectStore(name) { return { getAllKeys() { const request = {}; queueMicrotask(() => { request.result = stores[name]; request.onsuccess?.(); }); return request; } }; } };
+      queueMicrotask(() => tx.oncomplete?.());
+      return tx;
+    },
+  };
+  return {
+    removed,
+    factory: {
+      open() {
+        const request = { result: database };
+        queueMicrotask(() => request.onsuccess?.());
+        return request;
+      },
+      deleteDatabase() {
+        const request = {};
+        queueMicrotask(() => {
+          if (blockedDelete) request.onblocked?.();
+          else { removed.value = true; request.onsuccess?.(); }
+        });
+        return request;
+      },
+    },
+  };
+}
+
+test("save backups carry the current generation and reject older generations", () => {
+  const progress = { version: 1, levels: { detour: { completed: true, collected: 7 } } };
+  assert.deepEqual(createSaveBackup(progress), { generation: SAVE_GENERATION, progress });
+  assert.deepEqual(parseSaveBackup(createSaveBackup(progress)), progress);
+  assert.throws(() => parseSaveBackup(progress), { message: "这份存档属于旧版本，请重新开始。" });
+  assert.throws(() => parseSaveBackup({ generation: "older", progress }), { message: "这份存档属于旧版本，请重新开始。" });
+});
+
+test("only progress schema failures are marked for automatic local reset", () => {
+  assert.throws(() => parseProgress({ version: 9, levels: {} }), ProgressFormatError);
+  assert.throws(() => parseProgress(null), ProgressFormatError);
+  assert.equal(new Error("IndexedDB permission denied") instanceof ProgressFormatError, false);
+  assert.throws(() => parseSaveBackup({ generation: "old", progress: emptyProgress() }),
+    error => !(error instanceof ProgressFormatError));
+});
+
+test("matching save generation preserves progress and local settings", async () => {
+  const storage = memoryStorage({ [SAVE_GENERATION_KEY]: SAVE_GENERATION, "nwaxz-settings": "kept", other: "site" });
+  const idb = memoryIndexedDB({ stores: { state: ["progress"] } });
+  await prepareSaveGeneration({ storage, indexedDB: idb.factory });
+  assert.equal(storage.getItem("nwaxz-settings"), "kept");
+  assert.equal(storage.getItem("other"), "site");
+  assert.equal(idb.removed.value, false);
+});
+
+test("generation mismatch clears only nwaxz owned storage and records the new marker", async () => {
+  const storage = memoryStorage({ "nwaxz-settings": "old", "nwaxz-escape-session-v1": "old", unrelated: "keep" });
+  const idb = memoryIndexedDB({ stores: { state: ["progress"] } });
+  await prepareSaveGeneration({ storage, indexedDB: idb.factory });
+  assert.equal(storage.getItem("nwaxz-settings"), null);
+  assert.equal(storage.getItem("nwaxz-escape-session-v1"), null);
+  assert.equal(storage.getItem("unrelated"), "keep");
+  assert.equal(storage.getItem(SAVE_GENERATION_KEY), SAVE_GENERATION);
+  assert.equal(idb.removed.value, true);
+});
+
+test("blocked old database deletion fails without writing a generation marker", async () => {
+  const storage = memoryStorage({ "nwaxz-settings": "old" });
+  const idb = memoryIndexedDB({ stores: { state: ["progress"] }, blockedDelete: true });
+  await assert.rejects(prepareSaveGeneration({ storage, indexedDB: idb.factory, timeoutMs: 20 }), /关闭其他游戏标签页/);
+  assert.equal(storage.getItem(SAVE_GENERATION_KEY), null);
+  assert.equal(storage.getItem("nwaxz-settings"), "old");
+});
 
 test("version 1 saves without score fields round-trip unchanged", () => {
   const old = {

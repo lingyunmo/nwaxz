@@ -15,8 +15,9 @@ import { installEscapeModels } from "./models.ts";
 import { DOORS, type EscapeWorld } from "./world.ts";
 import { EscapeMap } from "./minimap.ts";
 import { withTimeout } from "../loading.ts";
+import { floorAt } from "./basement-map.ts";
 
-export type EscapeArt = { materials: HTMLImageElement; map: HTMLImageElement };
+export type EscapeArt = { materials: HTMLImageElement; map: HTMLImageElement; basement: HTMLImageElement };
 export class EscapeRenderer {
   private engine: Engine;
   private view;
@@ -45,6 +46,15 @@ export class EscapeRenderer {
       tex.getContext().drawImage(art.materials, quadrant % 2 * s, Math.floor(quadrant / 2) * s, s, s, 0, 0, 512, 512);
       tex.wrapU = tex.wrapV = Texture.WRAP_ADDRESSMODE; tex.anisotropicFilteringLevel = 4; tex.update(false);
       const material = this.view.scene.getMaterialByName(name === "wall" ? "painted-tile" : name === "wood" ? "painted-door" : `painted-${name}`);
+      if (material && "diffuseTexture" in material) material.diffuseTexture = tex;
+    }
+    for (const [name, quadrant] of [["basement-tile", 0], ["basement-floor", 1], ["basement-ceiling", 2], ["basement-secret", 3]] as const) {
+      const tex = new DynamicTexture(`painted-${name}`, 512, this.view.scene, true, Texture.TRILINEAR_SAMPLINGMODE);
+      const s = art.basement.width / 2;
+      tex.getContext().drawImage(art.basement, quadrant % 2 * s, Math.floor(quadrant / 2) * s, s, s, 0, 0, 512, 512);
+      if (name === "basement-secret") { tex.vScale = -1; tex.vOffset = 1; }
+      tex.wrapU = tex.wrapV = Texture.WRAP_ADDRESSMODE; tex.anisotropicFilteringLevel = 4; tex.update(false);
+      const material = this.view.scene.getMaterialByName(name);
       if (material && "diffuseTexture" in material) material.diffuseTexture = tex;
     }
     this.shadow = new ShadowGenerator(512, this.view.torch);
@@ -106,9 +116,12 @@ export class EscapeRenderer {
     }
     this.view.corridorLamp.setEnabled(!caught && d.player.z < 18);
     this.view.sewerGlow.setEnabled(!caught && d.player.z >= 18);
-    this.view.corridorLamp.intensity = (d.power ? .65 : .30) * (this.reduced ? 1 : .8 + .2 * Math.sin(d.elapsed * 8) ** 14);
+    const inBasement = floorAt(d.player) === -1;
+    this.view.basementMaintenance.setEnabled(!caught && inBasement);
+    this.view.sumpGlow.setEnabled(!caught && inBasement);
+    this.view.corridorLamp.intensity = (d.power ? .30 : .15) * (this.reduced ? 1 : .8 + .2 * Math.sin(d.elapsed * 8) ** 14);
     this.captureLight.setEnabled(caught);
-    this.view.ambient.intensity = caught ? .5 : .26;
+    this.view.ambient.intensity = caught ? .5 : inBasement ? .025 : .055;
     this.view.camera.viewport = caught ? this.engine.getRenderWidth() / this.engine.getRenderHeight() > 1.3 ? new Viewport(0, 0, .56, 1) : new Viewport(0, .34, 1, .66) : new Viewport(0, 0, 1, 1);
     if (caught) {
       const actor = this.models.actorRoot, center = actor.position.add(new Vector3(0, 1.05, 0));
@@ -119,8 +132,8 @@ export class EscapeRenderer {
     }
     this.engine.beginFrame(); this.view.scene.render(); this.engine.endFrame();
   }
-  drawMap(canvas: HTMLCanvasElement, world: EscapeWorld, compact = false) {
-    this.map.draw(canvas, world, compact);
+  drawMap(canvas: HTMLCanvasElement, world: EscapeWorld, compact = false, floor?: 0 | -1) {
+    this.map.draw(canvas, world, compact, floor);
   }
   dispose() {
     if (this.disposed) return;

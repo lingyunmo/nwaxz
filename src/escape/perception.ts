@@ -4,8 +4,8 @@ export const ALERT_THRESHOLD = 45;
 export const ALERT_MULTIPLIER = 1.5;
 export const EXPOSURE_CEILING = 99.5;
 export const HEARING = {
-  walk: { range: 7.5, rate: 16 }, crouch: { range: 3, rate: 7 },
-  sprint: { range: 15, rate: 36 }, breath: { range: 18, rate: 30 },
+  walk: { range: 13, rate: 22 }, crouch: { range: 5, rate: 9 },
+  sprint: { range: 24, rate: 48 }, breath: { range: 22, rate: 34 },
 } as const;
 
 /** Noisy-OR combines independent clues without linear addition.

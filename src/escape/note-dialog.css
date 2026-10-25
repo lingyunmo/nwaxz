@@ -1,0 +1,83 @@
+.escape-note-dialog {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: #020403d9;
+  overscroll-behavior: contain;
+}
+.escape-note-dialog[hidden] { display: none; }
+.escape-note-paper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(94vw, 660px);
+  max-height: min(86vh, 760px);
+  overflow: hidden;
+  padding: clamp(18px, 5vw, 42px);
+  border: 1px solid #74613c;
+  color: #1b1913;
+  background-color: #c9bc91;
+  background-image: linear-gradient(135deg, #fff0 0%, #fff3 42%, #5b48212b 100%), url('/assets/ui/escape-map-atlas-v1.webp');
+  background-size: cover, 400% 200%;
+  background-position: center, 100% 0%;
+  box-shadow: 0 18px 60px #000e, inset 0 0 45px #60451e4d;
+}
+.escape-note-paper::after {
+  position: absolute;
+  inset: 8px;
+  border: 1px solid #5b48204d;
+  content: '';
+  pointer-events: none;
+}
+.escape-note-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.escape-note-title {
+  min-width: 0;
+  margin: 0;
+  color: #211d15;
+  font: 700 clamp(17px, 4vw, 24px)/1.4 Georgia, 'Microsoft YaHei', serif;
+  letter-spacing: 2px;
+}
+.escape-note-close {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 7px 12px;
+  border: 1px solid #544627;
+  border-radius: 2px;
+  color: #211d15;
+  background: #e4d8b5d9;
+  font: 600 12px/1.2 'Microsoft YaHei', sans-serif;
+  cursor: pointer;
+}
+.escape-note-close:focus-visible { outline: 2px solid #37280f; outline-offset: 3px; }
+.escape-note-content {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  color: #211e16;
+  font: 500 clamp(15px, 3.7vw, 19px)/1.9 'Microsoft YaHei', 'SimSun', serif;
+  letter-spacing: .04em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overscroll-behavior: contain;
+  scrollbar-color: #6b5735 #b7a779;
+}
+@media (pointer: coarse) and (max-width: 360px) {
+  .escape-note-paper { width: min(100%,660px); min-width: 0; max-height: 88vh; padding: 18px 16px; }
+  .escape-note-header { gap: 9px; margin-bottom: 10px; }
+  .escape-note-close { min-height: 36px; padding: 6px 9px; }
+}

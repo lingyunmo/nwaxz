@@ -15,6 +15,7 @@ let stopping = false;
 function stop() {
   if (stopping) return;
   stopping = true;
+  app.locals.coop?.shutdown();
   const deadline = setTimeout(() => {
     server.closeAllConnections();
     process.exit(1);

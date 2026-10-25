@@ -28,7 +28,7 @@ try{
   const enter=async w=>{
     const snapshot=w.snapshot();EscapeWorld.restore(snapshot);
     await page.evaluate(s=>{localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(s));localStorage.setItem('nwaxz-escape-sound-v1','{"music":false,"sound":false}');},snapshot);
-    await page.locator('#extreme').tap();await page.locator('#escape-continue').tap();
+    await page.locator('#extreme').tap();await page.locator('#escape-menu-solo').tap();await page.locator('#escape-continue').tap();
     await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   };
   const pause=async()=>{
@@ -105,14 +105,14 @@ try{
   const desktop=await browser.newContext({viewport:{width:900,height:500}}),pc=await desktop.newPage();
   pc.on('pageerror',e=>errors.push(e.message));await pc.goto(base);await pc.locator('#extreme').waitFor({timeout:300000});
   await pc.evaluate(s=>{localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(s));localStorage.setItem('nwaxz-escape-sound-v1','{"music":false,"sound":false}');},solved);
-  await pc.locator('#extreme').click();await pc.locator('#escape-continue').click();await pc.locator('#escape-panel[hidden]').waitFor({state:'attached'});
+  await pc.locator('#extreme').click();await pc.locator('#escape-menu-solo').click();await pc.locator('#escape-continue').click();await pc.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   const desktopInventory=await pc.locator('#escape-inventory').boundingBox();
   assert.ok(desktopInventory.height<=48&&desktopInventory.y>400&&desktopInventory.y+desktopInventory.height<=500,'short desktop window keeps inventory at the bottom');
   await pc.keyboard.press('Escape');assert.equal(await pc.locator('#escape-inventory').isVisible(),false);await desktop.close();
   // Verify that a fully solved expanded session remains usable after an offline cold reload.
   await page.evaluate(s=>localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(s)),solved);
   await context.setOffline(true);await page.reload();await page.locator('#extreme').waitFor();
-  await page.locator('#extreme').tap();await page.locator('#escape-continue').tap();await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
+  await page.locator('#extreme').tap();await page.locator('#escape-menu-solo').tap();await page.locator('#escape-continue').tap();await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   const offline=await pause();assert.deepEqual(offline.expansion.valves,VALVE_ORDER);assert.ok(offline.inventory.includes('handwheel'));
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({base,rooms,handwheel:true,note:true,wrongOrderInvestigated:true,correctOrder:true,glassWalkAndCrouch:true,legacyDrain:true,layouts,desktopInventory,offlineSolvedSession:true,errors,output}));

@@ -16,6 +16,8 @@ import { DOORS, type EscapeWorld } from "./world.ts";
 import { EscapeMap } from "./minimap.ts";
 import { withTimeout } from "../loading.ts";
 import { floorAt } from "./basement-map.ts";
+import type { CoopPlayer } from "./coop-protocol.ts";
+import { PeerActorsRenderer } from "./peers.ts";
 
 export type EscapeArt = { materials: HTMLImageElement; map: HTMLImageElement; basement: HTMLImageElement };
 export class EscapeRenderer {
@@ -30,6 +32,7 @@ export class EscapeRenderer {
   private wasExpanded?: boolean;
   private disposed = false;
   private map: EscapeMap;
+  private peerActors?: PeerActorsRenderer;
   constructor(private canvas: HTMLCanvasElement, art: EscapeArt, private reduced: boolean) {
     this.engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false, powerPreference: "low-power" }, false);
     this.view = createEscapeScene(this.engine);
@@ -132,12 +135,20 @@ export class EscapeRenderer {
     }
     this.engine.beginFrame(); this.view.scene.render(); this.engine.endFrame();
   }
+  /** Update remote survivor billboards before draw(world); body sprites keep normal world depth testing. */
+  drawPeers(peers: readonly CoopPlayer[], selfId: string, dt = 1 / 60) {
+    if (this.disposed) return;
+    this.peerActors ??= new PeerActorsRenderer(this.view.scene, this.view.camera);
+    this.peerActors.draw(peers, selfId, dt);
+  }
+  /** Remove all peer meshes when leaving a room or returning to the menu. */
+  clearPeers() { this.peerActors?.clear(); }
   drawMap(canvas: HTMLCanvasElement, world: EscapeWorld, compact = false, floor?: 0 | -1) {
     this.map.draw(canvas, world, compact, floor);
   }
   dispose() {
     if (this.disposed) return;
-    this.disposed = true; this.models?.dispose(); this.shadow.dispose();
+    this.disposed = true; this.peerActors?.dispose(); this.peerActors = undefined; this.models?.dispose(); this.shadow.dispose();
     for (const container of this.containers) container.dispose();
     this.view.scene.dispose(); this.engine.dispose();
   }

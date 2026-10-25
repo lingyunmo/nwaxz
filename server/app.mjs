@@ -3,7 +3,8 @@ const { version } = packageInfo;
 import express from "express";
 import path from "node:path";
 import fs from "node:fs";
-export function createApp({ distDir, revision = "development" }) {
+import { mountCoopRoutes } from "./coop-service.mjs";
+export function createApp({ distDir, revision = "development", coopService } = {}) {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", false);
@@ -32,6 +33,7 @@ export function createApp({ distDir, revision = "development" }) {
         revision,
       });
   });
+  app.locals.coop = mountCoopRoutes(app, { express, ...(coopService ? { service: coopService } : {}) });
   app.use("/api", (_req, res) => res.status(404).json({ error: "接口不存在" }));
   // No extension: public .js responses previously carried month-long caching.
   // The bundled worker controls the root scope and must bypass static JS caches.

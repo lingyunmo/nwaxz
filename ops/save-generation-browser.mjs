@@ -105,17 +105,17 @@ try {
 
   // The currently stored escape session key is game-owned; v1 snapshots do not offer Resume.
   await page.evaluate(() => localStorage.setItem('nwaxz-escape-session-v1', JSON.stringify({ version: 1, player: { x: 3.5, z: 5.5 }, phase: 'playing' })));
-  await page.locator('#extreme').click();
+  await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click();
   await page.locator('#escape-new').waitFor({ timeout: 30000 });
   assert.equal(await page.locator('#escape-continue').count(), 0, 'old v1 escape snapshot cannot continue');
   assert.equal(await page.evaluate(() => localStorage.getItem('nwaxz-escape-session-v1')), null, 'old escape snapshot is removed');
-  await page.locator('#escape-intro-exit').click();
+  await page.locator('#escape-solo-back').click(); await page.locator('#escape-intro-exit').click();
 
   // A current v2 escape snapshot remains resumable and survives pause/resume/save cycles.
   const currentEscape = new EscapeWorld(42).snapshot();
   await page.evaluate(save => localStorage.setItem('nwaxz-escape-session-v1', JSON.stringify(save)), currentEscape);
   await page.reload(); await page.locator('.game-hub').waitFor({ timeout: 60000 });
-  await page.locator('#extreme').click();
+  await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click();
   await page.locator('#escape-continue').waitFor({ timeout: 30000 });
   await page.locator('#escape-continue').click();
   await page.locator('#escape-panel[hidden]').waitFor({ state: 'attached', timeout: 60000 });

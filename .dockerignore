@@ -12,6 +12,7 @@
 !server
 !server/app.mjs
 !server/index.mjs
+!server/coop-service.mjs
 !ops
 !ops/smoke.mjs
 !ops/pwa.test.mjs

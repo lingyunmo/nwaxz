@@ -13,5 +13,7 @@ try {
   }
   const sw = await fetch(`${base}/sw.js`, { signal: AbortSignal.timeout(3000) });
   if (!sw.ok || !(await sw.text()).includes('precache')) throw new Error('offline worker unavailable');
+  const ping = await fetch(`${base}/api/coop/ping`, { signal: AbortSignal.timeout(3000) });
+  if (!ping.ok || !Number.isFinite((await ping.json()).serverTime)) throw new Error('room transport unavailable');
   console.log(`nwaxz smoke passed: ${health.revision}`);
 } catch (error) { console.error(`nwaxz smoke failed: ${error.message}`); process.exit(1); }

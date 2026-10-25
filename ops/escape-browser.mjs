@@ -20,7 +20,7 @@ try {
   const page=await context.newPage();
   page.on('pageerror',e=>errors.push(e.message));
   page.on('console',m=>{if(m.type()==='error') errors.push(m.text());});
-  await page.goto(base); console.log('home'); await page.locator('#extreme').click(); await page.locator('#escape-new').click();
+  await page.goto(base); console.log('home'); await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click(); await page.locator('#escape-new').click();
   await page.locator('#cinematic-skip').click();
   await page.locator('#escape-panel[hidden]').waitFor({timeout:30000,state:'attached'}); console.log('3d-ready');
   await page.keyboard.press('Escape');
@@ -36,7 +36,7 @@ try {
   Object.assign(standing.data.player,{x:3.5,z:5.5,angle:0,pitch:0});
   Object.assign(standing.data.hunter,{x:5.8,z:5.5,angle:Math.PI});
   await page.evaluate(save=>localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(save)),standing.snapshot());
-  await page.reload(); await page.locator('#extreme').click(); await page.locator('#escape-continue').click();
+  await page.reload(); await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click(); await page.locator('#escape-continue').click();
   await page.locator('#escape-panel[hidden]').waitFor({state:'attached',timeout:30000});
   await new Promise(r=>setTimeout(r,350));
   await page.screenshot({path:path.join(output,'original-frog.png')});
@@ -45,7 +45,7 @@ try {
   await page.keyboard.press('Escape'); await page.locator('#escape-exit').click();
   const caught=new EscapeWorld(42); caught.capture();
   await page.evaluate(save=>localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(save)),caught.snapshot());
-  await page.reload(); await page.locator('#extreme').click(); await page.locator('#escape-continue').click();
+  await page.reload(); await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click(); await page.locator('#escape-continue').click();
   await page.locator('.capture-active').waitFor({timeout:60000});
   await page.screenshot({path:path.join(output, 'laugh.png')});
   const firstLaugh=await page.locator('#escape-view').screenshot();
@@ -61,7 +61,7 @@ try {
   Object.assign(hiding.data.player,{x:5.5,z:3.5,angle:-Math.PI/2});
   hiding.interact();
   await page.evaluate(save=>localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(save)),hiding.snapshot());
-  await page.locator('#extreme').click(); await page.locator('#escape-continue').click();
+  await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click(); await page.locator('#escape-continue').click();
   await page.locator('#escape-panel[hidden]').waitFor({state:'attached',timeout:30000});
   await page.screenshot({path:path.join(output,'cabinet.png')});
   await page.keyboard.press('e'); await page.keyboard.press('Escape');
@@ -71,7 +71,7 @@ try {
   const download=await downloadEvent;
   const backup=await fs.readFile(await download.path(),'utf8');
   if(JSON.stringify(JSON.parse(backup).session)!==JSON.stringify(leaving)) throw new Error('backup differs from paused session');
-  await page.locator('#escape-exit').click(); await page.locator('#extreme').click();
+  await page.locator('#escape-exit').click(); await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click();
   await page.locator('#escape-import').setInputFiles({name:'escape-backup.json',mimeType:'application/json',buffer:Buffer.from(backup)});
   await page.waitForFunction(()=>document.querySelector('.escape-storage')?.textContent.includes('存档已导入'));
   const imported=JSON.parse(await page.evaluate(()=>localStorage.getItem('nwaxz-escape-session-v1')));
@@ -86,7 +86,7 @@ try {
     if(networkOffline && /\/assets\/video\/escape-(opening|caught-[123])-v1\.mp4$/.test(url) && m.text().includes('net::ERR_FAILED')) offlineVideoMisses.push(url);
     else errors.push('mobile: '+m.text()+' '+url);
   });
-  await phone.goto(base); await phone.locator('#extreme').tap(); await phone.locator('#escape-new').tap();
+  await phone.goto(base); await phone.locator('#extreme').tap();await phone.locator('#escape-menu-solo').tap(); await phone.locator('#escape-new').tap();
   await phone.locator('#cinematic-skip').tap();
   await phone.locator('#escape-panel[hidden]').waitFor({timeout:30000,state:'attached'});
   const cdp=await mobile.newCDPSession(phone), stick=await phone.locator('#escape-stick').boundingBox();
@@ -117,7 +117,7 @@ try {
   const cached=await phone.evaluate(async()=>{let results=[]; for(const n of ['models/escape-props-v1.glb','character/haunted-frog-v1.webp','character/haunted-frog-actions-v2.webp','character/haunted-frog-directions-idle-v1.webp','character/haunted-frog-directions-walk-v1.webp','ui/escape-map-atlas-v1.webp'])results.push(!!await caches.match('/assets/'+n,{ignoreSearch:true}));return results;});
   if(!cached.every(Boolean)) throw new Error('3D models absent from offline cache');
   networkOffline=true; await mobile.setOffline(true); await phone.reload();
-  await phone.locator('#extreme').tap(); await phone.locator('#escape-continue').tap();
+  await phone.locator('#extreme').tap();await phone.locator('#escape-menu-solo').tap(); await phone.locator('#escape-continue').tap();
   await phone.locator('#escape-panel[hidden]').waitFor({timeout:30000,state:'attached'});
   await phone.locator('#escape-pause').tap();
   await phone.screenshot({path:path.join(output, 'offline.png')});
@@ -127,7 +127,7 @@ try {
   await phone.locator('#escape-pause').tap(); await phone.locator('#escape-exit').tap();
   await phone.evaluate(save=>localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(save)),caught.snapshot());
   await phone.setViewportSize({width:390,height:844});
-  await phone.reload(); await phone.locator('#extreme').tap(); await phone.locator('#escape-continue').tap();
+  await phone.reload(); await phone.locator('#extreme').tap();await phone.locator('#escape-menu-solo').tap(); await phone.locator('#escape-continue').tap();
   await phone.locator('.capture-active').waitFor({timeout:30000});
   await phone.screenshot({path:path.join(output,'mobile-laugh.png')});
   await mobile.close();

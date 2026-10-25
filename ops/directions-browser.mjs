@@ -19,7 +19,7 @@ function fixture(angle=0,freeze=false){
 try{
  browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH,headless:true,args:['--disable-gpu','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--renderer-process-limit=1']});
  async function open(options){const context=await browser.newContext(options),p=await context.newPage();p.on('pageerror',e=>errors.push(e.message));await p.goto(base);await p.locator('#extreme').waitFor({timeout:300000});return{context,p}}
- async function enter(p,w){const save=EscapeWorld.restore(w.snapshot()).snapshot();await p.evaluate(s=>{localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(s));localStorage.setItem('nwaxz-escape-sound-v1','{"music":false,"sound":false}')},save);await p.locator('#extreme').click();await p.locator('#escape-continue').click();await p.locator('#escape-panel[hidden]').waitFor({state:'attached'});await p.waitForTimeout(120)}
+ async function enter(p,w){const save=EscapeWorld.restore(w.snapshot()).snapshot();await p.evaluate(s=>{localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(s));localStorage.setItem('nwaxz-escape-sound-v1','{"music":false,"sound":false}')},save);await p.locator('#extreme').click();await p.locator('#escape-menu-solo').click();await p.locator('#escape-continue').click();await p.locator('#escape-panel[hidden]').waitFor({state:'attached'});await p.waitForTimeout(120)}
  async function pause(p){if(await p.evaluate(()=>!!document.pointerLockElement))await p.keyboard.press('Escape');else await p.locator('#escape-pause').click();await p.locator('#escape-resume').waitFor();const s=JSON.parse(await p.evaluate(()=>localStorage.getItem('nwaxz-escape-session-v1')));EscapeWorld.restore(s);return s}
  async function photo(p,name){
   // Pause via the real game, then remove only its visual overlay for inspection.
@@ -55,7 +55,7 @@ try{
  assert.ok(second.hunter.x>first.hunter.x);await exit(page);
  const mobile=await open({viewport:{width:390,height:844},isMobile:true,hasTouch:true});page=mobile.p;
  const back=fixture(Math.PI,true);Object.assign(back.data.hunter,{x:12.5,z:9.5});Object.assign(back.data.player,{x:8.5,z:9.5,angle:0});back.target={x:12.5,z:9.5};await enter(page,back);const saved=await pause(page);await photo(page,'mobile-back');await exit(page);
- await mobile.context.setOffline(true);await page.reload();await page.locator('#extreme').waitFor();await page.locator('#extreme').tap();await page.locator('#escape-continue').tap();await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});await page.waitForTimeout(150);const offline=await pause(page);await photo(page,'offline-back');
+ await mobile.context.setOffline(true);await page.reload();await page.locator('#extreme').waitFor();await page.locator('#extreme').tap();await page.locator('#escape-menu-solo').tap();await page.locator('#escape-continue').tap();await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});await page.waitForTimeout(150);const offline=await pause(page);await photo(page,'offline-back');
  assert.equal(offline.hunter.angle,saved.hunter.angle);assert.ok(offline.hunt.freeze>0);assert.deepEqual(errors,[]);
  console.log(JSON.stringify({base,decoded,views,sameFrozenHunterCircling:true,circled:{player:circled.player,freeze:circled.hunt.freeze},realWalking:true,mobile:true,offline:true,errors,output}));
 }catch(error){if(page)try{await page.screenshot({path:path.join(output,'failure.png')});await fs.writeFile(path.join(output,'failure.txt'),await page.locator('body').innerText())}catch{}throw error}

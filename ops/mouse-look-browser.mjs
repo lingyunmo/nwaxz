@@ -17,7 +17,7 @@ try {
     await p.goto(base);await p.locator('#extreme').waitFor({timeout:90000});
     const w=new EscapeWorld(42);Object.assign(w.data.hunter,{x:20.5,z:20.5});
     await p.evaluate(s=>{localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(s));localStorage.setItem('nwaxz-escape-sound-v1','{"music":false,"sound":false}');},w.snapshot());
-    await p.locator('#extreme').click();await p.locator('#escape-continue').click();await p.locator('#escape-panel[hidden]').waitFor({state:'attached'});
+    await p.locator('#extreme').click();await p.locator('#escape-menu-solo').click();await p.locator('#escape-continue').click();await p.locator('#escape-panel[hidden]').waitFor({state:'attached'});
     return w.snapshot();
   };
   const lock=async p=>{

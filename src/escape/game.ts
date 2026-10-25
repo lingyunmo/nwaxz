@@ -16,6 +16,11 @@ import { EscapeWorld, ITEM_NAMES, PROPS, type EscapeSnapshot } from "./world.ts"
 import { EscapeRenderer, type EscapeArt } from "./renderer.ts";
 import { prepareEscape, returnPreparedEscape, takePreparedEscape } from "./preparation.ts";
 import { EscapeLook, type MouseLookMode } from "./look.ts";
+import { CoopClient, type CoopConnectionState } from "./coop-client.ts";
+import type { CoopInput, CoopSnapshot } from "./coop-protocol.ts";
+import { version as APP_VERSION } from "../../package.json";
+import { peerAvatarOptions } from "./peer-art.ts";
+import "./coop.css";
 export { prepareEscape } from "./preparation.ts";
 
 const SESSION = "nwaxz-escape-session-v1", RECORD = "nwaxz-escape-record-v1", SOUND = "nwaxz-escape-sound-v1";
@@ -65,6 +70,25 @@ export class EscapeGame {
   private noteDialog: NoteDialog;
   private noteActive = false;
   private noteReturnToJournal = false;
+  private coop?: CoopClient;
+  private coopSnapshot?: CoopSnapshot;
+  private coopState: CoopConnectionState = "offline";
+  private coopMessage = "";
+  private coopLatency?: number;
+  private coopLastMoveAt = 0;
+  private coopSeenRevision = -1;
+  private coopAction?: CoopInput["action"];
+  private coopMode = false;
+  private coopStarting = false;
+  private coopLobbySignature = "";
+  private coopAssetsReady = false;
+  private coopWasCaught = false;
+  private coopFinal = false;
+  private coopSyncFaulted = false;
+  private coopRecovering = false;
+  private coopRequesting = false;
+  private coopVisual?: { x: number; z: number; viewId: string };
+  private coopUnsubscribers: (() => void)[] = [];
   private readonly signal = this.controller.signal;
   constructor(private root: HTMLElement, private audio: AudioManager, private settings: Settings, private exit: () => void) {
     try {
@@ -91,6 +115,7 @@ export class EscapeGame {
       <div class="escape-bottom"><div id="escape-movement" class="escape-movement">步行 · Shift 切换奔跑 · C 蹲行</div><div class="escape-meters"><label title="体力"><span>体力</span>${icon("run")}<meter id="escape-stamina" aria-label="体力" min="0" max="100" value="100"></meter><b id="escape-stamina-value">100</b></label><label title="疲劳"><span id="escape-effort-label">疲劳</span>${icon("run")}<meter id="escape-effort" aria-label="行走疲劳" min="0" max="100" value="0"></meter><b id="escape-effort-value">0</b></label><label title="手电电量"><span>电量</span>${icon("light")}<meter id="escape-battery" aria-label="手电电量" min="0" max="100" value="100"></meter><b id="escape-battery-value">100</b></label></div>
       <div class="escape-controls"><div class="escape-stick" id="escape-stick" aria-label="移动摇杆"><span></span></div><div class="escape-actions"><button id="escape-light" aria-label="开关手电" title="手电 F">${icon("light")}<span>手电</span><kbd>F</kbd></button><button id="escape-crouch" aria-label="切换蹲行，按 C 切换" title="蹲行 C：切换">${icon("crouch")}<span>蹲行</span><kbd>C</kbd></button><button id="escape-stone" aria-label="丢石子" title="石子 Q">${icon("stone")}<span>石子</span><b id="escape-stones">2</b><kbd>Q</kbd></button><button id="escape-sprint" aria-label="切换奔跑" title="奔跑 Shift：切换">${icon("run")}<span>奔跑</span><kbd>Shift</kbd></button><div class="escape-crystals"><button id="escape-freeze" aria-label="使用冻结晶，快捷键1"><i class="crystal-icon freeze">❄</i><span>冻结</span><b id="escape-freeze-count">0</b><small id="escape-freeze-time">余 0s</small><kbd>1</kbd></button><button id="escape-reveal" aria-label="使用显形晶，快捷键2"><i class="crystal-icon reveal">◇</i><span>显形</span><b id="escape-reveal-count">0</b><small id="escape-reveal-time">余 0s</small><kbd>2</kbd></button><button id="escape-ward" aria-label="使用净化晶，快捷键3" title="净化晶 3"><i class="crystal-icon ward">✦</i><span>净化</span><b id="escape-ward-count">0</b><small id="escape-ward-label">净化保护</small><progress id="escape-ward-progress" max="60" value="0" aria-label="净化保护剩余进度"></progress><kbd>3</kbd></button></div></div></div>
       <button class="escape-interact" id="escape-interact" hidden>${icon("hand")}<span></span><kbd>E</kbd></button></div>
+      <aside id="escape-coop-team" class="escape-coop-team" aria-label="队友" hidden></aside><div id="escape-coop-status" class="escape-coop-status" hidden></div>
       <div id="escape-panel" class="escape-panel" role="dialog" aria-modal="true" aria-label="逃生菜单"></div><input id="escape-import" type="file" accept=".json,application/json" hidden></main>`;
     this.abilityHud = new AbilityHud(this.$(".escape-shell"));
     this.noteDialog = new NoteDialog(this.$(".escape-shell"), () => {
@@ -130,26 +155,174 @@ export class EscapeGame {
   }
   private intro() {
     this.paused = true; this.audio.setPlaying(false);
-    const canResume = this.saved && ["playing", "caught"].includes(this.saved.phase);
-    this.panel(`<p class="escape-eyebrow">极限恐怖</p><h1>奶蛙<br><em>下水道逃生</em></h1><p>找到出口。躲开奶蛙。</p><p class="escape-story">找齐钥匙和工具，逃进下水道。</p>
-      <div class="escape-intro-controls"><span>WASD 移动 · 点击画面后移动鼠标转头</span><span>E 交互 · Shift 切换奔跑 · C 切换蹲行</span><span>手机：左摇杆移动，右侧滑动看四周，点击按钮切换奔跑/蹲行</span></div>
-      <label class="escape-check"><input id="escape-intro-music" type="checkbox" ${this.music ? "checked" : ""}>音乐</label>
-      ${canResume ? '<button id="escape-continue" class="escape-primary">继续逃生</button>' : ""}<button id="escape-new" class="${canResume ? "escape-secondary" : "escape-primary"}">${canResume ? "重新开始" : "进入浴场"}</button>
-      <div class="escape-links"><button id="escape-intro-help">操作</button><button id="escape-intro-saves">存档</button><button id="escape-intro-exit">返回首页</button></div>
+    this.panel(`<p class="escape-eyebrow">极限恐怖</p><h1>奶蛙<br><em>下水道逃生</em></h1><p>找到出口。躲开奶蛙。</p>
+      <nav class="escape-main-menu" aria-label="游戏模式"><button id="escape-menu-solo" class="escape-primary">单人游戏</button><button id="escape-menu-coop" class="escape-secondary">多人游戏</button><button id="escape-menu-help" class="escape-secondary">操作</button><button id="escape-intro-exit" class="escape-secondary">返回</button></nav>
       ${this.record ? `<p class="escape-record">逃出 ${this.record.escapes} 次 · 最佳 ${time(this.record.bestTimeMs / 1000)}</p>` : ""}<p class="escape-storage">${safe(this.storageWarning)}</p>`);
     this.$(".escape-shell").classList.add("intro-active"); this.$("#escape-panel").classList.add("escape-intro");
-    const music = () => { this.music = this.$<HTMLInputElement>("#escape-intro-music").checked; this.saveSound(); };
-    if (canResume) this.button("escape-continue", () => { music(); void this.start(true); });
-    this.button("escape-new", () => { music(); if (canResume) this.confirmRestart(); else void this.start(false); });
-    this.button("escape-intro-exit", this.exit);
-    this.button("escape-intro-help", () => this.help(false));
-    this.button("escape-intro-saves", () => this.saveMenu());
+    this.button("escape-menu-solo", () => this.soloMenu()); this.button("escape-menu-coop", () => this.coopMenu());
+    this.button("escape-menu-help", () => this.help(false)); this.button("escape-intro-exit", this.exit);
+  }
+  private soloMenu() {
+    const canResume = this.saved && ["playing", "caught"].includes(this.saved.phase);
+    this.panel(`<p class="escape-eyebrow">单人游戏</p><h2>下水道逃生</h2>${canResume ? '<button id="escape-continue" class="escape-primary">继续</button>' : ""}<button id="escape-new" class="${canResume ? "escape-secondary" : "escape-primary"}">新游戏</button><button id="escape-intro-saves" class="escape-secondary">存档</button><button id="escape-solo-back" class="escape-secondary">返回</button>`);
+    if (canResume) this.button("escape-continue", () => void this.start(true)); this.button("escape-new", () => canResume ? this.confirmRestart() : void this.start(false));
+    this.button("escape-intro-saves", () => this.saveMenu()); this.button("escape-solo-back", () => this.intro());
+  }
+  private settingsMenu() {
+    this.panel(`<p class="escape-eyebrow">设置</p><h2>声音</h2><div class="escape-setting-row"><label><input id="escape-menu-music" type="checkbox" ${this.music ? "checked" : ""}>音乐</label><label><input id="escape-menu-sound" type="checkbox" ${this.sound ? "checked" : ""}>音效</label></div><button id="escape-settings-back" class="escape-primary">返回</button>`);
+    this.$<HTMLInputElement>("#escape-menu-music").onchange = e => { this.music = (e.target as HTMLInputElement).checked; this.saveSound(); };
+    this.$<HTMLInputElement>("#escape-menu-sound").onchange = e => { this.sound = (e.target as HTMLInputElement).checked; this.saveSound(); };
+    this.button("escape-settings-back", () => this.started ? this.pause() : this.intro());
+  }
+  private coopMenu() {
+    this.panel(`<p class="escape-eyebrow">多人游戏</p><h2>和朋友一起逃生</h2><label class="escape-coop-field">昵称<input id="escape-coop-name" maxlength="12" value="玩家" autocomplete="nickname"></label><div class="escape-avatar-picker" role="group" aria-label="选择头像">${peerAvatarOptions.map(({ id, label }) => `<button type="button" class="escape-avatar" data-avatar="${id}" aria-label="${safe(label)}" title="${safe(label)}" aria-pressed="${id === 0}"><span class="escape-avatar-art" data-avatar="${id}"></span></button>`).join("")}</div><label class="escape-coop-field">房间码<input id="escape-coop-code" maxlength="6" autocomplete="off" placeholder="输入房间码"></label><p id="escape-coop-error" class="escape-coop-error" role="status"></p><button id="escape-coop-create" class="escape-primary">创建房间</button><button id="escape-coop-join" class="escape-secondary">加入房间</button><button id="escape-coop-back" class="escape-secondary">返回</button>`);
+    let avatar = 0;
+    this.root.querySelectorAll<HTMLButtonElement>("[data-avatar]").forEach(button => button.onclick = () => {
+      avatar = Number(button.dataset.avatar); this.root.querySelectorAll("[data-avatar]").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+    });
+    const details = () => ({ name: this.$<HTMLInputElement>("#escape-coop-name").value.trim().slice(0, 12) || "玩家", avatar: avatar as 0 | 1 | 2 | 3 });
+    this.button("escape-coop-create", () => void this.openCoopRoom("create", details()));
+    this.button("escape-coop-join", () => void this.openCoopRoom("join", { ...details(), code: this.$<HTMLInputElement>("#escape-coop-code").value.trim().toUpperCase() }));
+    this.button("escape-coop-back", () => this.intro());
+  }
+  private async openCoopRoom(kind: "create" | "join", input: { name: string; avatar: 0 | 1 | 2 | 3; code?: string }) {
+    if (this.coopRequesting) return;
+    this.coopRequesting = true;
+    const create = this.root.querySelector<HTMLButtonElement>("#escape-coop-create"), join = this.root.querySelector<HTMLButtonElement>("#escape-coop-join");
+    if (create) create.disabled = true; if (join) join.disabled = true;
+    const error = this.$<HTMLElement>("#escape-coop-error");
+    error.textContent = "正在进入房间…";
+    try {
+      const version = APP_VERSION;
+      const client = kind === "create"
+        ? await CoopClient.create({ version, name: input.name, avatar: input.avatar })
+        : await CoopClient.join({ version, name: input.name, avatar: input.avatar, code: input.code ?? "" });
+      this.attachCoop(client);
+      this.renderCoopLobby();
+      void this.prepareCoopRoom(client);
+    } catch (reason) { error.textContent = reason instanceof Error ? reason.message : "暂时无法进入房间"; }
+    finally { this.coopRequesting = false; if (create?.isConnected) create.disabled = false; if (join?.isConnected) join.disabled = false; }
+  }
+  private attachCoop(client: CoopClient) {
+    this.detachCoop(); this.coopMode = true; this.$(".escape-shell").classList.add("coop-active"); this.coop = client; this.coopState = "connecting"; this.coopMessage = "正在连接房间"; this.coopLobbySignature = ""; this.coopFinal = false; this.coopWasCaught = false; this.coopSyncFaulted = false; this.coopRecovering = false; this.coopAssetsReady = !!this.renderer?.usable; this.coopVisual = undefined;
+    this.coopUnsubscribers.push(client.onSnapshot(snapshot => {
+      const previousView = this.coopSnapshot?.viewPlayerId;
+      this.coopSnapshot = snapshot;
+      if (this.started && this.coopMode) {
+        if (this.coopSyncFaulted && !this.coopRecovering) { this.renderCoopTeam(); this.renderCoopStatus(); return; }
+        const wasFaulted = this.coopSyncFaulted;
+        try {
+          const angle = this.world.data.player.angle, pitch = this.world.data.player.pitch;
+          this.world = EscapeWorld.restore(snapshot.world, { playerId: snapshot.viewPlayerId, targetId: snapshot.targetPlayerId }); this.world.pending = snapshot.search ? { ...snapshot.search } : undefined;
+          if (previousView === snapshot.viewPlayerId) { this.world.data.player.angle = angle; this.world.data.player.pitch = pitch; }
+          else this.coopVisual = undefined;
+          this.phase = this.world.data.phase; this.coopSyncFaulted = false; this.coopRecovering = false;
+        }
+        catch (error) {
+          this.coopSyncFaulted = true; this.coopRecovering = false; this.coopMessage = "房间状态无法同步"; this.paused = true; this.clearInput(); this.audio.setPlaying(false); console.error("Co-op room snapshot could not be restored", error);
+          this.panel(`<p class="escape-eyebrow">逃生小队</p><h2>房间状态无法同步</h2><p>请重新连接，或退出房间。</p><button id="escape-coop-sync-reconnect" class="escape-primary">重新连接</button><button id="escape-coop-sync-leave" class="escape-secondary">退出房间</button>`);
+          this.button("escape-coop-sync-reconnect", () => { this.coopRecovering = true; this.coop?.reconnect(); }); this.button("escape-coop-sync-leave", () => void this.leaveCoop());
+          return;
+        }
+        if (wasFaulted && this.$("#escape-coop-sync-reconnect")?.isConnected) this.resume();
+        const self = snapshot.room.players.find(player => player.id === client.session.playerId);
+        if ((self?.status === "caught" || self?.status === "eliminated") && !this.coopWasCaught) this.showCoopCapture();
+        if (self && self.status !== "caught" && self.status !== "eliminated") this.coopWasCaught = false;
+        if (self?.status === "connected" && this.$("#escape-coop-respawn")?.isConnected && !this.coopFinal) { this.$(".escape-shell").classList.remove("capture-active"); this.resume(); }
+        if (["won", "lost"].includes(snapshot.room.phase)) this.coopResult(snapshot.room.phase);
+        this.updateHud(); this.renderCoopTeam();
+      } else if (this.coopMode && snapshot.room.phase === "playing") void this.startCoopGame();
+      else if (this.coopMode) this.renderCoopLobby();
+    }));
+    this.coopUnsubscribers.push(client.onState((state, message, latency) => {
+      this.coopState = state; this.coopMessage = message; if (latency !== undefined) this.coopLatency = latency; this.renderCoopStatus();
+      if (state === "closed" && this.coopMode && !this.coopFinal) { this.paused = true; this.clearInput(); this.cinematic?.close(); this.panel('<h2>房间已关闭</h2><button id="escape-coop-closed-leave" class="escape-primary">返回</button>'); this.button("escape-coop-closed-leave", () => void this.leaveCoop()); }
+    }));
+    client.start(); client.startInputs();
+  }
+  private async prepareCoopRoom(client: CoopClient) {
+    try {
+      if (!this.renderer?.usable) await prepareEscape(this.settings, stage => { if (client === this.coop) this.coopMessage = stage; });
+      if (client !== this.coop) return;
+      this.coopAssetsReady = true;
+      await client.ready(true); this.coopMessage = "已就绪，等待队友"; this.renderCoopLobby();
+    } catch (error) { this.coopMessage = error instanceof Error ? error.message : "场景载入失败"; this.renderCoopLobby(); }
+  }
+  private detachCoop() {
+    this.coopUnsubscribers.splice(0).forEach(unsubscribe => unsubscribe());
+    this.coop?.stop(); this.coop = undefined; this.coopSnapshot = undefined; this.coopMode = false; this.$(".escape-shell").classList.remove("coop-active"); this.coopLobbySignature = "";
+    this.renderer?.clearPeers();
+  }
+  private renderCoopLobby() {
+    const room = this.coopSnapshot?.room;
+    const me = room?.players.find(player => player.id === this.coop?.session.playerId);
+    const leader = this.coop?.session.leader || room?.leaderId === this.coop?.session.playerId;
+    const signature = JSON.stringify([room?.code, room?.phase, room?.players.map(player => [player.id, player.status, player.ready, player.lives, player.avatar, player.name]), this.coopMessage]);
+    if (signature === this.coopLobbySignature && !this.$("#escape-panel").hidden) return;
+    this.coopLobbySignature = signature;
+    const code = room?.code ?? this.coop?.session.code ?? "…";
+    this.panel(`<p class="escape-eyebrow">逃生小队</p><h2>房间 <code id="escape-coop-room-code">${safe(code)}</code></h2><button id="escape-coop-copy" class="escape-secondary">复制房间码</button><div class="escape-coop-lobby">${[1, 2, 3].map(slot => { const player = room?.players.find(item => item.slot === slot); return `<div class="escape-coop-slot ${player ? "occupied" : "empty"}"><span class="escape-avatar-art" data-avatar="${player?.avatar ?? 0}"></span><span>${player ? safe(player.name) : "等待队友"}</span><small>${player ? (player.id === room?.leaderId ? "队长" : player.status === "connected" ? "已加入" : "重连中") : ""} · ${player?.ready ? "已就绪" : player ? "准备中" : ""}</small></div>`; }).join("")}</div><p id="escape-coop-lobby-status" class="escape-coop-status-line">${safe(this.coopMessage || "等待队友加入")}</p>${leader ? '<button id="escape-coop-start" class="escape-primary" disabled>开始逃生</button>' : ""}<button id="escape-coop-leave" class="escape-secondary">退出房间</button>`);
+    this.button("escape-coop-copy", () => { const status = this.root.querySelector<HTMLElement>("#escape-coop-lobby-status"); if (!navigator.clipboard) { if (status) status.textContent = "长按房间码复制"; return; } void navigator.clipboard.writeText(code).then(() => { if (status) status.textContent = "房间码已复制"; }).catch(() => { if (status) status.textContent = "长按房间码复制"; }); });
+    if (leader) this.button("escape-coop-start", () => void this.coop?.startRoom().then(() => this.startCoopGame()).catch(error => { this.coopMessage = error instanceof Error ? error.message : "暂时无法开始"; this.coopLobbySignature = ""; this.renderCoopLobby(); }));
+    this.button("escape-coop-leave", () => void this.leaveCoop());
+    const start = this.root.querySelector<HTMLButtonElement>("#escape-coop-start");
+    if (start) start.disabled = (room?.players.length ?? 0) < 2 || !!room?.players.some(player => player.status !== "connected" || !player.ready);
+    this.renderCoopStatus();
+  }
+  private async leaveCoop() { await this.coop?.leave().catch(() => {}); this.started = false; this.paused = true; this.world = new EscapeWorld(); this.detachCoop(); this.$("#escape-coop-team").hidden = true; this.$("#escape-coop-status").hidden = true; this.intro(); }
+  private async startCoopGame() {
+    if (!this.coop || this.coopStarting || this.started) return;
+    this.coopStarting = true;
+    this.paused = true; this.started = false; this.audio.setMode("escape"); this.applySound();
+    this.panel('<p class="escape-eyebrow">多人逃生</p><h2>正在进入浴场…</h2>');
+    try {
+      if (!this.renderer?.usable) { if (!this.coopAssetsReady) { await prepareEscape(this.settings, () => {}); this.coopAssetsReady = true; } const bundle = takePreparedEscape(); if (!bundle) throw new Error("场景尚未准备完成"); const previous = this.$<HTMLCanvasElement>("#escape-view"); for (const attribute of previous.attributes) bundle.canvas.setAttribute(attribute.name, attribute.value); bundle.canvas.removeAttribute("style"); previous.replaceWith(bundle.canvas); this.renderer = bundle.renderer; this.art = bundle.art; this.bindView(bundle.canvas); }
+      if (this.coopSnapshot) this.world = EscapeWorld.restore(this.coopSnapshot.world, { playerId: this.coopSnapshot.viewPlayerId, targetId: this.coopSnapshot.targetPlayerId });
+      this.started = true; this.phase = this.world.data.phase; this.renderer?.resize(this.settings.quality === "high"); this.renderCoopTeam(); this.resume();
+    } catch (error) { this.coopMessage = error instanceof Error ? error.message : "场景载入失败"; this.coopLobbySignature = ""; this.renderCoopLobby(); }
+    finally { this.coopStarting = false; }
+  }
+  private coopResult(phase: string) {
+    if (this.coopFinal || !this.coopMode) return;
+    this.coopFinal = true; this.coop?.stop(); this.paused = true; this.clearInput(); this.audio.setPlaying(false); this.panel(`<p class="escape-eyebrow">逃生小队</p><h2>${phase === "won" ? "全队逃出生天" : "小队被困在浴场"}</h2><p>此次逃生已结束。</p><button id="escape-coop-result-exit" class="escape-primary">返回首页</button>`); this.button("escape-coop-result-exit", () => void this.leaveCoop());
+  }
+  private showCoopCapture() {
+    this.coopWasCaught = true; this.paused = true; this.clearInput(); this.audio.setPlaying(false);
+    this.$(".escape-shell").classList.add("capture-active");
+    void this.playCinematic(randomCaughtClip()).then(() => {
+      if (this.disposed || !this.coopMode || this.coopFinal) return;
+      this.$(".escape-shell").classList.remove("capture-active");
+      const player = this.coopSnapshot?.room.players.find(item => item.id === this.coop?.session.playerId);
+      const eliminated = player?.status === "eliminated";
+      this.panel(`<p class="escape-eyebrow">逃生小队</p><h2>${eliminated ? "继续旁观队友" : "队友还在浴场里"}</h2><p>${eliminated ? "你的机会已经用完。" : "可以请求在安全处重生。"}</p><button id="escape-coop-respawn" class="escape-primary">${eliminated ? "旁观队友" : "请求重生"}</button><button id="escape-coop-caught-leave" class="escape-secondary">退出房间</button>`);
+      this.button("escape-coop-caught-leave", () => void this.leaveCoop());
+      this.button("escape-coop-respawn", () => {
+        if (eliminated) { this.$(".escape-shell").classList.remove("capture-active"); this.resume(); return; }
+        const button = this.$<HTMLButtonElement>("#escape-coop-respawn"); button.disabled = true; button.textContent = "正在等待重生…";
+        void this.coop?.respawn().then(() => { this.coopMessage = "已收到重生请求"; }).catch(error => { this.coopMessage = error instanceof Error ? error.message : "暂时无法重生"; button.disabled = false; button.textContent = "请求重生"; });
+      });
+    });
+  }
+  private renderCoopTeam() {
+    const team = this.$<HTMLElement>("#escape-coop-team"); const players = this.coopSnapshot?.room.players ?? [];
+    team.hidden = !this.coopMode || !this.started;
+    const label = (status: string) => status === "escaped" ? "已逃出" : status === "eliminated" ? "已淘汰" : status === "left" ? "已退出" : status === "caught" ? "被抓" : status === "reconnecting" ? "重连中" : "逃生中";
+    this.root.querySelector("#escape-coop-status")?.remove();
+    team.innerHTML = `${[1, 2, 3].map(slot => { const player = players.find(item => item.slot === slot); return player ? `<div class="escape-coop-teammate ${player.status} ${player.id === this.coop?.session.playerId ? "self" : ""} ${player.id === this.coopSnapshot?.viewPlayerId ? "following" : ""}"><span class="escape-avatar-art" data-avatar="${player.avatar}"></span><span class="escape-coop-player-name">${slot} · ${safe(player.name)}</span><small ${player.id === this.coop?.session.playerId ? 'id="escape-coop-status" class="escape-coop-status"' : ""}>${label(player.status)} · ${player.lives}命</small></div>` : `<div class="escape-coop-teammate empty"><span class="escape-avatar-art" data-avatar="0"></span><span class="escape-coop-player-name">${slot} · 空位</span><small>等待队友</small></div>`; }).join("")}`;
+    this.renderCoopStatus();
+  }
+  private renderCoopStatus() {
+    const status = this.root.querySelector<HTMLElement>("#escape-coop-status"); if (!status) return;
+    status.hidden = !this.coopMode || !this.started;
+    status.dataset.state = this.coopState === "connected" && (this.coopLatency ?? 0) > 250 ? "unstable" : this.coopState;
+    const lives = this.coopSnapshot?.room.players.find(player => player.id === this.coop?.session.playerId)?.lives ?? 0;
+    status.textContent = `${lives}命 · ${this.coopState === "connected" ? this.coopLatency === undefined ? "连接中" : `延迟 ${this.coopLatency}ms` : "重连中"}`;
   }
   private saveMenu() {
     this.panel(`<p class="escape-eyebrow">下水道逃生</p><h2>存档管理</h2><p>${this.saved ? "已有逃生进度" : "暂无逃生进度"}</p><button id="escape-save-export" class="escape-primary" ${!this.saved ? "disabled" : ""}>备份存档</button><button id="escape-intro-import" class="escape-secondary">恢复存档</button><button id="escape-saves-back" class="escape-secondary">返回</button>`);
     this.button("escape-save-export", () => this.exportSave());
     this.button("escape-intro-import", () => this.$<HTMLInputElement>("#escape-import").click());
-    this.button("escape-saves-back", () => this.intro());
+    this.button("escape-saves-back", () => this.soloMenu());
   }
   private adoptPrepared() {
     const bundle = takePreparedEscape();
@@ -213,33 +386,37 @@ export class EscapeGame {
   private applySound() { this.audio.setSettings({ ...this.settings, music: this.music, sound: this.sound }); }
   private saveSound() { try { localStorage.setItem(SOUND, JSON.stringify({ music: this.music, sound: this.sound })); } catch { /* Audio still works without storage. */ } this.applySound(); }
   private resume() {
+    if (this.coopMode && this.coopFinal) return;
     this.$(".escape-shell").classList.remove("capture-active");
     this.$("#escape-view").setAttribute("aria-label", "3D第一人称逃生。WASD移动，Shift切换奔跑，C切换蹲行；点击画面后移动鼠标转头，手机滑动转头。E交互，Esc暂停并释放鼠标。");
     this.$("#escape-panel").hidden = true; this.$(".escape-shell").classList.remove("menu-active"); this.updateHud(); this.paused = false; this.lastFrame = 0; this.clearInput();
     this.$("#escape-view").focus({ preventScroll: true }); this.audio.setPlaying(true); void this.audio.unlock();
     this.look?.capture();
   }
-  private clearInput() { this.keys.clear(); this.stick = { x: 0, y: 0 }; this.look?.clear(); this.$("#escape-stick span").style.transform = "translate(0,0)"; }
+  private clearInput() { this.keys.clear(); this.stick = { x: 0, y: 0 }; this.look?.clear(); this.$("#escape-stick span").style.transform = "translate(0,0)"; if (this.coopMode) { this.coop?.clearActions(); this.coop?.sendInput({ move: { forward: 0, strafe: 0, turn: 0, look: 0, sprint: false } }); } }
+  private coopActionInput(action: NonNullable<CoopInput["action"]>) {
+    const self = this.coopSnapshot?.room.players.find(player => player.id === this.coop?.session.playerId);
+    if (this.coopMode && !this.coopFinal && this.coopSnapshot?.room.phase === "playing" && self?.status === "connected") this.coopAction = action;
+  }
   private pause(map = false) {
     if (map) { this.showMap(); return; }
     if (!this.started || this.world.data.phase !== "playing") return;
     if (document.pointerLockElement === this.root.querySelector("#escape-view")) this.unlockAt = performance.now();
     this.paused = true; this.clearInput(); this.audio.setPlaying(false); this.save();
-    this.panel(`<div class="escape-pause-menu"><p class="escape-eyebrow">已暂停</p><h2>暂停</h2><div class="escape-journal"><small>线索</small><p id="escape-goal">${safe(this.world.objective)}</p></div><button id="escape-resume" class="escape-primary">继续逃生</button>
-      <div class="escape-setting-row"><label><input id="escape-music" type="checkbox" ${this.music ? "checked" : ""}>音乐</label><label><input id="escape-sound" type="checkbox" ${this.sound ? "checked" : ""}>音效</label><button id="escape-audio-recover">恢复声音</button></div>
-      <div class="escape-links"><button id="escape-journal">纸条</button><button id="escape-backup">备份存档</button><button id="escape-help">操作说明</button><button id="escape-restart">重新开始</button><button id="escape-exit">保存并退出</button></div><p class="escape-storage" id="escape-save-status">${this.storageWarning || "进度已保存"}</p></div>`);
+    this.panel(`<div class="escape-pause-menu"><p class="escape-eyebrow">已暂停</p><h2>暂停</h2>${this.coopMode ? '<p class="escape-coop-note">房间仍在进行</p>' : ""}<div class="escape-journal"><small>线索</small><p id="escape-goal">${safe(this.world.objective)}</p></div><button id="escape-resume" class="escape-primary">继续逃生</button>
+      <div class="escape-setting-row"><button id="escape-pause-settings">设置</button><button id="escape-audio-recover">恢复声音</button></div>
+      <div class="escape-links"><button id="escape-journal">纸条</button>${this.coopMode ? "" : '<button id="escape-backup">备份存档</button>'}<button id="escape-help">操作说明</button>${this.coopMode ? "" : '<button id="escape-restart">重新开始</button>'}<button id="escape-exit">${this.coopMode ? "退出房间" : "保存并退出"}</button></div><p class="escape-storage" id="escape-save-status">${this.coopMode ? "房间仍在进行" : this.storageWarning || "进度已保存"}</p></div>`);
     this.$("#escape-panel").classList.add("escape-pause-panel");
     this.button("escape-journal", () => this.showJournal());
-    this.button("escape-resume", () => this.resume()); this.button("escape-help", () => this.help(true)); this.button("escape-restart", () => this.confirmRestart());
-    this.button("escape-exit", () => { this.save(); this.exit(); }); this.button("escape-backup", () => this.exportSave());
-    this.$<HTMLInputElement>("#escape-music").onchange = e => { this.music = (e.target as HTMLInputElement).checked; this.saveSound(); if (this.music) void this.audio.preview("music"); };
-    this.$<HTMLInputElement>("#escape-sound").onchange = e => { this.sound = (e.target as HTMLInputElement).checked; this.saveSound(); };
+    this.button("escape-resume", () => this.resume()); this.button("escape-help", () => this.help(true)); if (!this.coopMode) this.button("escape-restart", () => this.confirmRestart());
+    this.button("escape-exit", () => { if (this.coopMode) void this.leaveCoop(); else { this.save(); this.exit(); } }); if (!this.coopMode) this.button("escape-backup", () => this.exportSave());
+    this.button("escape-pause-settings", () => this.settingsMenu());
     this.button("escape-audio-recover", () => { void this.audio.recover().then(ok => { const el = this.root.querySelector("#escape-save-status"); if (el) el.textContent = ok ? "音效试听中" : "声音未开启，请重试。"; }); });
   }
   private showMap() {
     if (!this.started || this.world.data.phase !== "playing") return;
     this.paused = true; this.clearInput(); this.audio.setPlaying(false); this.save();
-    this.panel(`<section class="escape-map-page"><p class="escape-eyebrow">浴场地图</p><h2>探索记录</h2><div class="escape-floor-tabs" aria-label="地图楼层"><button id="escape-map-ground" aria-pressed="false">地面</button><button id="escape-map-basement" aria-pressed="false">负一楼</button></div><canvas id="escape-floorplan" width="560" height="560" aria-label="探索地图，箭头是你，暗处尚未探索"></canvas><p class="escape-map-legend"><i class="map-you"></i>你 <i class="map-door"></i>门 <i class="map-hide"></i>衣柜 <i class="map-fog"></i>未探索</p><p id="escape-map-current">当前位置：${safe(this.world.room)}</p><button id="escape-map-close" class="escape-secondary">返回游戏 <kbd>M</kbd></button></section>`);
+    this.panel(`<section class="escape-map-page"><p class="escape-eyebrow">浴场地图</p><h2>探索记录</h2>${this.coopMode ? '<p class="escape-coop-note">房间仍在进行</p>' : ""}<div class="escape-floor-tabs" aria-label="地图楼层"><button id="escape-map-ground" aria-pressed="false">地面</button><button id="escape-map-basement" aria-pressed="false">负一楼</button></div><canvas id="escape-floorplan" width="560" height="560" aria-label="探索地图，箭头是你，暗处尚未探索"></canvas><p class="escape-map-legend"><i class="map-you"></i>你 <i class="map-door"></i>门 <i class="map-hide"></i>衣柜 <i class="map-fog"></i>未探索</p><p id="escape-map-current">当前位置：${safe(this.world.room)}</p><button id="escape-map-close" class="escape-secondary">返回游戏 <kbd>M</kbd></button></section>`);
     this.$("#escape-panel").classList.add("escape-map-panel");
     const draw = (floor: 0 | -1) => {
       this.$("#escape-map-ground").setAttribute("aria-pressed", String(floor === 0));
@@ -252,7 +429,7 @@ export class EscapeGame {
   private showJournal() {
     this.paused = true; this.clearInput(); this.audio.setPlaying(false);
     const notes = this.world.data.notes.map(id => PROPS.find(p => p.id === id)!).filter(Boolean);
-    this.panel(`<p class="escape-eyebrow">已找到的纸条</p><h2>纸条</h2>${notes.length ? notes.map(note => `<button class="escape-secondary" data-note-id="${safe(note.id)}">${safe(note.name)}</button>`).join("") : "<p>还没有找到纸条。</p>"}<button id="escape-journal-back" class="escape-secondary">返回</button>`);
+    this.panel(`<p class="escape-eyebrow">已找到的纸条</p><h2>纸条</h2>${this.coopMode ? '<p class="escape-coop-note">房间仍在进行</p>' : ""}${notes.length ? notes.map(note => `<button class="escape-secondary" data-note-id="${safe(note.id)}">${safe(note.name)}</button>`).join("") : "<p>还没有找到纸条。</p>"}<button id="escape-journal-back" class="escape-secondary">返回</button>`);
     this.root.querySelectorAll<HTMLElement>("[data-note-id]").forEach(button => button.onclick = () => this.openNote(button.dataset.noteId!, true));
     this.button("escape-journal-back", () => this.pause());
   }
@@ -262,6 +439,9 @@ export class EscapeGame {
     this.noteActive = true; this.noteReturnToJournal = fromJournal;
     this.paused = true; this.clearInput(); this.look?.suspend(); this.audio.setPlaying(false); this.save();
     this.$("#escape-panel").hidden = true; this.$(".escape-shell").classList.add("menu-active");
+    const paper = this.root.querySelector(".escape-note-paper");
+    paper?.querySelector(".escape-coop-note")?.remove();
+    if (this.coopMode && paper) { const status = document.createElement("p"); status.className = "escape-coop-note"; status.textContent = "房间仍在进行"; paper.insertBefore(status, paper.querySelector(".escape-note-content")); }
     this.abilityHud.update({ ...this.world.data.abilities, floor: floorAt(this.world.data.player) }, false, this.settings.reducedMotion);
     this.noteDialog.show(note.name, note.text ?? "");
   }
@@ -270,8 +450,9 @@ export class EscapeGame {
     const expanded = !!this.world.data.expansion?.enabled;
     const controls = touch ? [["移动", "左侧摇杆"], ["观察", "滑动右侧画面"], ["互动", "靠近目标后点击手掌"], ["奔跑", "点击切换奔跑"], ["蹲行", "点击切换蹲行"], ["冻结 / 显形 / 净化", "屏幕晶体按钮"]] : [["移动", "WASD / 方向键"], ["观察", "点击画面后移动鼠标"], ["抬头 / 低头", "PageUp / PageDown"], ["互动", "E / 空格"], ["奔跑", "Shift 切换"], ["蹲行", "C 切换"], ["手电", "F"], ["石子 / 地图", "Q / M"], ["警戒详情", "Tab 展开 / 收起"], ["冻结 / 显形 / 净化", "1 / 2 / 3"], ["暂停 / 释放鼠标", "Esc"]];
     const tips = ["被发现时拉开距离，躲进衣柜并保持安静。", "被干扰时仪表不可信，绿晶能驱散杂讯。", "找到钥匙和工具，打开下水道铁网。", "冻住奶蛙能争取调整位置的机会；显形晶可查看奶蛙方向。", ...(expanded ? ["旧更衣室里有缺失的手轮；锅炉房维修纸条记着泄压顺序。", "走廊碎玻璃可以绕开或蹲行通过。"] : []), "连续移动会积累疲劳，停下休息可恢复。", "照中奶蛙会增加警觉，移开光束后警觉会下降。", "被抓后进入下一夜，物品保留。第三次被抓则失败。"];
-    this.panel(`<h2>操作</h2><dl class="escape-bindings">${controls.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("")}</dl><ul class="escape-help">${tips.map(tip => `<li>${tip}</li>`).join("")}</ul><details class="escape-perception-help"><summary>暴露值与追击规则</summary><p>声音、灯光、视觉分别累积 0–100。总分由三路共同计算：</p><p class="escape-formula">100 × [1 − (1 − 声音/100)(1 − 灯光/100)(1 − 视觉/100)]</p><p>例：声音50、灯光50为75；三路各50为87.5；声音和灯光各99会封顶100；任一路100也为100。原始分达到99.5即封顶并进入追击。</p><p>总分达到45会警觉，感知速度变为×1.5。蹲行、步行、跑步的基础听距为5、13、24米，喘息22米；墙门缩短听距，离得越近涨分越快。贡献按线索重叠程度公平分摊，相加等于总分；显示值四舍五入。追击时总分锁定100，贡献按比例显示，甩开视线和声光线索后转为搜查。</p></details><button id="escape-help-close" class="escape-primary">返回</button>`);
+    this.panel(`<h2>操作</h2><dl class="escape-bindings">${controls.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("")}</dl><ul class="escape-help">${tips.map(tip => `<li>${tip}</li>`).join("")}</ul><details class="escape-perception-help"><summary>暴露值与追击规则</summary><p>声音、灯光、视觉分别累积 0–100。总分由三路共同计算：</p><p class="escape-formula">100 × [1 − (1 − 声音/100)(1 − 灯光/100)(1 − 视觉/100)]</p><p>例：声音50、灯光50为75；三路各50为87.5；声音和灯光各99会封顶100；任一路100也为100。原始分达到99.5即封顶并进入追击。</p><p>总分达到45会警觉，感知速度变为×1.5。蹲行、步行、跑步的基础听距为5、13、24米，喘息22米；墙门缩短听距，离得越近涨分越快。贡献按线索重叠程度公平分摊，相加等于总分；显示值四舍五入。追击时总分锁定100，贡献按比例显示，甩开视线和声光线索后转为搜查。</p></details><button id="escape-help-settings" class="escape-secondary">设置</button><button id="escape-help-close" class="escape-primary">返回</button>`);
     this.button("escape-help-close", () => fromPause ? this.pause() : this.intro());
+    this.button("escape-help-settings", () => this.settingsMenu());
   }
   private confirmRestart() {
     this.paused = true; this.audio.setPlaying(false);
@@ -302,7 +483,7 @@ export class EscapeGame {
     }
   }
   private save() {
-    if (!this.started) return;
+    if (!this.started || this.coopMode) return;
     try { this.saved = this.world.snapshot(); localStorage.setItem(SESSION, JSON.stringify(this.saved)); this.storageWarning = ""; }
     catch { this.storageWarning = "本机无法自动保存，请先备份存档。"; }
   }
@@ -312,6 +493,7 @@ export class EscapeGame {
     try { localStorage.setItem(RECORD, JSON.stringify(this.record)); } catch { this.storageWarning = "纪录未能写入，请备份存档。"; }
   }
   private exportSave() {
+    if (this.coopMode) return;
     const data = this.started ? this.world.snapshot() : this.saved;
     const blob = new Blob([JSON.stringify({ format: "nwaxz-escape", version: 2, generation: SAVE_GENERATION, session: data, record: this.record }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob), link = document.createElement("a"); link.href = url; link.download = "nwaxz-escape-save.json"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -320,13 +502,13 @@ export class EscapeGame {
     this.button("escape-pause", () => this.pause()); this.button("escape-map", () => this.pause(true));
     this.button("escape-hud-toggle", () => { if (!this.paused) this.toggleHudDetails(); });
     this.button("escape-hud-help", () => { if (!this.paused) this.pause(); this.help(true); });
-    this.button("escape-interact", () => { if (!this.paused) this.world.interact(); });
-    this.button("escape-light", () => { if (!this.paused) this.world.toggleLight(); });
-    this.button("escape-crouch", () => { if (!this.paused) this.world.toggleCrouch(); });
-    this.button("escape-stone", () => { if (!this.paused) this.world.throwStone(); });
-    this.button("escape-freeze", () => { if (!this.paused) this.world.useCrystal("freeze"); });
-    this.button("escape-reveal", () => { if (!this.paused) this.world.useCrystal("reveal"); });
-    this.button("escape-ward", () => { if (!this.paused) this.world.useCrystal("ward"); });
+    this.button("escape-interact", () => { if (!this.paused) this.coopMode ? this.coopActionInput("interact") : this.world.interact(); });
+    this.button("escape-light", () => { if (!this.paused) this.coopMode ? this.coopActionInput("light") : this.world.toggleLight(); });
+    this.button("escape-crouch", () => { if (!this.paused) this.coopMode ? this.coopActionInput("crouch") : this.world.toggleCrouch(); });
+    this.button("escape-stone", () => { if (!this.paused) this.coopMode ? this.coopActionInput("stone") : this.world.throwStone(); });
+    this.button("escape-freeze", () => { if (!this.paused) this.coopMode ? this.coopActionInput("freeze") : this.world.useCrystal("freeze"); });
+    this.button("escape-reveal", () => { if (!this.paused) this.coopMode ? this.coopActionInput("reveal") : this.world.useCrystal("reveal"); });
+    this.button("escape-ward", () => { if (!this.paused) this.coopMode ? this.coopActionInput("ward") : this.world.useCrystal("ward"); });
     const stick = this.$("#escape-stick");
     const moveStick = (e: PointerEvent) => { const r = stick.getBoundingClientRect(), dx = (e.clientX - r.x - r.width / 2) / 42, dy = (e.clientY - r.y - r.height / 2) / 42, norm = Math.max(1, Math.hypot(dx, dy)); this.stick = { x: dx / norm, y: dy / norm }; stick.querySelector<HTMLElement>("span")!.style.transform = `translate(${this.stick.x * 38}px,${this.stick.y * 38}px)`; };
     let stickId: number | undefined;
@@ -334,7 +516,7 @@ export class EscapeGame {
     stick.addEventListener("pointermove", e => { if (stickId === e.pointerId) moveStick(e); }, { signal: this.signal });
     for (const event of ["pointerup", "pointercancel", "lostpointercapture"]) stick.addEventListener(event, () => { stickId = undefined; this.stick = { x: 0, y: 0 }; stick.querySelector<HTMLElement>("span")!.style.transform = "translate(0,0)"; }, { signal: this.signal });
     this.bindView(this.$("#escape-view"));
-    this.button("escape-sprint", () => { if (!this.paused) this.world.toggleSprint(); });
+    this.button("escape-sprint", () => { if (!this.paused) { if (this.coopMode) this.coopActionInput("sprint"); else this.world.toggleSprint(); } });
     document.addEventListener("keydown", e => {
       if (this.cinematic) return;
       if (this.noteActive) {
@@ -360,14 +542,14 @@ export class EscapeGame {
       if (e.repeat) return;
       if (key === "tab") { this.toggleHudDetails(); return; }
       if (["escape", "m"].includes(key)) this.pause(key !== "escape");
-      if (key === "e" || key === " ") this.world.interact();
-      if (key === "q") this.world.throwStone();
-      if (key === "f") this.world.toggleLight();
-      if (key === "c") this.world.toggleCrouch();
-      if (key === "shift") this.world.toggleSprint();
-      if (key === "1") this.world.useCrystal("freeze");
-      if (key === "2") this.world.useCrystal("reveal");
-      if (key === "3") this.world.useCrystal("ward");
+      if (key === "e" || key === " ") this.coopMode ? this.coopActionInput("interact") : this.world.interact();
+      if (key === "q") this.coopMode ? this.coopActionInput("stone") : this.world.throwStone();
+      if (key === "f") this.coopMode ? this.coopActionInput("light") : this.world.toggleLight();
+      if (key === "c") this.coopMode ? this.coopActionInput("crouch") : this.world.toggleCrouch();
+      if (key === "shift") this.coopMode ? this.coopActionInput("sprint") : this.world.toggleSprint();
+      if (key === "1") this.coopMode ? this.coopActionInput("freeze") : this.world.useCrystal("freeze");
+      if (key === "2") this.coopMode ? this.coopActionInput("reveal") : this.world.useCrystal("reveal");
+      if (key === "3") this.coopMode ? this.coopActionInput("ward") : this.world.useCrystal("ward");
     }, { signal: this.signal });
     document.addEventListener("keyup", e => this.keys.delete(e.key.toLowerCase()), { signal: this.signal });
     window.addEventListener("blur", () => { this.clearInput(); if (this.started && !this.paused) this.pause(); }, { signal: this.signal });
@@ -421,6 +603,41 @@ export class EscapeGame {
     const dt = this.lastFrame ? Math.min(.1, (now - this.lastFrame) / 1000) : 0; this.lastFrame = now;
     if (this.started && !this.paused && !document.hidden) {
       const down = (key: string) => this.keys.has(key) ? 1 : 0;
+      if (this.coopMode) {
+        const self = this.coopSnapshot?.room.players.find(player => player.id === this.coop?.session.playerId);
+        const canControl = this.coopSnapshot?.room.phase === "playing" && self?.status === "connected" && !this.coopFinal;
+        if (canControl && !this.world.data.hidden) {
+          const player = this.world.data.player;
+          const angle = player.angle + (down("arrowright") - down("arrowleft")) * dt * 2;
+          player.angle = Math.atan2(Math.sin(angle), Math.cos(angle));
+          player.pitch = Math.max(-1.3, Math.min(1.3, (player.pitch ?? 0) + (down("pageup") - down("pagedown")) * dt * 1.5));
+        }
+        if (canControl && now - this.coopLastMoveAt >= 100) {
+          this.coopLastMoveAt = now;
+          const action = this.coopAction; this.coopAction = undefined;
+          this.coop?.sendInput({ move: { forward: down("w") + down("arrowup") - down("s") - down("arrowdown") - this.stick.y, strafe: down("d") - down("a") + this.stick.x, turn: down("arrowright") - down("arrowleft"), look: down("pageup") - down("pagedown"), sprint: this.world.data.player.sprinting ?? false }, aim: { angle: this.world.data.player.angle, pitch: this.world.data.player.pitch ?? 0 }, ...(action ? { action } : {}) });
+        } else if (!canControl) { this.coopAction = undefined; this.coop?.clearActions(); }
+        const player = this.world.data.player, authX = player.x, authZ = player.z;
+        const viewId = this.coopSnapshot?.viewPlayerId ?? this.coop?.session.playerId ?? "";
+        if (!this.coopVisual || this.coopVisual.viewId !== viewId || Math.hypot(authX - this.coopVisual.x, authZ - this.coopVisual.z) > 3) this.coopVisual = { x: authX, z: authZ, viewId };
+        else { const blend = 1 - Math.exp(-18 * dt); this.coopVisual.x += (authX - this.coopVisual.x) * blend; this.coopVisual.z += (authZ - this.coopVisual.z) * blend; }
+        player.x = this.coopVisual.x; player.z = this.coopVisual.z;
+        try { this.renderer?.draw(this.world, dt); } finally { player.x = authX; player.z = authZ; }
+        this.renderer?.drawPeers(this.coopSnapshot?.room.players ?? [], viewId, dt);
+        const snapshot = this.coopSnapshot;
+        if (snapshot && snapshot.revision !== this.coopSeenRevision) {
+          this.coopSeenRevision = snapshot.revision;
+          for (const event of snapshot.events) {
+            if (event.type === "message" && event.text) this.world.say(event.text);
+            if (event.type === "laugh") this.audio.haunt();
+            if (["step", "door", "noise"].includes(event.type)) this.audio.effect(event.type as "step" | "door" | "noise");
+            if (event.type === "item") this.audio.effect("coin");
+            if (event.type === "breath") this.audio.effect("breath");
+            if (event.type === "note" && event.id) this.openNote(event.id);
+          }
+        }
+        if (now - this.hudAt > 100) { this.hudAt = now; this.updateHud(); }
+      } else {
       this.world.advance(dt, { forward: down("w") + down("arrowup") - down("s") - down("arrowdown") - this.stick.y, strafe: down("d") - down("a") + this.stick.x, turn: down("arrowright") - down("arrowleft"), look: down("pageup") - down("pagedown"), sprint: this.world.data.player.sprinting ?? false });
       this.renderer?.draw(this.world, dt);
       const d = this.world.data;
@@ -436,6 +653,7 @@ export class EscapeGame {
       if (d.elapsed - this.saveAt > 4) { this.saveAt = d.elapsed; this.save(); }
       if (d.phase !== this.phase) { this.phase = d.phase; if (d.phase === "won") this.recordWin(); this.result(d.phase === "caught" || d.phase === "lost"); }
       if (now - this.hudAt > 100) { this.hudAt = now; this.updateHud(); }
+      }
     }
     // Capture is a cosmetic animation only. Simulation, battery and saves do
     // not advance while its clearly visible original-art belly laugh loops.
@@ -446,7 +664,7 @@ export class EscapeGame {
     this.updateMouseHint();
     const d = this.world.data;
     const interfered = d.interference.stage === "corrupt";
-    this.abilityHud.update({ ...d.abilities, floor: floorAt(d.player) }, this.started && !this.cinematic && d.phase === "playing" && floorAt(d.player) === -1, this.settings.reducedMotion);
+    this.abilityHud.update({ ...d.abilities, floor: floorAt(d.player), subjectSlot: this.coopMode && this.coopSnapshot?.abilityTargetPlayerId !== this.coopSnapshot?.viewPlayerId ? this.coopSnapshot?.room.players.find(player => player.id === this.coopSnapshot?.abilityTargetPlayerId)?.slot : undefined }, this.started && !this.cinematic && d.phase === "playing" && floorAt(d.player) === -1, this.settings.reducedMotion);
     const room = this.world.room;
     if (room !== this.lastRoom) { this.lastRoom = room; this.roomCueUntil = d.elapsed + 1.6; }
     this.$("#escape-room").textContent = room;
@@ -460,7 +678,10 @@ export class EscapeGame {
     const pauseRoom = this.root.querySelector<HTMLElement>("#escape-map-current");
     if (pauseRoom) pauseRoom.textContent = `当前位置：${room}`;
     const items = ["brass", "cellar", "fuse", "cutters", "handwheel", "relay"] as const;
-    const inventoryKey = d.inventory.join(",") + ":" + d.captures + ":" + !!d.expansion?.enabled;
+    const self = this.coopSnapshot?.room.players.find(player => player.id === this.coop?.session.playerId);
+    const lifeCap = this.coopMode ? this.coopSnapshot?.team.total === 3 ? 1 : 2 : 3;
+    const lives = this.coopMode ? self?.lives ?? lifeCap : 3 - d.captures;
+    const inventoryKey = d.inventory.join(",") + ":" + lives + ":" + lifeCap + ":" + !!d.expansion?.enabled;
     if (inventoryKey !== this.inventoryKey) {
       this.inventoryKey = inventoryKey;
       this.$("#escape-inventory").classList.toggle("expansion-inventory", !!d.expansion?.enabled);
@@ -468,15 +689,15 @@ export class EscapeGame {
         const owned = d.inventory.includes(item), glyph = item === "cutters" ? "cutters" : item === "fuse" || item === "relay" ? "fuse" : item === "handwheel" ? "handwheel" : "key";
         return `<span class="escape-slot ${owned ? "owned" : ""}" title="${owned ? ITEM_NAMES[item] : "未找到物品"}" aria-label="${owned ? ITEM_NAMES[item] : "空物品栏"}"><small>${i+1}</small>${owned ? icon(glyph) : ""}</span>`;
       }).join("");
-      this.$("#escape-lives").innerHTML = [0,1,2].map(i => `<span class="${i < d.captures ? "lost" : ""}">${icon("heart")}</span>`).join("");
-      this.$("#escape-lives").setAttribute("aria-label", `剩余${3-d.captures}次机会`);
+      this.$("#escape-lives").innerHTML = Array.from({ length: lifeCap }, (_, i) => `<span class="${i < lifeCap - lives ? "lost" : ""}">${icon("heart")}</span>`).join("");
+      this.$("#escape-lives").setAttribute("aria-label", `剩余${lives}次机会`);
     }
     if (this.world.message !== this.lastNotice) { this.lastNotice = this.world.message; this.noticeUntil = performance.now() + 5000; this.$("#escape-notice").textContent = this.world.message; }
     this.$("#escape-notice").hidden = performance.now() > this.noticeUntil;
-    const danger = d.hidden ? "已藏匿" : d.hunter.state === "chase" ? "被发现了" : Math.hypot(d.hunter.x - d.player.x, d.hunter.z - d.player.z) < 4 ? "脚步正在靠近" : "";
+    const danger = d.hidden ? "已藏匿" : this.world.isPlayerChased ? "被发现了" : Math.hypot(d.hunter.x - d.player.x, d.hunter.z - d.player.z) < 4 ? "脚步正在靠近" : "";
     this.$("#escape-danger").textContent = danger;
     this.$("#escape-danger").hidden = !danger;
-    this.$(".escape-shell").classList.toggle("being-chased", d.hunter.state === "chase");
+    this.$(".escape-shell").classList.toggle("being-chased", this.world.isPlayerChased);
     this.$(".escape-shell").classList.toggle("in-cabinet", !!d.hidden);
     this.$(".escape-shell").classList.toggle("freeze-active", (d.hunt?.freeze ?? 0) > 0 && d.phase === "playing");
     const target = this.world.nearest(), interact = this.$<HTMLButtonElement>("#escape-interact");
@@ -494,7 +715,7 @@ export class EscapeGame {
     this.$<HTMLMeterElement>("#escape-exposure").value = exposure;
     this.$("#escape-exposure-value").textContent = Number(exposure.toFixed(1)).toString();
     this.$("#escape-exposure-hint").textContent = this.world.hunterDecision;
-    const huntState = d.hidden ? "藏匿" : hunt?.freeze ? "冻结" : d.hunter.state === "chase" ? "追击" : hunt?.alert && hunt.alert > 0 ? `警觉 · 感知×${this.world.perceptionMultiplier}` : d.hunter.state !== "patrol" ? this.world.hunterDecision : "平静";
+    const huntState = d.hidden ? "藏匿" : hunt?.freeze ? "冻结" : d.hunter.state === "chase" ? this.world.isPlayerChased ? "追击" : "追击队友" : hunt?.alert && hunt.alert > 0 ? `警觉 · 感知×${this.world.perceptionMultiplier}` : d.hunter.state !== "patrol" ? this.world.hunterDecision : "平静";
     this.$("#escape-hunt-state").textContent = interfered ? "被干扰" : huntState;
     this.$<HTMLMeterElement>("#escape-effort").value = effort; this.$("#escape-effort-value").textContent = String(Math.round(effort));
     for (const [id, source] of [["noise", perception.contributions.noise], ["glare", perception.contributions.glare], ["sight", perception.contributions.sight]] as const) {
@@ -540,7 +761,7 @@ export class EscapeGame {
     wardButton.setAttribute("aria-label", ward > 0 ? "净化保护中" : `使用净化晶，剩余${this.world.crystalCharges("ward")}枚，快捷键3`);
     freezeButton.classList.toggle("active", freeze > 0); revealButton.classList.toggle("active", reveal > 0);
     wardButton.classList.toggle("active", ward > 0);
-    this.$("#escape-night").textContent = `第${Math.min(3, d.captures + 1)}夜 · ${time(d.elapsed)}`;
+    this.$("#escape-night").textContent = this.coopMode ? `${self?.slot ?? ""}号 · ${time(d.elapsed)}` : `第${Math.min(3, d.captures + 1)}夜 · ${time(d.elapsed)}`;
     this.$(".escape-hunt").classList.toggle("interfered", interfered);
     this.$("#escape-exposure-label").textContent = interfered ? "被干扰" : "暴露值";
     if (interfered) {
@@ -566,7 +787,7 @@ export class EscapeGame {
     this.roomCueUntil = this.world.data.elapsed + 1.6;
   }
   destroy() {
-    if (this.disposed) return; this.save(); this.disposed = true; this.cinematic?.close(); this.controller.abort(); cancelAnimationFrame(this.raf); this.audio.setPlaying(false); this.audio.stopPreview();
+    if (this.disposed) return; this.save(); if (this.coop) void this.coop.leave().catch(() => {}); this.detachCoop(); this.disposed = true; this.cinematic?.close(); this.controller.abort(); cancelAnimationFrame(this.raf); this.audio.setPlaying(false); this.audio.stopPreview();
     if (this.renderer && this.art) returnPreparedEscape({ renderer: this.renderer, art: this.art, canvas: this.$("#escape-view") });
     this.renderer = undefined; this.abilityHud.destroy(); this.noteDialog.destroy();
   }

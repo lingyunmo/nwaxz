@@ -15,7 +15,7 @@ try {
   browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH,headless:true,args:['--disable-gpu','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--renderer-process-limit=1']});
   const context=await browser.newContext({viewport:{width:1280,height:720},serviceWorkers:'allow'}), page=await context.newPage();
   page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(base); await page.locator('#extreme').click();
+  await page.goto(base); await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click();
   await page.evaluate(()=>{Math.random=()=>.1;});
   await page.locator('#escape-new').click();
   const video=page.locator('.escape-cinematic video');
@@ -42,11 +42,11 @@ try {
   await page.locator('.escape-cinematic').waitFor({state:'detached',timeout:20000}); // natural ending
   await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   await page.keyboard.press('Escape'); await page.locator('#escape-exit').click();
-  await page.locator('#extreme').click(); await page.locator('#escape-continue').click();
+  await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click(); await page.locator('#escape-continue').click();
   await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   assert.equal(await page.locator('.escape-cinematic').count(),0,'continue must not replay opening');
   await page.keyboard.press('Escape'); await page.locator('#escape-exit').click();
-  await page.locator('#extreme').click(); await page.locator('#escape-new').click();
+  await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click(); await page.locator('#escape-new').click();
   await page.evaluate(()=>{Math.random=()=>.75;});
   await page.locator('#escape-confirm-restart').click();
   const secondOpening=page.locator('.escape-cinematic video');
@@ -65,7 +65,7 @@ try {
     for(let prior=0;prior<n;prior++){world.capture();world.nextNight();}
     Object.assign(world.data.hunter,{x:3.6,z:5.5,state:'chase'});
     await page.evaluate(({key,snapshot,rng})=>{localStorage.setItem(key,JSON.stringify(snapshot));Math.random=()=>rng;},{key:sessionKey,snapshot:world.snapshot(),rng:(n+.1)/3});
-    await page.locator('#extreme').click(); await page.locator('#escape-continue').click();
+    await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click(); await page.locator('#escape-continue').click();
     await page.locator('.escape-cinematic video').waitFor({timeout:30000});
     const src=await page.locator('video').getAttribute('src'); selected.push(src);
     assert.ok(src.endsWith(`caught-${n+1}-v1.mp4`));
@@ -93,7 +93,7 @@ try {
   const blocked=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   await blocked.addInitScript(()=>{const play=HTMLMediaElement.prototype.play;let first=true;HTMLMediaElement.prototype.play=function(){if(first){first=false;return Promise.reject(new DOMException('blocked','NotAllowedError'));}return play.call(this);};});
   const phone=await blocked.newPage(); phone.on('pageerror',e=>errors.push(e.message));
-  await phone.goto(base); await phone.locator('#extreme').tap(); await phone.locator('#escape-new').tap();
+  await phone.goto(base); await phone.locator('#extreme').tap();await phone.locator('#escape-menu-solo').tap(); await phone.locator('#escape-new').tap();
   await phone.getByText('点击播放',{exact:true}).waitFor();
   await phone.locator('#cinematic-play').tap(); await phone.waitForFunction(()=>document.querySelector('video')?.currentTime>.3);
   await phone.screenshot({path:path.join(output,'phone.png')});
@@ -108,7 +108,7 @@ try {
   await fallback.goto(base);
   await fallback.locator('#enter-now').waitFor({timeout:40000});
   await fallback.locator('#enter-now').click();
-  await fallback.locator('#extreme').click();await fallback.locator('#escape-new').click();
+  await fallback.locator('#extreme').click();await fallback.locator('#escape-menu-solo').click();await fallback.locator('#escape-new').click();
   await fallback.locator('#escape-panel[hidden]').waitFor({state:'attached',timeout:30000});
   assert.equal(await fallback.locator('.escape-cinematic').count(),0,'missing CG must fall back to playable scene');
   await missing.close();
@@ -124,7 +124,7 @@ try {
     assert.equal(range.status,206);assert.equal(range.length,256);assert.match(range.range,/^bytes 0-255\//);
   }
   await page.addInitScript(()=>{Math.random=()=>.75;});
-  await page.reload(); await page.locator('#extreme').click(); await page.locator('#escape-new').click();
+  await page.reload(); await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click(); await page.locator('#escape-new').click();
   await page.waitForFunction(()=>document.querySelector('.escape-cinematic video')?.currentTime>.3);
   assert.ok((await page.locator('.escape-cinematic video').getAttribute('src')).endsWith('escape-opening-2-v1.mp4'),'second opening plays while offline');
   assert.equal(await page.locator('.escape-cinematic').getAttribute('aria-label'),'开场影片');

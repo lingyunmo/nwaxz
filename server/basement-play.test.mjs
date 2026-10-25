@@ -5,7 +5,7 @@ import { floorAt } from '../src/escape/basement-map.ts';
 import { playEscapeRoute } from './escape-player.mjs';
 
 // Seed changes the active hunter, not the level geometry. This reference policy
-// proves the full objective chain at 202; other seeds exercise genuine failure.
+// proves the full objective chain at 202; other seeds exercise genuine outcomes.
 for (const seed of [202]) {
   test(`continuous v2 escape crosses the basement and returns, seed ${seed}`, { timeout: 180_000 }, () => {
     const { world, routeProof, log, phase, captures, time } = playEscapeRoute(new EscapeWorld(seed), true);
@@ -19,6 +19,8 @@ for (const seed of [202]) {
     assert.deepEqual(world.data.basement, { power: true, sluice: true });
     assert.ok(world.data.searched.includes('basement-storage-drawer'));
     assert.ok(world.data.notes.includes('basement-secret-note'));
+    assert.ok(world.data.hunt.collected.includes('crystal-ward-changing'), 'a ward was physically picked up along the route');
+    assert.ok(world.data.hunt.wardUsed > 0, 'the finite ward was used against a real cast during the route');
     assert.ok(routeProof.visitedBasement, 'player physically reached z >= 28');
     assert.ok(routeProof.returnedToGround, 'player physically returned above the stair threshold');
     assert.ok(routeProof.zTrail.some(z => z >= 24 && z < 28), 'player physically walked the stair slope');

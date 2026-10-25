@@ -3,32 +3,35 @@
   --ability-copper: #b78b5c;
   position: absolute;
   z-index: 4;
-  top: calc(max(16px, env(safe-area-inset-top)) + 98px);
-  left: 0;
-  right: 0;
-  margin-inline: auto;
-  width: min(84vw, 620px);
+  top: clamp(118px, 16vh, 190px);
+  left: max(24px, env(safe-area-inset-left));
+  right: auto;
+  width: clamp(164px, 19vw, 300px);
   color: var(--ability-ink);
-  font: 11px/1.3 ui-monospace, 'Microsoft YaHei', sans-serif;
+  font: 13px/1.3 ui-monospace, 'Microsoft YaHei', sans-serif;
   text-shadow: 0 1px 3px #000;
   pointer-events: none;
 }
 .escape-shell.menu-active .escape-ability-hud { visibility: hidden; }
 .escape-ability-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 46px;
-  padding: 4px 10px 4px 7px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 14px;
+  height: clamp(156px, 19vh, 210px);
+  box-sizing: border-box;
+  padding: 14px;
   border: 1px solid #a5825a65;
+  border-radius: 8px;
   background: linear-gradient(112deg, #090b0bdc, #211a14ed 50%, #090b0bdc);
   box-shadow: 0 4px 14px #0009, inset 0 0 16px #8d65401a;
 }
 .escape-ability-avatar {
   display: block;
-  flex: 0 0 38px;
-  width: 38px;
-  height: 38px;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  align-self: start;
   border: 1px solid #cfb48a;
   border-radius: 50%;
   background-color: #171715;
@@ -39,8 +42,9 @@
   filter: grayscale(1) contrast(1.1);
   box-shadow: 0 0 9px #000, 0 0 0 2px #201a15;
 }
-.escape-ability-readout { display: flex; flex: 1; min-width: 0; align-items: center; gap: 8px; }
-.escape-ability-item { display: grid; flex: 1 1 0; min-width: 0; grid-template-columns: auto minmax(38px,1fr); align-items: center; gap: 7px; color: #d7c9aa; white-space: nowrap; }
+.escape-ability-readout { display: grid; grid-template-rows: repeat(2,minmax(0,1fr)); min-width: 0; gap: 16px; }
+.escape-ability-item { display: grid; min-width: 0; grid-template-columns: minmax(0,1fr); grid-template-rows: auto 9px; align-content: center; gap: 9px; color: #e7d9bd; white-space: nowrap; }
+.escape-ability-status .escape-ability-charge { height: 9px; }
 .escape-ability-charge,.escape-ability-warning-meter { display: block; width: 100%; height: 7px; overflow: hidden; appearance: none; border: 1px solid #94765177; border-radius: 1px; background: #0b0d0b; }
 .escape-ability-charge::-webkit-progress-bar,.escape-ability-warning-meter::-webkit-progress-bar { background: #0b0d0b; }
 .escape-ability-charge::-webkit-progress-value,.escape-ability-warning-meter::-webkit-progress-value { background: linear-gradient(90deg,#826346,#d3b47b); }
@@ -75,7 +79,7 @@
   pointer-events: none;
 }
 .escape-ability-banner.is-warning::before { opacity: 1; }
-.escape-ability-banner .escape-ability-avatar { flex-basis: 54px; width: 54px; height: 54px; }
+.escape-ability-banner .escape-ability-avatar { flex-basis: 54px; width: 54px; height: 54px; align-self:center; }
 .escape-ability-banner-copy { position: relative; min-width: 0; flex: 1; display: grid; gap: 7px; }
 .escape-ability-banner-copy strong { color: #eee3ca; font: 600 clamp(13px, 3.4vw, 18px)/1.4 Georgia, 'Microsoft YaHei', serif; letter-spacing: 1px; }
 .escape-ability-warning-meter { max-width: 240px; height: 5px; }
@@ -87,31 +91,51 @@
 .escape-ability-hud.reduced-motion .escape-ability-banner::before { animation: none; }
 .escape-ability-hud.reduced-motion .escape-ability-banner { scroll-behavior: auto; }
 
-/* The exposure panel occupies the top center; put the compact readout below it. */
-.escape-shell:has(.escape-hunt.details-open) .escape-ability-hud { top: calc(max(16px, env(safe-area-inset-top)) + 290px); }
+/* Keep the permanent card in the free left column, away from the Tab panel. */
+@media (pointer: fine) and (max-width: 800px) {
+  .escape-ability-hud { left:8px; width:clamp(164px,calc(27vw - 20px),192px); font-size:12px; }
+  .escape-ability-status { height:132px; padding:10px; gap:8px; grid-template-columns:32px minmax(0,1fr); }
+  .escape-ability-status>.escape-ability-avatar { width:32px; height:32px; }
+  .escape-ability-readout { gap:12px; }
+}
+@media (pointer: fine) and (max-width: 600px) {
+  .escape-ability-status { grid-template-columns:minmax(0,1fr); height:112px; padding:8px; }
+  .escape-ability-status>.escape-ability-avatar { display:none; }
+}
 @media (pointer: coarse) {
-  .escape-ability-hud { top: calc(max(120px, env(safe-area-inset-top) + 120px) + 84px); width: min(92vw, 620px); }
-  .escape-ability-status { min-height: 42px; padding: 3px 8px 3px 6px; gap: 7px; }
+  .escape-ability-hud { top:204px; left:12px; width:min(44vw,192px); font-size:12px; }
+  .escape-ability-status { height:128px; padding:10px; gap:9px; grid-template-columns:34px minmax(0,1fr); }
   .escape-ability-avatar { flex-basis: 34px; width: 34px; height: 34px; }
-  .escape-ability-readout { gap: 7px; font-size: 10px; }
-  .escape-ability-item { gap: 5px; }
-  .escape-shell:has(.escape-hunt.details-open) .escape-ability-hud { top: calc(max(120px, env(safe-area-inset-top) + 120px) + 260px); }
+  .escape-ability-readout { gap:12px; }
+  .escape-ability-item { gap:6px; grid-template-rows:auto 7px; }
+  .escape-ability-status .escape-ability-charge { height:7px; }
   .escape-ability-banner { top: 43%; min-height: 68px; padding: 8px 14px; gap: 11px; }
   .escape-ability-banner .escape-ability-avatar { flex-basis: 48px; width: 48px; height: 48px; }
 }
 @media (max-width: 360px) {
-  .escape-ability-hud { width: calc(100vw - 24px); }
-  .escape-ability-status { gap: 6px; padding-right: 6px; }
-  .escape-ability-readout { gap: 2px 5px; font-size: 9px; }
-  .escape-ability-item { grid-template-columns:auto minmax(30px,1fr); gap:4px; }
   .escape-ability-banner { width: calc(100vw - 24px); padding-inline: 10px; }
 }
+@media (pointer:coarse) and (max-height:650px) and (orientation:portrait) {
+  .escape-ability-hud { top:184px; left:8px; width:140px; font-size:11px; }
+  .escape-ability-status { height:92px; padding:9px; grid-template-columns:30px minmax(0,1fr); gap:8px; }
+  .escape-ability-status>.escape-ability-avatar { width:30px; height:30px; }
+  .escape-ability-readout { gap:8px; }
+  .escape-ability-item { gap:4px; }
+}
+@media (pointer:coarse) and (orientation:portrait) {
+  .escape-shell:has(.escape-hunt.details-open) .escape-ability-hud { top:14px; left:156px; width:clamp(54px,calc(100vw - 266px),120px); font-size:10px; }
+  .escape-shell:has(.escape-hunt.details-open) .escape-ability-status { height:62px; padding:6px; gap:0; grid-template-columns:minmax(0,1fr); }
+  .escape-shell:has(.escape-hunt.details-open) .escape-ability-status>.escape-ability-avatar { display:none; }
+  .escape-shell:has(.escape-hunt.details-open) .escape-ability-readout { gap:5px; }
+  .escape-shell:has(.escape-hunt.details-open) .escape-ability-item { grid-template-rows:auto 5px; gap:2px; }
+  .escape-shell:has(.escape-hunt.details-open) .escape-ability-charge { height:5px; }
+}
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 540px) {
-  .escape-ability-hud { top: calc(max(8px, env(safe-area-inset-top)) + 66px); width: min(51vw, 440px); }
-  .escape-ability-status { min-height: 36px; }
+  .escape-ability-hud { top:90px; left:14px; width:158px; font-size:11px; }
+  .escape-ability-status { height:100px; padding:9px; grid-template-columns:30px minmax(0,1fr); gap:8px; }
   .escape-ability-avatar { flex-basis: 30px; width: 30px; height: 30px; }
-  .escape-ability-item { gap:5px; }
-  .escape-shell:has(.escape-hunt.details-open) .escape-ability-hud { top: calc(max(8px, env(safe-area-inset-top)) + 160px); }
+  .escape-ability-readout { gap:8px; }
+  .escape-ability-item { gap:4px; }
   .escape-ability-banner { top: 43%; }
 }
 @media (prefers-reduced-motion: reduce) { .escape-ability-banner::before { animation: none; } }

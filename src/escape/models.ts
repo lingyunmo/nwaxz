@@ -22,7 +22,7 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, texture
   const powerMaterials = new Map<string, Material & { emissiveColor: Color3 }>();
   const crystals = new Map<string, ReturnType<typeof MeshBuilder.CreatePolyhedron>>();
   const crystalMaterials = new Map<string, ReturnType<typeof colorMaterial>>();
-  for (const [kind, color] of [["freeze", "#8be5ff"], ["reveal", "#e49aff"]] as const) crystalMaterials.set(kind, colorMaterial(scene, `crystal-${kind}`, color, true));
+  for (const [kind, color] of [["freeze", "#8be5ff"], ["reveal", "#e49aff"], ["ward", "#a5e0a2"]] as const) crystalMaterials.set(kind, colorMaterial(scene, `crystal-${kind}`, color, true));
   for (const crystal of CRYSTALS) {
     const mesh = MeshBuilder.CreatePolyhedron(`crystal:${crystal.id}`, { type: 1, size: .36 }, scene);
     mesh.position.set(crystal.x * CELL, floorYAt(crystal) + .66, crystal.z * CELL); mesh.material = crystalMaterials.get(crystal.kind)!; mesh.isPickable = false;

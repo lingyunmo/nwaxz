@@ -286,7 +286,9 @@ try {
   await enter(mobilePage, mobileFixture);
   for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 844, height: 390 }]) {
     await mobilePage.setViewportSize(viewport);
-    await mobilePage.waitForTimeout(100);
+    await mobilePage.waitForFunction(({width,height}) => innerWidth === width && innerHeight === height
+      && matchMedia('(orientation:landscape)').matches === (width > height), viewport);
+    await mobilePage.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const bounds = await interferenceBounds(mobilePage);
     assert.equal(bounds.pointerCoarse, true, `coarse media query at ${viewport.width}x${viewport.height}`);
     assert.equal((await uiValues(mobilePage)).label, '被干扰');

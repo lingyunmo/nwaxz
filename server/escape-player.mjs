@@ -38,7 +38,8 @@ export function playEscapeRoute(world, expanded = true, trace = false) {
 
   const defend = () => {
     const d = world.data, hunterDistance = distance(d.player, d.hunter);
-    if (hunterDistance < 2.5 && ['chase', 'investigate', 'search'].includes(d.hunter.state)
+    if ((d.hunt.ward ?? 0) <= 0 && world.crystalCharges('ward') > 0 && d.interference.stage === 'corrupt') world.useCrystal('ward');
+    if (hunterDistance < 2.5
       && d.hunt.freeze <= 0 && world.crystalCharges('freeze') > 0) world.useCrystal('freeze');
     return d.hunter.state === 'chase' || d.hunt.freeze > 0 || hunterDistance < 4;
   };
@@ -94,6 +95,7 @@ export function playEscapeRoute(world, expanded = true, trace = false) {
   const waitForPatrol = (maxTicks = 2400) => {
     for (let n = 0; n < maxTicks && world.data.phase === 'playing'; n++) {
       defend();
+      if (world.data.hunt.freeze > 0) return true; // Spend the respite moving, not waiting beside the hunter.
       advance();
       if (world.data.hunter.state === 'patrol' && distance(world.data.player, world.data.hunter) > 7) return true;
     }
@@ -105,6 +107,7 @@ export function playEscapeRoute(world, expanded = true, trace = false) {
       const path = world.route(world.data.player, target);
       if (world.data.hunter.state === 'patrol' && clearOfHunter(path) && distance(world.data.player, world.data.hunter) > 5) return true;
       defend();
+      if (world.data.hunt.freeze > 0) return true;
       advance();
     }
     return clearWholeRoute(world.route(world.data.player, target));
@@ -134,9 +137,11 @@ export function playEscapeRoute(world, expanded = true, trace = false) {
       const next = path.find(point => distance(world.data.player, point) > .09) ?? target;
       face(world, next);
       const sprint = fleeing && world.data.player.stamina > 12 && !world.data.player.winded;
-      const crouch = !sprint;
+      // Walk in clear corridors; crouching for the whole route gives the patrol
+      // time to repeatedly close every doorway. Sprint remains a finite escape.
+      const crouch = !sprint && distance(world.data.player, world.data.hunter) < 6;
       if (world.data.player.crouched !== crouch) world.toggleCrouch();
-      const speed = sprint ? 3 : .95;
+      const speed = sprint ? 3 : crouch ? .95 : 1.7;
       advance({ forward: Math.min(1, distance(world.data.player, next) / (speed * step)), sprint });
     }
     return distance(world.data.player, target) <= .1;

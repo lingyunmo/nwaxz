@@ -1,5 +1,7 @@
 # 极限恐怖：下水道逃生
 
+0.20.0增加八方向角色：脸、侧身或背影反映奶蛙的实际朝向，玩家原地转头不会让它跟着转身；被冻结后绕到背后仍是背影。站立、行走和奔跑使用对应方向，原正面和被抓后的捧腹大笑保留。追击视觉同样受前方视野限制，失去视线仍会根据听见的声音、手电光源和最后线索追查。下列旧版本段落保留当时的实现记录。[素材与方向规则](art/escape-directions-v1.md) · [发布状态](https://github.com/lingyunmo/nwaxz/issues/60)。
+
 0.11.0 发布了独立的原创第一人称逃生篇，属于同一 H5 游戏的另一种玩法。该发布版采用 Canvas 2D 光线投射；原洗澡玩法18关（普通12关、恐怖洗澡6关）与 IndexedDB v1 存档保留。0.11.0 精确发布证据见[GitHub记录](https://github.com/lingyunmo/nwaxz/pull/34#issuecomment-6343588123)，历史验收摘要见 [VERIFICATION.md](VERIFICATION.md)。玩法借鉴潜行恐怖游戏常见机制，不复制其他商业游戏的地图、角色、音频或美术。
 
 0.12.0 已发布，逃生篇升级为 Babylon.js 9.32 / WebGL 真3D：镜头可上下看，衣柜门可动且藏身位置位于真实柜内几何中，奶蛙有 idle、walk、run、laugh 四段骨骼动画；被抓时保留清楚可见的捧腹大笑造型。[发布证据与精确 main SHA `f6f4dee296eb280aa387dbfc440b33024b2287a0`](https://github.com/lingyunmo/nwaxz/pull/38#issuecomment-6349588315)。家具 GLB 为 `public/assets/models/escape-props-v1.glb`；`public/assets/models/extreme-milk-frog-v1.glb` 是保留的源模型，0.13.0 不再由运行时加载或预缓存。生成脚本为 `ops/build_escape_props.py`、`ops/build_escape_character.py`。

@@ -14,11 +14,17 @@
 | 出口细节 | `public/assets/props/escape-details-v1.webp` | 768 × 768，2×2 透明图集 |
 | 恐怖奶蛙动作图集 | `public/assets/character/haunted-frog-v1.webp` | 复用站立与经典捧腹大笑原画 |
 | 恐怖奶蛙动作图集 | `public/assets/character/haunted-frog-actions-v2.webp` | 4×2，八个凝视、搜查、扑抓与跑步动作 |
+| 恐怖奶蛙八方向站立 | `public/assets/character/haunted-frog-directions-idle-v1.webp` | 1536×768，4×2透明图集 |
+| 恐怖奶蛙八方向行走 | `public/assets/character/haunted-frog-directions-walk-v1.webp` | 1536×1536，4×4，每向两帧交替步态 |
 | 像素地图图集 | `public/assets/ui/escape-map-atlas-v1.webp` | 4×2，石墙、地板、木材、纸张、水、迷雾、铜与危险纹理 |
 | 逃生家具与设施模型 | `public/assets/models/escape-props-v1.glb` | GLB，六组根节点：衣柜、抽屉、配电箱、阀门、铁网、管道 |
 | 恐怖奶蛙模型源资产 | `public/assets/models/extreme-milk-frog-v1.glb` | GLB，保留的旧18关节模型；0.13.0 运行时及预缓存不使用 |
 
 两个 GLB 源资产由 `ops/build_escape_props.py` 和 `ops/build_escape_character.py` 生成；已有绘制材质图集 `escape-materials-v1.webp` 的右上旧木门象限裁切后用于家具模型木材 UV，并作为 PNG 嵌入道具 GLB。当前角色表现使用恐怖奶蛙原画图集；`milk-frog-turnaround-v1.png`、`normal-milk-frog-turnaround-v1.png` 是普通模式 Cute 角色建模草稿，不作为恐怖版参考。0.13.0 运行时保留家具 GLB，但不加载或预缓存角色 GLB。候选浏览器脚本为 `ops/escape-browser.mjs`，需要独立安装 Playwright 或配置 `PLAYWRIGHT_MODULE`，可选配置 `CHROMIUM_PATH`，并始终以 headless 软件渲染和独立 profile 运行。地图图集用于探索地图的材质采样。
+
+## 0.20.0 方向原画
+
+角色平面仍只绕Y轴面向镜头，但图像内容改按奶蛙实际AI朝向与玩家位置选择八个方向，因此站在背后会看到黄色背影；不是把正面原图左右翻转。正面站立、眨眼、扑抓和捧腹大笑继续取原素材。新图以透明边界收紧UV、保持脚底与比例，冻结可从不同方向观察同一姿态。内置imagegen的完整提示、制作流程及限制见 [八方向图集](art/escape-directions-v1.md)，发布状态见 [Issue #60](https://github.com/lingyunmo/nwaxz/issues/60)。以上0.13.0描述为历史实现。
 
 ## 纹理提示
 

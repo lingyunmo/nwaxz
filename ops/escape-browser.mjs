@@ -114,7 +114,7 @@ try {
   await phone.locator('#escape-exit').tap();
   await phone.evaluate(async()=>{await navigator.serviceWorker.ready;});
   await phone.waitForFunction(()=>!!navigator.serviceWorker.controller);
-  const cached=await phone.evaluate(async()=>{let results=[]; for(const n of ['models/escape-props-v1.glb','character/haunted-frog-v1.webp','character/haunted-frog-actions-v2.webp','ui/escape-map-atlas-v1.webp'])results.push(!!await caches.match('/assets/'+n,{ignoreSearch:true}));return results;});
+  const cached=await phone.evaluate(async()=>{let results=[]; for(const n of ['models/escape-props-v1.glb','character/haunted-frog-v1.webp','character/haunted-frog-actions-v2.webp','character/haunted-frog-directions-idle-v1.webp','character/haunted-frog-directions-walk-v1.webp','ui/escape-map-atlas-v1.webp'])results.push(!!await caches.match('/assets/'+n,{ignoreSearch:true}));return results;});
   if(!cached.every(Boolean)) throw new Error('3D models absent from offline cache');
   networkOffline=true; await mobile.setOffline(true); await phone.reload();
   await phone.locator('#extreme').tap(); await phone.locator('#escape-continue').tap();

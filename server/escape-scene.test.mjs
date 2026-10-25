@@ -71,7 +71,7 @@ test("solid cabinets coexist with upright original-art frog and the canonical be
   try {
     const bytes = await fs.readFile(new URL("../public/assets/models/escape-props-v1.glb", import.meta.url));
     props = await LoadAssetContainerAsync(bytes, view.scene, { pluginExtension: ".glb", pluginOptions: { gltf: { skipMaterials: true, animationStartMode: 0 } } });
-    models = installEscapeModels(view.scene, props, { original: new Texture(null, view.scene), actions: new Texture(null, view.scene) });
+    models = installEscapeModels(view.scene, props, { original: new Texture(null, view.scene), actions: new Texture(null, view.scene), directionIdle: new Texture(null, view.scene), directionWalk: new Texture(null, view.scene) });
     assert.equal(models.cabinets.size, 7);
     const w = new EscapeWorld(); models.animate(w, .3);
     assert.equal(models.actorRoot.position.x, w.data.hunter.x * CELL);

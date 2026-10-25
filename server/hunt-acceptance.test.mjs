@@ -51,7 +51,7 @@ test('freeze prevents a touching hunter from capturing for ten seconds and then 
 
 test('frozen original-art geometry holds its pose, while capture restores the full laugh',()=>{
   const engine=new NullEngine(),view=createEscapeScene(engine);
-  const actor=new PaintedFrog(view.scene,{original:new Texture(null,view.scene),actions:new Texture(null,view.scene)});
+  const actor=new PaintedFrog(view.scene,{original:new Texture(null,view.scene),actions:new Texture(null,view.scene),directionIdle:new Texture(null,view.scene),directionWalk:new Texture(null,view.scene)});
   try{
     const w=new EscapeWorld(42);actor.animate(w,.1,true);freeze(w);actor.animate(w,.1,true);
     const poses=actor.meshes.map(m=>({vertices:m.getVerticesData('position').slice(),y:m.position.y})),pose={...actor.pose};

@@ -1,0 +1,129 @@
+.escape-main-menu { display: grid; gap: 10px; margin: 24px 0 8px; }
+.escape-shell .escape-hud { z-index: 12; }
+.escape-main-menu button { width: 100%; }
+.escape-avatar-picker { display: flex; justify-content: center; gap: 10px; margin: 8px auto 14px; }
+.escape-avatar { width: 54px; height: 54px; padding: 4px; border: 2px solid transparent; border-radius: 50%; background: #182122; cursor: pointer; }
+.escape-avatar[aria-pressed="true"] { border-color: #d8ee74; box-shadow: 0 0 0 2px #182122, 0 0 0 4px #d8ee74; }
+.escape-avatar-art { display: block; width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%; background-image: url("/assets/character/escape-survivor-portraits.webp"); background-size: 200% 200%; background-repeat: no-repeat; }
+.escape-avatar-art[data-avatar="0"] { background-position: 0% 0%; }
+.escape-avatar-art[data-avatar="1"] { background-position: 100% 0%; }
+.escape-avatar-art[data-avatar="2"] { background-position: 0% 100%; }
+.escape-avatar-art[data-avatar="3"] { background-position: 100% 100%; }
+.escape-coop-field { display: grid; gap: 6px; margin: 12px 0; text-align: left; color: #d7ddd5; }
+.escape-coop-field input { box-sizing: border-box; width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid #586661; border-radius: 8px; color: #f3f4ee; background: #101918; font: inherit; }
+.escape-coop-field input:focus-visible { outline: 2px solid #d8ee74; outline-offset: 2px; }
+.escape-coop-error { min-height: 1.2em; color: #f2ba9d; }
+.escape-coop-lobby { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 18px 0; }
+.escape-coop-slot { display: flex; min-width: 0; min-height: 108px; align-items: center; justify-content: center; flex-direction: column; gap: 5px; border: 1px solid #53625d; border-radius: 10px; background: #192221; text-align: center; }
+.escape-coop-slot.empty { border-style: dashed; color: #8e9c94; }
+.escape-coop-slot span:not(.escape-avatar-art) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.escape-coop-slot small { color: #aab9ad; font-size: 11px; }
+.escape-coop-status-line, .escape-coop-note { color: #d8ee74; text-align: center; }
+.escape-coop-team { position: absolute; z-index: 5; top: 210px; right: 14px; display: grid; gap: 7px; width: min(182px, 22vw); pointer-events: none; }
+.escape-coop-team-crystals { padding: 5px 9px; border: 1px solid #ffffff24; border-radius: 999px; color: #d8ee74; background: #101817c9; text-align: center; font-size: 11px; }
+.escape-coop-team[hidden], .escape-coop-status[hidden] { display: none; }
+.escape-coop-teammate { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: 8px; align-items: center; padding: 7px 9px; border: 1px solid #ffffff24; border-radius: 9px; color: #f3f1e8; background: #101817c9; backdrop-filter: blur(8px); }
+.escape-coop-teammate .escape-avatar-art { grid-row: span 2; width: 30px; height: 30px; }
+.escape-coop-teammate .escape-coop-player-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.escape-coop-teammate small { color: #c5d1c7; font-size: 10px; }
+.escape-coop-teammate.eliminated, .escape-coop-teammate.escaped, .escape-coop-teammate.left, .escape-coop-teammate.empty { opacity: .62; }
+.escape-coop-teammate.caught { border-color: #da9274; }
+.escape-coop-teammate.self { border-color: #d8ee74; }
+.escape-coop-teammate.following { box-shadow: 0 0 0 1px #8bc9e6; }
+.escape-note-paper .escape-coop-note { color: #667548; }
+.escape-coop-status { position: absolute; z-index: 6; right: 14px; bottom: 92px; padding: 6px 10px; border: 1px solid #ffffff24; border-radius: 999px; color: #e5eadc; background: #101817cc; font-size: 12px; pointer-events: none; }
+.escape-coop-status[data-state="reconnecting"], .escape-coop-status[data-state="offline"] { border-color: #e2a17d; color: #ffd1b6; }
+.escape-coop-status[data-state="connected"] { border-color: #a6c778; }
+.escape-coop-teammate .escape-coop-status { position:static; padding:0; border:0; border-radius:0; max-width:none; background:none; font-size:10px; line-height:1.3; color:#c5d1c7; }
+.escape-coop-teammate .escape-coop-status[data-state="unstable"],.escape-coop-teammate .escape-coop-status[data-state="reconnecting"] { color:#ffd1b6; }
+@media (max-width: 700px) {
+  .escape-coop-team { top: 210px; right: 8px; width: min(138px, 37vw); gap: 4px; }
+  .escape-coop-teammate { grid-template-columns: 27px minmax(0, 1fr); column-gap: 6px; padding: 5px 6px; }
+  .escape-coop-teammate .escape-avatar-art { width: 26px; height: 26px; }
+  .escape-coop-status { right: 8px; bottom: 74px; max-width: 45vw; font-size: 10px; }
+  .escape-coop-lobby { gap: 5px; }
+  .escape-coop-slot { min-height: 96px; font-size: 12px; }
+}
+@media (max-height: 600px) and (pointer: fine) {
+  .escape-coop-team { top: 156px; }
+  .escape-coop-team { gap: 3px; width: min(160px, 20vw); }
+  .escape-coop-teammate { grid-template-columns: 24px minmax(0, 1fr); column-gap: 5px; padding: 4px 6px; }
+  .escape-coop-teammate .escape-avatar-art { width: 22px; height: 22px; }
+  .escape-coop-teammate .escape-coop-player-name { font-size: 11px; }
+  .escape-coop-teammate small { font-size: 9px; }
+  .escape-shell.coop-active .escape-coop-teammate .escape-coop-status { font-size:9px; }
+  .escape-coop-team-crystals { padding: 4px 7px; font-size: 10px; }
+}
+@media (pointer: coarse) and (orientation: portrait) {
+  .escape-shell.coop-active .escape-coop-team {
+    top: 118px;
+    right: 8px;
+    left: 8px;
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    width: auto;
+  }
+  .escape-coop-team-crystals {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    padding: 4px 6px;
+    font-size: 10px;
+    writing-mode: vertical-rl;
+  }
+  .escape-coop-teammate {
+    flex: 1 1 0;
+    grid-template-columns: 22px minmax(0, 1fr);
+    column-gap: 4px;
+    min-height: 48px;
+    padding: 4px;
+  }
+  .escape-coop-teammate .escape-avatar-art { width: 21px; height: 21px; }
+  .escape-coop-teammate .escape-coop-player-name { font-size: 10px; }
+  .escape-coop-teammate small { font-size: 9px; }
+  .escape-shell.coop-active .escape-hunt { top: 180px; }
+  .escape-shell.coop-active .escape-ability-hud { top: 260px; }
+}
+@media (pointer: coarse) and (max-height: 650px) and (orientation: portrait) {
+  .escape-shell.coop-active .escape-hunt { top: 180px; }
+  .escape-shell.coop-active .escape-ability-hud { top: 260px; }
+}
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 540px) {
+  .escape-shell.coop-active .escape-coop-team {
+    top: 118px;
+    right: 8px;
+    left: auto;
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    width: calc(50vw - 16px);
+  }
+  .escape-shell.coop-active .escape-coop-team-crystals { flex: 0 0 auto; align-self: center; padding: 4px 6px; font-size: 10px; }
+  .escape-shell.coop-active .escape-coop-teammate { flex: 1 1 0; grid-template-columns: 24px minmax(0, 1fr); column-gap: 4px; min-height: 48px; padding: 4px; }
+  .escape-shell.coop-active .escape-coop-teammate .escape-avatar-art { width: 22px; height: 22px; }
+  .escape-shell.coop-active .escape-coop-teammate .escape-coop-player-name { font-size: 10px; }
+  .escape-shell.coop-active .escape-coop-teammate small { font-size: 9px; }
+  .escape-shell.coop-active .escape-hunt { top: 8px; left: 8px; right: auto; width: calc(50vw - 20px); max-width: none; transform: none; }
+  .escape-shell.coop-active .escape-ability-hud { top: 8px; left: calc(50vw + 10px); width: min(158px, calc(50vw - 178px)); }
+  .escape-shell.coop-active .escape-hud { top:8px; left:auto; right:114px; bottom:auto; width:43px; padding:0; }
+  .escape-shell.coop-active .escape-hud>.escape-location { display:none; }
+  .escape-shell.coop-active .escape-inventory { top: 174px; left: auto; right: 8px; bottom: auto; }
+}
+/* The two unused cells beside the third crystal are the thumb's interaction slot. */
+@media (pointer:coarse) {
+ .escape-shell.coop-active .escape-interact,.escape-shell.coop-active .escape-search { position:fixed; top:auto; left:auto; right:22px; bottom:max(28px,env(safe-area-inset-bottom)); transform:none; box-sizing:border-box; width:100px; height:46px; min-height:0; margin:0; padding:6px; font-size:11px; }
+ .escape-shell.coop-active .escape-interact { gap:4px; }
+ .escape-shell.coop-active .escape-interact svg { width:18px; height:18px; flex-shrink:0; }
+ .escape-shell.coop-active .escape-interact span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+ .escape-shell.coop-active .escape-search progress { height:6px; }
+}
+@media (pointer:coarse) and (max-height:650px) and (orientation:portrait) {
+ .escape-shell.coop-active .escape-interact,.escape-shell.coop-active .escape-search { width:100px; height:46px; }
+}
+@media (pointer:coarse) and (max-width:360px) {
+ .escape-shell.coop-active .escape-interact,.escape-shell.coop-active .escape-search { width:94px; height:44px; }
+}
+@media (pointer:coarse) and (orientation:landscape) and (max-height:540px) {
+ .escape-shell.coop-active .escape-interact,.escape-shell.coop-active .escape-search { width:100px; height:46px; bottom:18px; }
+}

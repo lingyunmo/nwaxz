@@ -61,7 +61,7 @@ async function enter(p, snapshot = fixture()) {
     localStorage.setItem('nwaxz-escape-sound-v1', JSON.stringify({ music: false, sound: false }));
     localStorage.setItem('nwaxz-escape-hud-v1', 'compact');
   }, { key: SESSION, value: save });
-  await p.locator('#extreme').click();
+  await p.locator('#extreme').click();await p.locator('#escape-menu-solo').click();
   await p.locator('#escape-continue').waitFor({ state: 'visible', timeout: 30_000 });
   await p.locator('#escape-continue').click();
   await p.locator('#escape-panel').waitFor({ state: 'hidden', timeout: 300_000 });
@@ -240,7 +240,7 @@ try {
     await context.setOffline(true);
     await page.reload();
     await ready(page);
-    await page.locator('#extreme').click();
+    await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click();
     await page.locator('#escape-continue').waitFor({ state: 'visible' });
     await page.locator('#escape-continue').click();
     await page.locator('#escape-panel').waitFor({ state: 'hidden', timeout: 300_000 });

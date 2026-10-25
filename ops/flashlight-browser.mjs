@@ -20,7 +20,7 @@ try {
     const world=new EscapeWorld();Object.assign(world.data.player,p);
     Object.assign(world.data.hunter,p.z<12?{x:20.5,z:20.5}:{x:3.5,z:2.5});
     await page.evaluate(s=>{localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(s));localStorage.setItem('nwaxz-escape-sound-v1',JSON.stringify({music:false,sound:false}));},world.snapshot());
-    await page.locator('#extreme').click();await page.locator('#escape-continue').click();
+    await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click();await page.locator('#escape-continue').click();
     await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   };
   const frames=()=>page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));

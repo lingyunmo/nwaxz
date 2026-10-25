@@ -1,4 +1,5 @@
 export type AbilityHUDView = {
+  subjectSlot?: number;
   enabled: boolean;
   floor: 0 | -1;
   stage: 'rest' | 'cooldown' | 'attempt' | 'warning';
@@ -97,7 +98,7 @@ export class AbilityHud {
     this.warningMeter.hidden = !warning;
     if (notice) {
       this.banner.style.setProperty('--ability-sweep', `${-45 + 155 * (1 - notice.remaining / notice.duration)}%`);
-      this.bannerTitle.textContent = this.noticeText(notice.kind);
+      this.bannerTitle.textContent = notice.kind === 'exposed' && view.subjectSlot ? `${view.subjectSlot}号位置暴露` : this.noticeText(notice.kind);
       this.warningMeter.value = warning ? Math.max(0, Math.min(3, 3 - notice.remaining)) : 0;
     }
   }

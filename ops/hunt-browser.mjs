@@ -50,7 +50,7 @@ try{
  const enter=async(w,sound=false)=>{
   const save=w.snapshot();EscapeWorld.restore(save);
   await page.evaluate(({save,sound})=>{localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(save));localStorage.setItem('nwaxz-escape-sound-v1',JSON.stringify({music:false,sound}));},{save,sound});
-  await page.locator('#extreme').tap();await page.locator('#escape-continue').tap();await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
+  await page.locator('#extreme').tap();await page.locator('#escape-menu-solo').tap();await page.locator('#escape-continue').tap();await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
  };
  const pause=async()=>{await page.locator('#escape-pause').tap();const s=JSON.parse(await page.evaluate(()=>localStorage.getItem('nwaxz-escape-session-v1')));EscapeWorld.restore(s);return s;};
  const exit=async()=>{await page.locator('#escape-exit').tap();await page.locator('#extreme').waitFor();};
@@ -116,19 +116,19 @@ print(json.dumps({'revealMean':sum(ImageStat.Stat(d).mean)/3,'expiredMean':sum(I
  }
  await page.setViewportSize({width:390,height:844});const saved=await pause();
  const download=page.waitForEvent('download');await page.locator('#escape-backup').tap();const file=await download,backupPath=path.join(output,'hunt-backup.json');await file.saveAs(backupPath);await exit();
- await page.locator('#extreme').tap();await page.locator('#escape-intro-saves').tap();await page.locator('#escape-import').setInputFiles(backupPath);
+ await page.locator('#extreme').tap();await page.locator('#escape-menu-solo').tap();await page.locator('#escape-intro-saves').tap();await page.locator('#escape-import').setInputFiles(backupPath);
  await page.locator('#escape-continue').waitFor();const imported=JSON.parse(await page.evaluate(()=>localStorage.getItem('nwaxz-escape-session-v1')));assert.deepEqual(imported,saved);
  await page.locator('#escape-intro-exit').tap();
  let desktopLayout;
  if(!process.env.HUNT_QA_SKIP_DESKTOP){
   const pcContext=await browser.newContext({viewport:{width:900,height:500}}),pc=await pcContext.newPage();pc.on('pageerror',e=>errors.push(e.message));await pc.goto(base);await ready(pc);
   await pc.evaluate(save=>{localStorage.setItem('nwaxz-escape-session-v1',JSON.stringify(save));localStorage.setItem('nwaxz-escape-sound-v1','{"music":false,"sound":false}');},saved);
-  await pc.locator('#extreme').click();await pc.locator('#escape-continue').click();await pc.locator('#escape-panel[hidden]').waitFor({state:'attached'});
+  await pc.locator('#extreme').click();await pc.locator('#escape-menu-solo').click();await pc.locator('#escape-continue').click();await pc.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   desktopLayout=await pc.evaluate(()=>['.escape-hunt','.escape-crystals','#escape-inventory'].map(id=>{const r=document.querySelector(id).getBoundingClientRect();return{id,x:r.x,y:r.y,width:r.width,height:r.height};}));
   for(const r of desktopLayout)assert.ok(r.x>=0&&r.y>=0&&r.x+r.width<=900&&r.y+r.height<=500,JSON.stringify(r));
   await pc.screenshot({path:path.join(output,'desktop-900x500.png')});await pc.keyboard.press('Escape');await pcContext.close();await page.bringToFront();
  }
- await context.setOffline(true);await page.reload();await page.locator('#extreme').waitFor();await page.locator('#extreme').tap();await page.locator('#escape-continue').tap();await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
+ await context.setOffline(true);await page.reload();await page.locator('#extreme').waitFor();await page.locator('#extreme').tap();await page.locator('#escape-menu-solo').tap();await page.locator('#escape-continue').tap();await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
  await page.locator('#escape-reveal').tap();await page.locator('#escape-reveal.active').waitFor();await pause();
  assert.deepEqual(errors,[]);console.log(JSON.stringify({base,startups,pickup:true,freezePauseAndThaw:true,visibility,bearings:true,breath,sound,rest:true,glare:true,layouts,desktopLayout,backup:true,offlineCrystal:true,errors,output}));
 }catch(error){if(page)try{await page.screenshot({path:path.join(output,'failure.png')});await fs.writeFile(path.join(output,'failure.txt'),await page.locator('body').innerText());}catch{}throw error;}

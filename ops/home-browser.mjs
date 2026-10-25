@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createApp } from '../server/app.mjs';
 import { levels } from '../src/game/levels.ts';
 import { modeIndices } from '../src/game/modes.ts';
+import { SAVE_GENERATION } from '../src/save-generation.ts';
 // Optional integration QA, isolated from user tabs and data.
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
 const output = path.resolve(process.env.HOME_QA_DIR ?? '.local/home-qa');
@@ -46,7 +47,7 @@ try {
   const fixture={version:1,levels:{}};
   for(const i of [...modeIndices('normal').slice(0,3),modeIndices('horror')[0]])fixture.levels[levels[i].id]={completed:true,collected:7};
   fixture.levels[levels[0].id].bestScore=3474;fixture.levels[levels[0].id].bestTimeMs=2662;
-  await page.locator('#import-file').setInputFiles({name:'legacy-v1.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(fixture))});
+  await page.locator('#import-file').setInputFiles({name:'current-progress.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({generation:SAVE_GENERATION,progress:fixture}))});
   await page.waitForFunction(()=>document.querySelector('.modal-feedback')?.textContent==='存档已导入。');
   const exportProgress=async()=>{const pending=page.waitForEvent('download');await page.locator('#export').click();return JSON.parse(await fs.readFile(await(await pending).path(),'utf8'));};
   const before=await exportProgress(), preferences=await page.evaluate(()=>localStorage.getItem('nwaxz-settings'));
@@ -62,14 +63,14 @@ try {
     assert.equal(await page.locator('#gesture-hint').textContent(),levels[index].hint);
     await page.keyboard.press('Escape'); await page.locator('#quit').click(); await page.locator('#home').click();
   }
-  await page.locator('#extreme').click();
+  await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click();
   await page.locator('#escape-new').waitFor();
   assert.equal(await page.locator('#escape-new').isVisible(),true);
   assert.equal(await page.locator('#escape-panel').textContent().then(t=>t.includes('原18关')||t.includes('3D')),false);
-  await page.locator('#escape-intro-help').click(); assert.ok(await page.locator('.escape-bindings').isVisible());
-  await page.locator('#escape-help-close').click(); await page.locator('#escape-intro-saves').click();
+  await page.locator('#escape-solo-back').click(); await page.locator('#escape-menu-help').click(); assert.ok(await page.locator('.escape-bindings').isVisible());
+  await page.locator('#escape-help-close').click(); await page.locator('#escape-menu-solo').click(); await page.locator('#escape-intro-saves').click();
   assert.equal(await page.locator('#escape-save-export').isDisabled(),true);
-  await page.locator('#escape-saves-back').click(); await page.locator('#escape-intro-exit').click();
+  await page.locator('#escape-saves-back').click(); await page.locator('#escape-solo-back').click(); await page.locator('#escape-intro-exit').click();
   await page.locator('#settings').click(); await page.locator('.save-settings summary').click();
   assert.deepEqual(await exportProgress(),before,'menu navigation and unfinished runs preserve all previous scores');
   assert.equal(await page.evaluate(()=>localStorage.getItem('nwaxz-settings')),preferences);
@@ -79,11 +80,11 @@ try {
   await context.setOffline(true); await page.reload(); await page.locator('.game-hub').waitFor();
   await page.waitForFunction(()=>[...document.querySelectorAll('.mode-art')].every(i=>i.complete&&i.naturalWidth));
   for(const mode of ['normal','horror']) {await page.locator('#'+mode).click();await page.locator('#mode-continue').waitFor();await page.locator('#home').click();}
-  await page.locator('#extreme').click(); await page.locator('#escape-new').waitFor(); await page.locator('#escape-intro-exit').click();
+  await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click(); await page.locator('#escape-new').waitFor(); await page.locator('#escape-solo-back').click(); await page.locator('#escape-intro-exit').click();
   await page.screenshot({path:path.join(output,'offline.png')});
   const phone=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   const touch=await phone.newPage(); await touch.goto(base); await touch.locator('#horror').tap(); await touch.locator('#mode-continue').waitFor(); await touch.locator('#home').tap();
-  await touch.locator('#extreme').tap(); await touch.locator('#escape-new').waitFor(); await touch.locator('#escape-intro-exit').tap();
+  await touch.locator('#extreme').tap();await touch.locator('#escape-menu-solo').tap(); await touch.locator('#escape-new').waitFor(); await touch.locator('#escape-solo-back').tap(); await touch.locator('#escape-intro-exit').tap();
   await touch.screenshot({path:path.join(output,'touch.png')}); await phone.close();
   assert.deepEqual(errors,[]); console.log(JSON.stringify({layouts,importExport:true,modeCheckpoints:true,offline:true,touch:true,errors}));
   await context.close();

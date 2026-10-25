@@ -1,4 +1,4 @@
-import { ALERT_THRESHOLD, ALERT_MULTIPLIER, HEARING, SENSES, combinePerception, type Sense } from "./perception.ts";
+import { ALERT_THRESHOLD, ALERT_MULTIPLIER, EXPOSURE_CEILING, HEARING, SENSES, combinePerception, type Sense } from "./perception.ts";
 import { BASEMENT_RECTANGLES, BASEMENT_ROOMS, BASEMENT_PROPS, BASEMENT_CRYSTALS, MAP_HEIGHT, floorAt, floorYAt, stairsAt } from "./basement-map.ts";
 import { advanceAbilities, createAbilities, isAbilityState, type AbilityKind, type AbilityState } from "./abilities.ts";
 import { advanceInterference, createInterference, isInterferenceState, type InterferenceState } from "./interference.ts";
@@ -139,8 +139,14 @@ export class EscapeWorld {
   private hunterStep = 0;
   private laughAt = 0;
   private seenHide?: string;
+  private seenHidePlayerId?: string;
   private lastMovement: "walk" | "crouch" | "sprint" | "still" = "still";
   private mapPosition = "";
+  private coopActorOnly = false;
+  private coopInvestigation?: Vec;
+  private coopAbilityTargetId?: string;
+  private coopPlayerId?: string;
+  private coopTargetId?: string;
   constructor(seed?: number) {
     const hunt = this.data.hunt!;
     if (seed !== undefined) hunt.rng = seed >>> 0 || 1;
@@ -177,9 +183,20 @@ export class EscapeWorld {
     if (this.data.player.sprinting) this.data.player.crouched = false;
   }
   get perceptionMultiplier() { return (this.data.hunt?.alert ?? 0) > 0 ? ALERT_MULTIPLIER : 1; }
+  private get chaseLockApplies() {
+    return this.data.phase === "playing" && this.data.hunter.state === "chase"
+      && (this.coopPlayerId === undefined || this.coopTargetId === this.coopPlayerId);
+  }
   get perception() {
     const hunt = this.data.hunt!;
-    return combinePerception({ noise: hunt.noise ?? 0, glare: hunt.glare, sight: hunt.sight ?? 0 }, this.data.phase === "playing" && this.data.hunter.state === "chase");
+    return combinePerception({ noise: hunt.noise ?? 0, glare: hunt.glare, sight: hunt.sight ?? 0 }, this.chaseLockApplies);
+  }
+  get isPlayerChased() { return this.chaseLockApplies; }
+  get abilityTargetPlayerId() { return this.coopAbilityTargetId; }
+  /** Set transient co-op targeting context for personal HUD/perception; it is never serialized. */
+  setCoopPerceptionContext(playerId: string, targetId?: string) {
+    this.coopPlayerId = playerId; this.coopTargetId = targetId;
+    if (this.data.hunt) this.data.hunt.exposure = this.perception.total;
   }
   get lightPerception() {
     const illuminated = this.illuminatesHunter();
@@ -209,6 +226,23 @@ export class EscapeWorld {
     const range = Math.max(0, ...sources.map(s => s.range * attenuation));
     const rate = d.hunt!.freeze > 0 ? 0 : Math.max(0, ...sources.map(s => s.rate * Math.max(0, 1 - distance / (s.range * attenuation)) ** 2)) * this.perceptionMultiplier;
     return { action: this.lastMovement, distance, range, rate, audible: rate > 0, breathing, occluded };
+  }
+  /** Current, unforced sensory evidence for the room coordinator. */
+  get coopEvidence() {
+    const p = this.data.player, hunt = this.data.hunt!;
+    const currentCues: Partial<Record<Sense, Vec>> = {};
+    const scores: Record<Sense, number> = { noise: 0, glare: 0, sight: 0 };
+    if (this.hearing.audible) { currentCues.noise = { x: p.x, z: p.z }; scores.noise = hunt.noise ?? 0; }
+    if (this.vision.rate > 0) { currentCues.sight = { x: p.x, z: p.z }; scores.sight = hunt.sight ?? 0; }
+    if (this.lightPerception.rate > 0) { currentCues.glare = { x: p.x, z: p.z }; scores.glare = hunt.glare; }
+    const combined = combinePerception(scores);
+    const focus = SENSES.filter(key => currentCues[key]).sort((a, b) => combined.contributions[b].points - combined.contributions[a].points)[0];
+    return { rawExposure: this.perception.raw, currentExposure: combined.total, currentCues, focus };
+  }
+  drainCoopInvestigation() {
+    const point = this.coopInvestigation;
+    this.coopInvestigation = undefined;
+    return point;
   }
   get exposureHint() {
     const d = this.data, h = d.hunt!;
@@ -281,7 +315,7 @@ export class EscapeWorld {
     if (dot < Math.cos(TORCH_CONE / 2)) return false;
     return this.clearSight(p, h);
   }
-  private updateHunt(dt: number, walked: number, running: boolean) {
+  private updateHunt(dt: number, walked: number, running: boolean, personalOnly = false) {
     const hunt = this.data.hunt!, d = this.data;
     this.lastMovement = walked > .0001 ? running ? "sprint" : d.player.crouched ? "crouch" : "walk" : "still";
     if (walked > .0001) hunt.effort = Math.min(100, hunt.effort + (running ? 14 : d.player.crouched ? 3 : 6) * dt);
@@ -292,8 +326,7 @@ export class EscapeWorld {
       hunt.breathIn -= dt;
       if (hunt.breathIn <= 0) { hunt.breathIn = 2.5; this.events.push({ type: "breath" }); }
     }
-    hunt.freeze = Math.max(0, hunt.freeze - dt);
-    hunt.reveal = Math.max(0, hunt.reveal - dt);
+    if (!personalOnly) { hunt.freeze = Math.max(0, hunt.freeze - dt); hunt.reveal = Math.max(0, hunt.reveal - dt); }
     // Freeze suspends perception as well as pursuit; held scores retain their explanation.
     if (hunt.freeze > 0) return;
     hunt.alert = Math.max(0, (hunt.alert ?? 0) - dt);
@@ -315,7 +348,10 @@ export class EscapeWorld {
     const d = this.data, hunt = d.hunt!;
     hunt.traces ??= {};
     for (const key of SENSES) if (sensed[key]) hunt.traces[key] = { x: sensed[key]!.x, z: sensed[key]!.z };
-    const risk = this.perception;
+    const cooperativePlayer = this.coopPlayerId !== undefined;
+    const risk = cooperativePlayer
+      ? combinePerception({ noise: hunt.noise ?? 0, glare: hunt.glare, sight: hunt.sight ?? 0 }, this.chaseLockApplies)
+      : this.perception;
     hunt.exposure = risk.total;
     if (hunt.freeze > 0) return;
     const live = SENSES.filter(key => sensed[key]);
@@ -327,8 +363,9 @@ export class EscapeWorld {
       hunt.alert = 6;
       if (!at) return;
       hunt.focus = source;
-      if (risk.total === 100) { this.startChase(at); return; }
+      if (risk.total === 100) { if (!cooperativePlayer) this.startChase(at); return; }
       if (d.hunter.state !== "chase") {
+        if (cooperativePlayer) return;
         const next = this.reachableTarget(at);
         if (d.hunter.state !== "investigate" || dist(this.target, next) > .6) this.pathTimer = 0;
         d.hunter.state = "investigate"; this.target = next; this.wait = 4;
@@ -421,9 +458,98 @@ export class EscapeWorld {
     while (left > .0001) { const dt = Math.min(left, 1 / 60); this.tick(dt, input); left -= dt; if (this.data.phase !== "playing") break; }
     this.revealMap();
   }
-  private tick(dt: number, input: EscapeInput) {
+  /** Advance one player's movement and senses without advancing the room clock or hunter. */
+  advanceActorAuthoritative(seconds: number, input: EscapeInput, context: { playerId: string; targetId?: string }) {
+    if (this.data.phase !== "playing") return;
+    this.coopActorOnly = true; this.setCoopPerceptionContext(context.playerId, context.targetId);
+    let left = Math.min(.15, Math.max(0, seconds));
+    while (left > .0001) { const dt = Math.min(left, 1 / 60); this.tick(dt, input, true); left -= dt; }
+    this.revealMap(); this.coopActorOnly = false;
+  }
+  /** Advance shared team timers and the single room hunter once, selecting cues across all players. */
+  advanceEnemyAuthoritative(seconds: number, candidates: Array<{ id: string; player: EscapeSnapshot["player"]; hidden?: string; seenHide?: string; exposure: number; rawExposure?: number; currentExposure?: number; currentCues?: Partial<Record<Sense, Vec>>; focus?: Sense; traces?: Partial<Record<Sense, Vec>>; living: boolean; moving?: boolean; investigation?: Vec }>) {
+    const dt = Math.min(.15, Math.max(0, seconds));
+    if (this.data.phase !== "playing") return [] as string[];
+    const hunt = this.data.hunt!;
+    const frozen = hunt.freeze > 0;
+    hunt.freeze = Math.max(0, hunt.freeze - dt); hunt.reveal = Math.max(0, hunt.reveal - dt);
+    hunt.ward = Math.max(0, (hunt.ward ?? 0) - dt); this.data.elapsed += dt;
+    const living = candidates.filter(candidate => candidate.living);
+    if (this.coopTargetId && !living.some(candidate => candidate.id === this.coopTargetId)) this.coopTargetId = undefined;
+    const current = living.find(candidate => candidate.id === this.coopTargetId);
+    const hasCue = (candidate: typeof living[number]) => Boolean(candidate.currentCues && Object.keys(candidate.currentCues).length);
+    const sighting = living.filter(candidate => (candidate.currentExposure ?? 0) >= EXPOSURE_CEILING - 1e-8 && hasCue(candidate))
+      .sort((a, b) => (b.currentExposure ?? 0) - (a.currentExposure ?? 0))[0];
+    const clue = living.filter(candidate => (candidate.currentExposure ?? 0) >= ALERT_THRESHOLD && candidate.focus && candidate.currentCues?.[candidate.focus])
+      .sort((a, b) => (b.currentExposure ?? 0) - (a.currentExposure ?? 0))[0];
+    if (sighting) {
+      this.coopTargetId = sighting.id; this.data.player = { ...sighting.player }; this.data.hidden = sighting.hidden;
+      this.seenHide = sighting.seenHide; this.seenHidePlayerId = sighting.id;
+      if (sighting.focus) hunt.focus = sighting.focus;
+      if (!frozen) this.startChase(sighting.player);
+    } else if (current) {
+      this.data.player = { ...current.player }; this.data.hidden = current.hidden;
+      const focus = current.focus, cue = focus && current.currentCues?.[focus];
+      if (this.data.hunter.state === "chase" && cue && !frozen) {
+        const point = cue;
+        const next = this.reachableTarget(point);
+        if (dist(this.target, next) > .6) this.pathTimer = 0;
+        this.target = next; this.unseen = 0; this.wait = 0; hunt.focus = current.focus!;
+      }
+    } else if (clue && !frozen && this.data.hunter.state !== "chase") {
+      const point = clue.currentCues![clue.focus!]!;
+      this.data.hunter.state = "investigate"; this.target = this.reachableTarget(point); this.wait = 4; this.pathTimer = 0;
+      hunt.alert = 6; hunt.focus = clue.focus;
+    }
+    if (!sighting && !clue && !frozen && this.data.hunter.state !== "chase") {
+      const sound = living.find(candidate => candidate.investigation)?.investigation;
+      if (sound) { this.data.hunter.state = "investigate"; this.target = this.reachableTarget(sound); this.wait = 4; this.pathTimer = 0; hunt.focus = "noise"; }
+    }
+    const underground = living.filter(candidate => floorAt(candidate.player) === -1);
+    const skillTarget = (this.data.abilities.stage === "warning" ? underground.find(candidate => candidate.id === this.coopAbilityTargetId) : undefined)
+      ?? [...underground].sort((a, b) => b.exposure - a.exposure)[0];
+    if (skillTarget?.id !== this.coopAbilityTargetId) { this.coopAbilityTargetId = skillTarget?.id; this.data.abilities.motionMemory = 0; }
+    this.data.abilities = advanceAbilities(this.data.abilities, dt, {
+      active: Boolean(skillTarget), suspended: frozen, moving: Boolean(skillTarget?.moving),
+      random: () => this.random(), execute: kind => {
+        const target = skillTarget;
+        if (!target) return false;
+        this.data.player = { ...target.player }; this.data.hidden = target.hidden;
+        this.coopTargetId = target.id; this.seenHide = target.seenHide; this.seenHidePlayerId = target.id;
+        if (kind === "sense") { this.seenHide = target.hidden; this.data.hunt!.sight = 100; this.startChase(target.player); return true; }
+        return this.executeAbility(kind);
+      },
+    });
+    const caught: string[] = [];
+    const addCollisions = () => {
+      if (hunt.freeze > 0) return;
+      for (const candidate of living) {
+      const player = candidate.player;
+      if (!candidate.hidden && dist(this.data.hunter, player) < .55 && this.lineOfSight(this.data.hunter, player)) caught.push(candidate.id);
+      else if (candidate.hidden) {
+        const knownHide = candidate.seenHide ?? (candidate.id === this.seenHidePlayerId ? this.seenHide : undefined);
+        if (candidate.hidden === knownHide && dist(this.data.hunter, PROPS.find(p => p.id === knownHide) ?? player) < 1.2) caught.push(candidate.id);
+      }
+      }
+    };
+    addCollisions();
+    const targetStillActive = Boolean(this.coopTargetId && living.some(candidate => candidate.id === this.coopTargetId));
+    const currentChaseCue = Boolean(current?.focus && current.currentCues?.[current.focus]);
+    this.updateHunter(dt, true, targetStillActive, currentChaseCue);
+    addCollisions();
+    if (caught.length) { this.data.phase = "playing"; this.data.captures = Math.min(2, this.data.captures); this.events.push({ type: "caught" }); }
+    return [...new Set(caught)];
+  }
+  /** Resolve an interaction only when the server's expected target is the nearest legal target. */
+  interactAuthoritative(expectedId: string) {
+    const target = this.nearest();
+    if (!target || target.id !== expectedId) return false;
+    this.interact();
+    return true;
+  }
+  private tick(dt: number, input: EscapeInput, actorOnly = false) {
     const d = this.data, p = d.player;
-    d.elapsed += dt;
+    if (!actorOnly) d.elapsed += dt;
     p.angle = angleDelta(p.angle + (input.turn ?? 0) * dt * 2, 0);
     p.pitch = Math.max(-1.3, Math.min(1.3, (p.pitch ?? 0) + (input.look ?? 0) * dt * 1.5));
     const forward = Math.max(-1, Math.min(1, input.forward ?? 0)), side = Math.max(-1, Math.min(1, input.strafe ?? 0));
@@ -454,8 +580,8 @@ export class EscapeWorld {
         }
       });
     }
-    this.updateHunt(dt, walked, running);
-    d.abilities = advanceAbilities(d.abilities, dt, {
+    this.updateHunt(dt, walked, running, actorOnly);
+    if (!actorOnly) d.abilities = advanceAbilities(d.abilities, dt, {
       active: floorAt(p) === -1, suspended: d.hunt!.freeze > 0,
       moving: walked > .0001, random: () => this.random(), execute: kind => this.executeAbility(kind),
     });
@@ -467,7 +593,7 @@ export class EscapeWorld {
     // simulation instant is blocked and spent, never deferred until expiration.
     if (protectedTime > 0) d.interference = advanceInterference(d.interference, protectedTime, { ...interferenceEnv, immune: true });
     if (dt - protectedTime > 1e-10) d.interference = advanceInterference(d.interference, dt - protectedTime, interferenceEnv);
-    d.hunt!.ward = ward - dt < 1e-10 ? 0 : ward - dt;
+    if (!actorOnly) d.hunt!.ward = ward - dt < 1e-10 ? 0 : ward - dt;
     if (previousInterference !== d.interference.stage && d.interference.stage === "corrupt") this.say("感官被干扰，仪表数值已污染！");
     if (previousInterference === "corrupt" && d.interference.stage !== "corrupt") this.say("感官恢复了，仪表已恢复正常。");
     if (this.pending) {
@@ -475,15 +601,15 @@ export class EscapeWorld {
       if (dist(p, object) > 1.9 || d.hidden) { this.pending = undefined; this.say("搜索中断，靠近后再试。"); }
       else if ((this.pending.remaining -= dt) <= 0) { this.pending = undefined; this.search(object); }
     }
-    this.updateHunter(dt);
+    if (!actorOnly) this.updateHunter(dt);
     if (d.phase === "playing") this.syncExposure();
   }
-  private updateHunter(dt: number) {
+  private updateHunter(dt: number, cooperative = false, cooperativeTargetActive = true, cooperativeCueActive = false) {
     const d = this.data, h = d.hunter;
     if (d.hunt!.freeze > 0) return;
-    if (h.state === "chase" && this.seesPlayer()) {
+    if (h.state === "chase" && (!cooperative || cooperativeTargetActive) && this.seesPlayer()) {
       this.target = { x: d.player.x, z: d.player.z }; this.unseen = 0; this.wait = 0;
-    } else if (h.state === "chase") {
+    } else if (h.state === "chase" && (!cooperative || !cooperativeCueActive)) {
       this.unseen += dt;
       if (this.unseen > 3.5) { h.state = "search"; this.wait = 4; }
     }
@@ -491,10 +617,10 @@ export class EscapeWorld {
       const cabinet = PROPS.find(p => p.id === this.seenHide)!;
       this.target = { x: cabinet.x, z: cabinet.z + .65 }; h.state = "search";
       if (dist(h, cabinet) < 1.2) {
-        if (d.hidden === this.seenHide) { this.capture(); return; }
+        if (d.hidden === this.seenHide) { if (!cooperative) this.capture(); return; }
         this.seenHide = undefined; this.wait = 4;
       }
-    } else if (!d.hidden && dist(h, d.player) < .55 && this.lineOfSight(h, d.player)) { this.capture(); return; }
+    } else if ((!cooperative || cooperativeTargetActive) && !d.hidden && dist(h, d.player) < .55 && this.lineOfSight(h, d.player)) { if (!cooperative) this.capture(); return; }
     const destination = this.reachableTarget(this.target);
     if (dist(h, destination) < .35) {
       if (h.state === "patrol") {
@@ -504,7 +630,7 @@ export class EscapeWorld {
       } else {
         if (h.state === "chase") { h.state = "search"; this.wait = 4; }
         this.wait -= dt;
-        if (this.wait > 0) { h.angle += dt * .55; return; }
+        if (this.wait > 0) { h.angle = angleDelta(h.angle + dt * .55, 0); return; }
         h.state = "patrol"; this.seenHide = undefined; this.target = this.choosePatrolTarget(); this.pathTimer = 0;
       }
     }
@@ -572,6 +698,7 @@ export class EscapeWorld {
   private investigateSound(at: Vec) {
     const d = this.data;
     if (d.hunter.state === "chase" || d.hunt!.freeze > 0) return;
+    if (this.coopPlayerId !== undefined) { this.coopInvestigation = { x: at.x, z: at.z }; return; }
     d.hunt!.focus = "noise";
     d.hunter.state = "investigate"; this.target = this.reachableTarget(at); this.wait = 4; this.pathTimer = 0;
   }
@@ -585,6 +712,7 @@ export class EscapeWorld {
       this.syncExposure({ noise: at }); this.investigateSound(at); return;
     }
     if (h.state === "chase") return;
+    if (this.coopPlayerId !== undefined) { this.coopInvestigation = { x: at.x, z: at.z }; d.hunt!.focus = "noise"; return; }
     d.hunt!.focus = "noise";
     h.state = "investigate"; this.target = this.reachableTarget(at); this.wait = 4; this.pathTimer = 0;
   }
@@ -607,6 +735,7 @@ export class EscapeWorld {
     }
     this.events.push({ type: "item" });
   }
+  clearInterferenceAuthoritative() { this.data.interference = createInterference(floorAt(this.data.player)); }
   throwStone() {
     if (this.data.hidden || this.data.phase !== "playing") return;
     if (!this.data.stones) { this.say("没有石子了。"); return; }
@@ -727,6 +856,17 @@ export class EscapeWorld {
     this.clearHuntAlerts();
     this.pending = undefined; this.events.push({ type: "caught" });
   }
+  /** Multiplayer respawn keeps shared objectives, elapsed time, and hunter state intact. */
+  respawnCoopPlayer() {
+    const d = this.data;
+    Object.assign(d.player, { x: 3.5, z: 5.5, angle: -Math.PI / 2, pitch: 0, stamina: 100, battery: Math.max(35, d.player.battery), crouched: false, sprinting: false, winded: false });
+    Object.assign(d.hunt!, { effort: 0, panting: false, breathIn: 0, glare: 0, lightArmed: true, noise: 0, sight: 0, exposure: 0, alert: 0, traces: {}, listenIn: 0 });
+    delete d.hunt!.focus;
+    d.interference = createInterference(floorAt(d.player));
+    d.hidden = undefined; d.phase = "playing"; this.pending = undefined; this.seenHide = undefined;
+    this.seenHidePlayerId = undefined; this.unseen = 0; this.lastMovement = "still";
+    this.events.push({ type: "message", text: "你在寝室重新醒来。" });
+  }
   nextNight() {
     if (this.data.phase !== "caught") return;
     const d = this.data; Object.assign(d.player, { x: 3.5, z: 5.5, angle: -Math.PI / 2, pitch: 0, stamina: 100, battery: Math.max(35, d.player.battery), crouched: false, sprinting: false, winded: false });
@@ -745,7 +885,7 @@ export class EscapeWorld {
   snapshot(): EscapeSnapshot {
     return JSON.parse(JSON.stringify({ ...this.data, pursuit: { target: this.target, seenHide: this.seenHide, unseen: this.unseen, wait: this.wait, patrolIndex: this.patrolIndex } }));
   }
-  static restore(raw: unknown): EscapeWorld {
+  static restore(raw: unknown, cooperativeContext?: { playerId: string; targetId?: string }): EscapeWorld {
     if (!raw || typeof raw !== "object") throw new Error("逃生存档格式不正确");
     const d = raw as EscapeSnapshot;
     const number = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
@@ -814,11 +954,11 @@ export class EscapeWorld {
       || DOORS.some(door => door.key && d.unlocked.includes(door.id) && !d.inventory.includes(door.key))
       || PROPS.some(o => o.loot && d.searched.includes(o.id) && !d.inventory.includes(o.loot))) throw new Error("逃生存档目标状态不正确");
     const world = new EscapeWorld(); world.data = JSON.parse(JSON.stringify(d));
+    if (cooperativeContext) world.setCoopPerceptionContext(cooperativeContext.playerId, cooperativeContext.targetId);
     if (!world.data.hunt) world.data.hunt = { version: 1, effort: 0, panting: false, breathIn: 0, glare: 0, lightArmed: true, freeze: 0, reveal: 0, collected: [], freezeUsed: 0, revealUsed: 0, rng: (Math.random() * 0xffffffff) >>> 0 || 1, recent: [] };
     const hunt = world.data.hunt;
     hunt.ward ??= 0; hunt.wardUsed ??= 0;
-    hunt.noise ??= 0; hunt.sight ??= d.hunter.state === "chase" ? 100 : 0; hunt.alert ??= 0; hunt.traces ??= {};
-    if (d.phase === "playing" && d.hunter.state === "chase" && world.perception.raw === 0) hunt[hunt.focus ?? "sight"] = 100;
+    hunt.noise ??= 0; hunt.sight ??= world.chaseLockApplies ? 100 : 0; hunt.alert ??= 0; hunt.traces ??= {};
     hunt.exposure = world.perception.total;
     if (world.data.player.sprinting === undefined && !d.hidden) world.data.player.crouched = false;
     world.data.player.sprinting ??= false; world.data.player.winded ??= false;

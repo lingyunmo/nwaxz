@@ -47,11 +47,11 @@ try{
   assert.ok(cache.every(Boolean),'every current resource cached before menu');
   assert.equal(await page.evaluate(()=>window.__glContexts.size),1,'3D context created before menu');
   await page.evaluate(()=>{window.__preparedCanvas=[...window.__glContexts][0].canvas;});
-  console.log('enter first');await page.locator('#extreme').tap();await page.locator('#escape-new').tap();await page.locator('#cinematic-skip').tap();
+  console.log('enter first');await page.locator('#extreme').tap();await page.locator('#escape-menu-solo').tap();await page.locator('#escape-new').tap();await page.locator('#cinematic-skip').tap();
   await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   assert.ok(await page.evaluate(()=>window.__preparedCanvas===document.querySelector('#escape-view')));
   await page.locator('#escape-pause').tap();await page.locator('#escape-exit').tap();
-  await page.locator('#extreme').tap();const start=Date.now();await page.locator('#escape-continue').tap();await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
+  await page.locator('#extreme').tap();await page.locator('#escape-menu-solo').tap();const start=Date.now();await page.locator('#escape-continue').tap();await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   console.log('reentry done');const reentryMs=Date.now()-start;
   assert.equal(await page.evaluate(()=>window.__glContexts.size),1,'same renderer reused after exiting');
   assert.ok(await page.evaluate(()=>window.__preparedCanvas===document.querySelector('#escape-view')));
@@ -64,7 +64,7 @@ try{
   assert.deepEqual(repaired,['/assets/video/escape-caught-3-v1.mp4'],'only missing resource redownloaded');
   // Entire startup, CG and real 3D work with the network disconnected.
   console.log('offline start');const failures=[];page.on('requestfailed',r=>failures.push(r.url()));await context.setOffline(true);await page.reload();await page.locator('#normal').waitFor({timeout:60000});
-  await page.locator('#extreme').tap();await page.locator('#escape-new').tap();await page.locator('#escape-confirm-restart').tap();
+  await page.locator('#extreme').tap();await page.locator('#escape-menu-solo').tap();await page.locator('#escape-new').tap();await page.locator('#escape-confirm-restart').tap();
   await page.waitForFunction(()=>document.querySelector('video')?.currentTime>.25);await page.locator('#cinematic-skip').tap();await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   await page.screenshot({path:path.join(output,'offline-3d-phone.png')});
   assert.deepEqual(failures,[]);assert.deepEqual(errors,[]);

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApp } from "./app.mjs";
+import { attachCoopSockets } from "./coop-socket.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const app = createApp({
   distDir: path.join(root, "dist"),
@@ -12,9 +13,11 @@ const server = app.listen(
   () => console.log("nwaxz server ready"),
 );
 let stopping = false;
+const closeSockets = attachCoopSockets(server,app.locals.coop);
 function stop() {
   if (stopping) return;
   stopping = true;
+  closeSockets();
   app.locals.coop?.shutdown();
   const deadline = setTimeout(() => {
     server.closeAllConnections();

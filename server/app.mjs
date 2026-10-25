@@ -8,12 +8,14 @@ export function createApp({ distDir, revision = "development", coopService } = {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", false);
-  app.use((_req, res, next) => {
+  app.use((req, res, next) => {
+    const host=req.get('host')??'';
+    const sockets=/^[a-z\d.\-:[\]]+$/i.test(host)?` ws://${host} wss://${host}`:'';
     res.set({
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",
       "Content-Security-Policy":
-        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'",
+        `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'${sockets}; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'`,
     });
     next();
   });

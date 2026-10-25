@@ -17,7 +17,7 @@ WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
-COPY server/app.mjs server/index.mjs server/coop-service.mjs ./server/
+COPY server/app.mjs server/index.mjs server/coop-service.mjs server/coop-socket.mjs ./server/
 COPY src/escape/world.ts src/escape/basement-map.ts src/escape/perception.ts src/escape/abilities.ts src/escape/interference.ts src/escape/coop-protocol.ts ./src/escape/
 COPY ops/smoke.mjs ./ops/smoke.mjs
 USER 10001:10001

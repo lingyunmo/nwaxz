@@ -3,15 +3,22 @@ import { fileURLToPath } from 'node:url';
 import { createApp } from '../server/app.mjs';
 import { EscapeWorld, HEIGHT, SIZE } from '../src/escape/world.ts';
 import { CoopService } from '../server/coop-service.mjs';
+import {attachCoopSockets} from '../server/coop-socket.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
 const coopService = new CoopService();
 const server = createApp({ distDir: fileURLToPath(new URL('../dist/', import.meta.url)), coopService }).listen(0, '127.0.0.1');
 await new Promise(resolve => server.once('listening', resolve));
+attachCoopSockets(server,coopService);
 const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH, headless: true, args: ['--disable-gpu', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-background-networking'] });
 const instrumentation = `
   window.__coopSnapshots = []; window.__coopInputs = []; window.__coopSessions = [];
+  const NativeSocket=window.WebSocket;
+  window.WebSocket=class extends NativeSocket {
+    constructor(...args){super(...args);this.addEventListener('message',event=>{try{const p=JSON.parse(event.data);if(p.type==='snapshot'){window.__coopSnapshots.push(p.data);if(window.__coopSnapshots.length>300)window.__coopSnapshots.shift();}}catch{}});}
+    send(data){try{const p=JSON.parse(data);if(p.type==='input')window.__coopInputs.push(p.data);}catch{}return super.send(data);}
+  };
   const realFetch = window.fetch.bind(window);
   window.fetch = async (input, init = {}) => {
     const url = typeof input === 'string' ? input : input.url;
@@ -124,6 +131,22 @@ try {
   await waitReady(a.page); await waitReady(b.page);
   await b.page.waitForFunction(() => window.__coopSnapshots.at(-1)?.room.players.some(player => player.avatar === 1), undefined, { timeout: 10000 });
   await startRoom(a.page); await b.page.locator('#escape-coop-team').waitFor({ state: 'visible', timeout: 90000 });
+  await a.page.keyboard.press('e');
+  try{await b.page.waitForFunction(()=>window.__coopSnapshots.at(-1)?.world.hunt.collected.includes('crystal-bed'),undefined,{timeout:10000});}
+  catch(error){console.error('Pickup diagnostics',await a.page.evaluate(()=>({inputs:window.__coopInputs.slice(-8),player:window.__coopSnapshots.at(-1)?.world.player,panel:document.querySelector('#escape-panel')?.innerText,hidden:document.querySelector('#escape-panel')?.hidden,target:document.querySelector('#escape-interact')?.textContent,status:document.querySelector('#escape-coop-status')?.textContent})));throw error;}
+  assert.ok(await a.page.evaluate(()=>window.__coopInputs.some(p=>p.action==='interact'&&p.targetId==='crystal-bed')),'real E pickup includes the target id and replicates to teammate');
+  const entryA=await a.page.evaluate(()=>window.__coopSessions.at(-1));
+  const ownRoom=coopService.rooms.get(code), ownActor=coopService.findPlayer(ownRoom,entryA.token);
+  // Local interaction fixture; not a route-completion claim.
+  ownActor.position={x:5.5,z:3.5};Object.assign(ownActor.actorWorld.data.player,ownActor.position,{angle:-Math.PI/2});
+  await a.page.waitForFunction(()=>window.__coopSnapshots.at(-1)?.world.player.x===5.5,undefined,{timeout:5000});
+  await a.page.waitForTimeout(150);await a.page.keyboard.press('e');
+  await a.page.waitForFunction(()=>window.__coopSnapshots.at(-1)?.world.hidden==='bed-hide',undefined,{timeout:5000});
+  await a.page.keyboard.press('e');
+  await a.page.waitForFunction(()=>!window.__coopSnapshots.at(-1)?.world.hidden,undefined,{timeout:5000});
+  assert.ok(ownActor.position.z>=3.4,'leaving a wardrobe persists the legal exit position');
+  // Return the local fixture to the normal initial pose before the other acceptance cases.
+  ownActor.position={x:3.5,z:5.5};Object.assign(ownActor.actorWorld.data.player,ownActor.position,{angle:-Math.PI/2});
   for (const [width, height] of [[1280, 800], [900, 500]]) await assertTeamClear(a.page, { width, height }, `2-player desktop ${width}x${height}`);
   for (const [width, height] of [[390, 844], [320, 568], [844, 390]]) await assertTeamClear(b.page, { width, height }, `2-player touch ${width}x${height}`);
   await a.page.setViewportSize({ width: 1280, height: 800 }); await b.page.setViewportSize({ width: 390, height: 844 });
@@ -206,7 +229,7 @@ try {
   const offline = await openPlayer('离线玩家'); await offline.context.setOffline(true);
   await offline.page.locator('#escape-coop-create').click(); await offline.page.waitForFunction(() => { const text = document.querySelector('#escape-coop-error')?.textContent ?? ''; return !!text && text !== '正在进入房间…'; }, undefined, { timeout: 10000 });
   assert.deepEqual(await offline.page.evaluate(() => [localStorage.getItem('nwaxz-escape-session-v1'), localStorage.getItem('nwaxz-escape-record-v1')]), [sessionValue, recordValue], 'offline join attempt keeps single-player saves unchanged');
-  console.log('co-op browser acceptance passed: 2-player movement/actions/lives, 3-player movement/lives, leader departure, phone layout, ping, save isolation, offline refusal');
+  console.log('co-op browser acceptance passed: WebSocket, E crystal pickup, wardrobe entry/exit, 2-player movement/actions/lives, 3-player movement/lives, leader departure, phone layout, ping, save isolation, offline refusal');
 } finally {
   await Promise.all(contexts.map(context => context.close().catch(() => {})));
   await browser.close(); coopService.close(); await new Promise(resolve => server.close(resolve));

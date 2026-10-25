@@ -17,6 +17,7 @@ import { EscapeRenderer, type EscapeArt } from "./renderer.ts";
 import { prepareEscape, returnPreparedEscape, takePreparedEscape } from "./preparation.ts";
 import { EscapeLook, type MouseLookMode } from "./look.ts";
 import { CoopClient, type CoopConnectionState } from "./coop-client.ts";
+import {CoopMovement} from './coop-movement.ts';
 import type { CoopInput, CoopSnapshot } from "./coop-protocol.ts";
 import { version as APP_VERSION } from "../../package.json";
 import { peerAvatarOptions } from "./peer-art.ts";
@@ -77,7 +78,6 @@ export class EscapeGame {
   private coopLatency?: number;
   private coopLastMoveAt = 0;
   private coopSeenRevision = -1;
-  private coopAction?: CoopInput["action"];
   private coopMode = false;
   private coopStarting = false;
   private coopLobbySignature = "";
@@ -87,7 +87,8 @@ export class EscapeGame {
   private coopSyncFaulted = false;
   private coopRecovering = false;
   private coopRequesting = false;
-  private coopVisual?: { x: number; z: number; viewId: string };
+  private coopMovement=new CoopMovement();
+  private coopTeamSignature='';
   private coopUnsubscribers: (() => void)[] = [];
   private readonly signal = this.controller.signal;
   constructor(private root: HTMLElement, private audio: AudioManager, private settings: Settings, private exit: () => void) {
@@ -204,7 +205,7 @@ export class EscapeGame {
     finally { this.coopRequesting = false; if (create?.isConnected) create.disabled = false; if (join?.isConnected) join.disabled = false; }
   }
   private attachCoop(client: CoopClient) {
-    this.detachCoop(); this.coopMode = true; this.$(".escape-shell").classList.add("coop-active"); this.coop = client; this.coopState = "connecting"; this.coopMessage = "正在连接房间"; this.coopLobbySignature = ""; this.coopFinal = false; this.coopWasCaught = false; this.coopSyncFaulted = false; this.coopRecovering = false; this.coopAssetsReady = !!this.renderer?.usable; this.coopVisual = undefined;
+    this.detachCoop(); this.coopMode = true; this.$(".escape-shell").classList.add("coop-active"); this.coop = client; this.coopState = "connecting"; this.coopMessage = "正在连接房间"; this.coopLobbySignature = ""; this.coopFinal = false; this.coopWasCaught = false; this.coopSyncFaulted = false; this.coopRecovering = false; this.coopAssetsReady = !!this.renderer?.usable; this.coopMovement.reset();
     this.coopUnsubscribers.push(client.onSnapshot(snapshot => {
       const previousView = this.coopSnapshot?.viewPlayerId;
       this.coopSnapshot = snapshot;
@@ -212,10 +213,11 @@ export class EscapeGame {
         if (this.coopSyncFaulted && !this.coopRecovering) { this.renderCoopTeam(); this.renderCoopStatus(); return; }
         const wasFaulted = this.coopSyncFaulted;
         try {
-          const angle = this.world.data.player.angle, pitch = this.world.data.player.pitch;
+          const angle = this.world.data.player.angle, pitch = this.world.data.player.pitch, previousHidden=this.world.data.hidden;
           this.world = EscapeWorld.restore(snapshot.world, { playerId: snapshot.viewPlayerId, targetId: snapshot.targetPlayerId }); this.world.pending = snapshot.search ? { ...snapshot.search } : undefined;
-          if (previousView === snapshot.viewPlayerId) { this.world.data.player.angle = angle; this.world.data.player.pitch = pitch; }
-          else this.coopVisual = undefined;
+          if (previousView === snapshot.viewPlayerId && previousHidden === this.world.data.hidden) { this.world.data.player.angle = angle; this.world.data.player.pitch = pitch; }
+          else this.coopMovement.reset();
+          this.coopMovement.accept(this.world,performance.now(),this.coopLatency??100,snapshot.viewPlayerId);
           this.phase = this.world.data.phase; this.coopSyncFaulted = false; this.coopRecovering = false;
         }
         catch (error) {
@@ -236,6 +238,7 @@ export class EscapeGame {
     }));
     this.coopUnsubscribers.push(client.onState((state, message, latency) => {
       this.coopState = state; this.coopMessage = message; if (latency !== undefined) this.coopLatency = latency; this.renderCoopStatus();
+      if(this.started&&state==='connected'&&message!=='已连接')this.world.say(message);
       if (state === "closed" && this.coopMode && !this.coopFinal) { this.paused = true; this.clearInput(); this.cinematic?.close(); this.panel('<h2>房间已关闭</h2><button id="escape-coop-closed-leave" class="escape-primary">返回</button>'); this.button("escape-coop-closed-leave", () => void this.leaveCoop()); }
     }));
     client.start(); client.startInputs();
@@ -306,6 +309,8 @@ export class EscapeGame {
   private renderCoopTeam() {
     const team = this.$<HTMLElement>("#escape-coop-team"); const players = this.coopSnapshot?.room.players ?? [];
     team.hidden = !this.coopMode || !this.started;
+    const signature=JSON.stringify([this.coop?.session.playerId,this.coopSnapshot?.viewPlayerId,players.map(({id,slot,name,avatar,status,lives})=>({id,slot,name,avatar,status,lives}))]);
+    if(signature===this.coopTeamSignature)return;this.coopTeamSignature=signature;
     const label = (status: string) => status === "escaped" ? "已逃出" : status === "eliminated" ? "已淘汰" : status === "left" ? "已退出" : status === "caught" ? "被抓" : status === "reconnecting" ? "重连中" : "逃生中";
     this.root.querySelector("#escape-coop-status")?.remove();
     team.innerHTML = `${[1, 2, 3].map(slot => { const player = players.find(item => item.slot === slot); return player ? `<div class="escape-coop-teammate ${player.status} ${player.id === this.coop?.session.playerId ? "self" : ""} ${player.id === this.coopSnapshot?.viewPlayerId ? "following" : ""}"><span class="escape-avatar-art" data-avatar="${player.avatar}"></span><span class="escape-coop-player-name">${slot} · ${safe(player.name)}</span><small ${player.id === this.coop?.session.playerId ? 'id="escape-coop-status" class="escape-coop-status"' : ""}>${label(player.status)} · ${player.lives}命</small></div>` : `<div class="escape-coop-teammate empty"><span class="escape-avatar-art" data-avatar="0"></span><span class="escape-coop-player-name">${slot} · 空位</span><small>等待队友</small></div>`; }).join("")}`;
@@ -396,7 +401,10 @@ export class EscapeGame {
   private clearInput() { this.keys.clear(); this.stick = { x: 0, y: 0 }; this.look?.clear(); this.$("#escape-stick span").style.transform = "translate(0,0)"; if (this.coopMode) { this.coop?.clearActions(); this.coop?.sendInput({ move: { forward: 0, strafe: 0, turn: 0, look: 0, sprint: false } }); } }
   private coopActionInput(action: NonNullable<CoopInput["action"]>) {
     const self = this.coopSnapshot?.room.players.find(player => player.id === this.coop?.session.playerId);
-    if (this.coopMode && !this.coopFinal && this.coopSnapshot?.room.phase === "playing" && self?.status === "connected") this.coopAction = action;
+    if (this.coopMode && !this.coopFinal && this.coopSnapshot?.room.phase === "playing" && self?.status === "connected") {
+      const down=(key:string)=>this.keys.has(key)?1:0;
+      this.coop?.sendInput({move:{forward:down('w')+down('arrowup')-down('s')-down('arrowdown')-this.stick.y,strafe:down('d')-down('a')+this.stick.x,turn:0,look:0,sprint:this.world.data.player.sprinting??false},aim:{angle:this.world.data.player.angle,pitch:this.world.data.player.pitch??0},action,...(action==='interact'?{targetId:this.world.nearest()?.id}:{})});
+    }
   }
   private pause(map = false) {
     if (map) { this.showMap(); return; }
@@ -605,7 +613,7 @@ export class EscapeGame {
       const down = (key: string) => this.keys.has(key) ? 1 : 0;
       if (this.coopMode) {
         const self = this.coopSnapshot?.room.players.find(player => player.id === this.coop?.session.playerId);
-        const canControl = this.coopSnapshot?.room.phase === "playing" && self?.status === "connected" && !this.coopFinal;
+        const canControl = this.coopState === 'connected' && this.coopSnapshot?.room.phase === "playing" && self?.status === "connected" && !this.coopFinal;
         if (canControl && !this.world.data.hidden) {
           const player = this.world.data.player;
           const angle = player.angle + (down("arrowright") - down("arrowleft")) * dt * 2;
@@ -614,14 +622,12 @@ export class EscapeGame {
         }
         if (canControl && now - this.coopLastMoveAt >= 100) {
           this.coopLastMoveAt = now;
-          const action = this.coopAction; this.coopAction = undefined;
-          this.coop?.sendInput({ move: { forward: down("w") + down("arrowup") - down("s") - down("arrowdown") - this.stick.y, strafe: down("d") - down("a") + this.stick.x, turn: down("arrowright") - down("arrowleft"), look: down("pageup") - down("pagedown"), sprint: this.world.data.player.sprinting ?? false }, aim: { angle: this.world.data.player.angle, pitch: this.world.data.player.pitch ?? 0 }, ...(action ? { action } : {}) });
-        } else if (!canControl) { this.coopAction = undefined; this.coop?.clearActions(); }
+          this.coop?.sendInput({ move: { forward: down("w") + down("arrowup") - down("s") - down("arrowdown") - this.stick.y, strafe: down("d") - down("a") + this.stick.x, turn: 0, look: 0, sprint: this.world.data.player.sprinting ?? false }, aim: { angle: this.world.data.player.angle, pitch: this.world.data.player.pitch ?? 0 } });
+        } else if (!canControl) { this.coop?.clearActions(); }
         const player = this.world.data.player, authX = player.x, authZ = player.z;
         const viewId = this.coopSnapshot?.viewPlayerId ?? this.coop?.session.playerId ?? "";
-        if (!this.coopVisual || this.coopVisual.viewId !== viewId || Math.hypot(authX - this.coopVisual.x, authZ - this.coopVisual.z) > 3) this.coopVisual = { x: authX, z: authZ, viewId };
-        else { const blend = 1 - Math.exp(-18 * dt); this.coopVisual.x += (authX - this.coopVisual.x) * blend; this.coopVisual.z += (authZ - this.coopVisual.z) * blend; }
-        player.x = this.coopVisual.x; player.z = this.coopVisual.z;
+        const predicted=canControl?this.coopMovement.advance(this.world,dt,{forward:down('w')+down('arrowup')-down('s')-down('arrowdown')-this.stick.y,strafe:down('d')-down('a')+this.stick.x,sprint:player.sprinting??false},now,viewId):{x:authX,z:authZ};
+        player.x = predicted.x; player.z = predicted.z;
         try { this.renderer?.draw(this.world, dt); } finally { player.x = authX; player.z = authZ; }
         this.renderer?.drawPeers(this.coopSnapshot?.room.players ?? [], viewId, dt);
         const snapshot = this.coopSnapshot;

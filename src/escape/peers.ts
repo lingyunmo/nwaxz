@@ -1,5 +1,5 @@
 /** Pure helpers and the isolated world-space renderer for remote co-op survivors. */
-import { Color3, Vector3 } from "@babylonjs/core/Maths/math.js";
+import { Color3 } from "@babylonjs/core/Maths/math.js";
 import { Constants } from "@babylonjs/core/Engines/constants.js";
 import { Material } from "@babylonjs/core/Materials/material.js";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial.js";
@@ -49,9 +49,6 @@ export class PeerActorsRenderer {
     const live = new Set<string>();
     const delta = Math.max(0, Math.min(.12, Number.isFinite(dt) ? dt : 1 / 60));
     const smooth = 1 - Math.exp(-delta * 11);
-    const cameraForward = this.camera.getDirection(Vector3.Forward());
-    const cameraAngle = Math.atan2(cameraForward.z, cameraForward.x);
-    const viewFromAngle = wrapPeerAngle(cameraAngle + Math.PI);
 
     for (const peer of peers) {
       if (!peerIsRenderable(peer, selfId) || !peer.position) {
@@ -86,12 +83,13 @@ export class PeerActorsRenderer {
       actor.root.scaling.y = 1;
       actor.body.position.y = PEER_HEIGHT * crouchScale * .5 + bob;
       actor.body.scaling.x = PEER_WIDTH;
-      actor.body.scaling.y = crouchScale;
+      actor.body.scaling.y = height;
       actor.bodyMaterial.alpha = peer.status === "reconnecting" ? .42 : 1;
       actor.marker.position.y = height + .38 + bob;
       actor.markerMaterial.alpha = peer.status === "reconnecting" ? .55 : .96;
       actor.marker.setEnabled(true);
       actor.body.setEnabled(!!actor.atlas && actor.atlas.isReady());
+      const viewFromAngle = Math.atan2(this.camera.position.z - actor.root.position.z, this.camera.position.x - actor.root.position.x);
       const cell = peerViewAtlasCell(actor.angle, viewFromAngle);
       if (actor.atlas) {
         actor.atlas.uOffset = cell.column / 4;
@@ -137,6 +135,7 @@ export class PeerActorsRenderer {
     bodyMaterial.disableDepthWrite = true;
     bodyMaterial.specularColor.set(.035, .035, .03);
     bodyMaterial.ambientColor.set(.16, .15, .12);
+    bodyMaterial.emissiveColor.set(.6, .6, .6);
     body.material = bodyMaterial;
 
     const marker = MeshBuilder.CreatePlane(`coop-peer-slot-${slot}`, { width: .38, height: .38 }, this.scene);
@@ -154,6 +153,7 @@ export class PeerActorsRenderer {
     const definition = peerAvatarDefinition(avatar);
     actor.atlas?.dispose();
     const atlas = new Texture(definition.asset, this.scene, true, true, Texture.BILINEAR_SAMPLINGMODE);
+    atlas.hasAlpha = true;
     atlas.uScale = .25;
     atlas.vScale = .5;
     atlas.vOffset = .5;
@@ -169,6 +169,7 @@ export class PeerActorsRenderer {
     if (existing) return existing;
     const color = SLOT_COLORS[slot];
     const texture = new DynamicTexture(`coop-peer-slot-texture-${slot}`, { width: 128, height: 128 }, this.scene, false);
+    texture.hasAlpha = true;
     const ctx = texture.getContext() as unknown as CanvasRenderingContext2D;
     const glow = ctx.createRadialGradient(64, 64, 6, 64, 64, 58);
     glow.addColorStop(0, `${color}55`); glow.addColorStop(.48, `${color}24`); glow.addColorStop(1, `${color}00`);
@@ -176,7 +177,7 @@ export class PeerActorsRenderer {
     ctx.strokeStyle = color; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(64, 64, 27, 0, Math.PI * 2); ctx.stroke();
     ctx.fillStyle = "#f5f1df"; ctx.font = "bold 52px Georgia, serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.shadowColor = color; ctx.shadowBlur = 14; ctx.fillText(String(slot), 64, 66);
-    texture.update(false);
+    texture.update(true);
     const material = new StandardMaterial(`coop-peer-slot-material-${slot}`, this.scene);
     material.diffuseTexture = texture;
     material.emissiveColor = new Color3(.8, .8, .8);

@@ -43,6 +43,8 @@ test("release readiness, UTF-8, asset caching, and private-file isolation", asyn
   const policy = page.headers.get("content-security-policy");
   assert.match(policy, /img-src 'self' data: blob:/, "embedded GLB textures can use browser blob image URLs");
   assert.match(policy, /script-src 'self';/);
+  assert.ok(policy.includes(`wss://127.0.0.1:${server.address().port}`),'same-host WSS is explicit for browsers that exclude sockets from self');
+  assert.ok(!policy.includes('wss:*')&&!policy.includes('ws:*'),'socket permission stays limited to this host');
   assert.ok(!policy.includes("unsafe-eval") && !policy.includes("unsafe-inline"));
   assert.match(
     (await request("/assets/app-1234abcd.js")).headers.get("cache-control"),

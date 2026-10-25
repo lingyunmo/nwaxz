@@ -124,6 +124,11 @@ async function run() {
   assert(slotLumas.every(luma => luma > 150), `slot numbers 1/2/3 should render through the wall; lumas=${slotLumas}, points=${JSON.stringify(markerPoints)}`);
   const slotOrientation = markerOrientation(centerActor);
   assert(players.every(player => actorFor(player.id).markerMaterial.diffuseTexture.hasAlpha && actorFor(player.id).atlas.hasAlpha), "marker and survivor textures must retain transparent pixels");
+  const originalTarget=camera.getTarget().clone();
+  const originalCells=players.map(p=>[actorFor(p.id).atlas.uOffset,actorFor(p.id).atlas.vOffset]);
+  camera.setTarget(camera.position.add(new Vector3(1,0,1)));render();
+  assert(JSON.stringify(originalCells)===JSON.stringify(players.map(p=>[actorFor(p.id).atlas.uOffset,actorFor(p.id).atlas.vOffset])), 'turning the camera in place cannot change an actor body direction');
+  camera.setTarget(originalTarget);render();
 
   const cameraForward = camera.getDirection(Vector3.Forward());
   const viewFrom = Math.atan2(cameraForward.z, cameraForward.x) + Math.PI;
@@ -145,11 +150,15 @@ async function run() {
   for (let frame = 0; frame < 10; frame++) render(.12);
   const markersAfter = players.map(player => ({ name: actorFor(player.id).marker.name, material: actorFor(player.id).markerMaterial.name }));
   assert(JSON.stringify(markersBefore) === JSON.stringify(markersAfter), "each player's slot marker must remain stable as the view turns");
+  scene.ambientColor.set(0,0,0);for(const light of scene.lights)light.intensity=.055;wall.setEnabled(false);render();
+  const darkBodyPixel=pixel(bodyPoint.x,bodyPoint.y);
+  assert(darkBodyPixel.reduce((a,b)=>a+b,0)/3>25,`survivor texture must remain readable in the actual dim map lighting: ${darkBodyPixel}`);
+  (window as any).__coopPeerFrame=canvas.toDataURL('image/png');
   const meshesBeforeClear = scene.meshes.filter(mesh => mesh.name.startsWith("coop-peer-")).length;
   peersRenderer.clear(); engine.beginFrame(); scene.render(); engine.endFrame();
   const meshesAfterClear = scene.meshes.filter(mesh => mesh.name.startsWith("coop-peer-")).length;
   assert(meshesBeforeClear === 6 && meshesAfterClear === 0, `clear must destroy every peer body and marker mesh (${meshesBeforeClear} -> ${meshesAfterClear})`);
-  return { bodyVisibleWithoutWall: visibleBodyPixel, bodyPixelBehindWall: blockedBodyPixel, wallPixel: sampledWallPixel, slotMarkerLumas: slotLumas, slotOrientation, directionHashes, atlasCells, shaderCompileFrames: compileFrames, meshesBeforeClear, meshesAfterClear };
+  return { bodyVisibleWithoutWall: visibleBodyPixel, darkBodyPixel, bodyPixelBehindWall: blockedBodyPixel, wallPixel: sampledWallPixel, slotMarkerLumas: slotLumas, slotOrientation, directionHashes, atlasCells, shaderCompileFrames: compileFrames, meshesBeforeClear, meshesAfterClear };
 }
 
 (window as any).__coopPeerReport = run().catch((error: unknown) => ({ error: error instanceof Error ? error.stack ?? error.message : String(error) }));

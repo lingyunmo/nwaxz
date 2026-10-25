@@ -452,6 +452,17 @@ export class EscapeWorld {
     if (!blocked(body.x + dx, body.z)) body.x += dx;
     if (!blocked(body.x, body.z + dz)) body.z += dz;
   }
+  /** Local collision prediction only: no AI, inventory, timers, senses or events. */
+  predictMovement(from: Vec, seconds: number, input: EscapeInput, angle = this.data.player.angle): Vec {
+    const next = {...from}, p = this.data.player;
+    if(this.data.hidden)return next;
+    const forward=Math.max(-1,Math.min(1,input.forward??0)),side=Math.max(-1,Math.min(1,input.strafe??0));
+    const running=!!(input.sprint&&!p.crouched&&!p.winded&&p.stamina>2);
+    const speed=running?3:p.crouched?.95:1.7,norm=Math.max(1,Math.hypot(forward,side));
+    let left=Math.min(.4,Math.max(0,seconds));
+    while(left>.00001){const dt=Math.min(left,1/60);this.move(next,(Math.cos(angle)*forward-Math.sin(angle)*side)*speed*dt/norm,(Math.sin(angle)*forward+Math.cos(angle)*side)*speed*dt/norm);left-=dt;}
+    return next;
+  }
   advance(seconds: number, input: EscapeInput = {}) {
     if (this.data.phase !== "playing") return;
     let left = Math.min(.15, Math.max(0, seconds));

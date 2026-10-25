@@ -139,6 +139,7 @@ export class CoopService {
       syncTeam(player.actorWorld, room.world);
       if (body.action === "ward") for (const member of room.players.values()) member.actorWorld.clearInterferenceAuthoritative();
       player.actor = { ...player.actorWorld.data.player };
+      player.position = {x:player.actor.x,z:player.actor.z};
       player.hidden = player.actorWorld.data.hidden;
       player.pending = player.actorWorld.pending;
       if (escaped) { player.status = "escaped"; player.actorWorld.data.phase = "playing"; }
@@ -269,7 +270,13 @@ export class CoopService {
         }
         if (room.phase === "lobby") { room.lastLobbyRevision = room.revision; room.lastLobbyHeartbeat = now; }
         room.snapshotEvents = [...room.world.drainEvents().filter(event => event.type !== "caught"), ...room.sharedEvents.splice(0)];
-        for (const p of room.players.values()) { const peer = room.peers.get(p.id); if (!peer || peer.res.writableEnded) continue; const payload = JSON.stringify(this.snapshot(room, p)); if (peer.res.writableLength > 256 * 1024) { this.closePeer(peer); room.peers.delete(p.id); if (p.status === "connected") p.status = "reconnecting"; p.disconnectedAt = now; if (room.leaderId === p.id) this.electLeader(room); continue; } if (!peer.res.write(`event: snapshot\ndata: ${payload}\n\n`)) peer.lastSent = now; }
+        for (const p of room.players.values()) {
+          const peer = room.peers.get(p.id); if (!peer || peer.res.writableEnded) continue;
+          if (peer.res.writableLength > 256 * 1024) { this.closePeer(peer); room.peers.delete(p.id); if (p.status === "connected") p.status = "reconnecting"; p.disconnectedAt = now; if (room.leaderId === p.id) this.electLeader(room); continue; }
+          const snapshot=this.snapshot(room,p);
+          if(peer.res.sendSnapshot)peer.res.sendSnapshot(snapshot);
+          else if(!peer.res.write(`event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`))peer.lastSent=now;
+        }
       }
     }
   }

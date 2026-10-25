@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -91,6 +91,8 @@ try {
   }
   assert.equal(result.meshesBeforeClear, 6);
   assert.equal(result.meshesAfterClear, 0);
+  const frame=await connection.send('Runtime.evaluate',{expression:'window.__coopPeerFrame',returnByValue:true});
+  if(typeof frame.result?.value==='string'){await mkdir(resolve(root,'.local'),{recursive:true});await writeFile(resolve(root,'.local/coop-peer-dark.png'),Buffer.from(frame.result.value.split(',')[1],'base64'));}
   console.log("co-op peer headless render passed:");
   console.log(JSON.stringify({ edge: version.Browser, ...result }, null, 2));
 } finally {

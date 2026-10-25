@@ -1,5 +1,5 @@
 /** Pure helpers and the isolated world-space renderer for remote co-op survivors. */
-import { Color3, Vector3 } from "@babylonjs/core/Maths/math.js";
+import { Color3 } from "@babylonjs/core/Maths/math.js";
 import { Constants } from "@babylonjs/core/Engines/constants.js";
 import { Material } from "@babylonjs/core/Materials/material.js";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial.js";
@@ -49,9 +49,6 @@ export class PeerActorsRenderer {
     const live = new Set<string>();
     const delta = Math.max(0, Math.min(.12, Number.isFinite(dt) ? dt : 1 / 60));
     const smooth = 1 - Math.exp(-delta * 11);
-    const cameraForward = this.camera.getDirection(Vector3.Forward());
-    const cameraAngle = Math.atan2(cameraForward.z, cameraForward.x);
-    const viewFromAngle = wrapPeerAngle(cameraAngle + Math.PI);
 
     for (const peer of peers) {
       if (!peerIsRenderable(peer, selfId) || !peer.position) {
@@ -86,12 +83,13 @@ export class PeerActorsRenderer {
       actor.root.scaling.y = 1;
       actor.body.position.y = PEER_HEIGHT * crouchScale * .5 + bob;
       actor.body.scaling.x = PEER_WIDTH;
-      actor.body.scaling.y = crouchScale;
+      actor.body.scaling.y = height;
       actor.bodyMaterial.alpha = peer.status === "reconnecting" ? .42 : 1;
       actor.marker.position.y = height + .38 + bob;
       actor.markerMaterial.alpha = peer.status === "reconnecting" ? .55 : .96;
       actor.marker.setEnabled(true);
       actor.body.setEnabled(!!actor.atlas && actor.atlas.isReady());
+      const viewFromAngle = Math.atan2(this.camera.position.z - actor.root.position.z, this.camera.position.x - actor.root.position.x);
       const cell = peerViewAtlasCell(actor.angle, viewFromAngle);
       if (actor.atlas) {
         actor.atlas.uOffset = cell.column / 4;
@@ -137,6 +135,7 @@ export class PeerActorsRenderer {
     bodyMaterial.disableDepthWrite = true;
     bodyMaterial.specularColor.set(.035, .035, .03);
     bodyMaterial.ambientColor.set(.16, .15, .12);
+    bodyMaterial.emissiveColor.set(.6, .6, .6);
     body.material = bodyMaterial;
 
     const marker = MeshBuilder.CreatePlane(`coop-peer-slot-${slot}`, { width: .38, height: .38 }, this.scene);

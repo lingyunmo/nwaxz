@@ -7,6 +7,7 @@ const makeResponse = () => ({
   writableEnded: false, writableLength: 0, bytes: 0, snapshots: 0,
   status() { return this; }, set() { return this; }, flushHeaders() {}, on() {},
   write(chunk) { if (chunk.startsWith("event: snapshot")) { this.bytes += Buffer.byteLength(chunk); this.snapshots++; } return true; },
+  sendSnapshot(data) { this.bytes += Buffer.byteLength(JSON.stringify({type:'snapshot',data})); this.snapshots++; },
   end() { this.writableEnded = true; },
 });
 

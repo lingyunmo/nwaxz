@@ -74,6 +74,20 @@ test("solid cabinets coexist with upright original-art frog and the canonical be
     models = installEscapeModels(view.scene, props, { original: new Texture(null, view.scene), actions: new Texture(null, view.scene), directionIdle: new Texture(null, view.scene), directionWalk: new Texture(null, view.scene) });
     assert.equal(models.cabinets.size, PROPS.filter(prop => prop.kind === "wardrobe").length);
     const w = new EscapeWorld(); models.animate(w, .3);
+    const mainPower = view.scene.getMeshByName("power-state:power"), basementPower = view.scene.getMeshByName("power-state:basement-relay");
+    const sluiceLamp = view.scene.getMeshByName("valve-state:basement-sluice");
+    const sluiceWheel = models.propRoots.get("basement-sluice").getDescendants().find(n => n.name.includes("valve_wheel"));
+    assert.ok(mainPower?.material && basementPower?.material && sluiceLamp?.material && sluiceWheel);
+    w.data.power = true; models.animate(w, .1);
+    assert.equal(mainPower.material.name, "valve-state-ready");
+    assert.equal(basementPower.material.name, "power-state-off", "ground power cannot pretend the basement relay is repaired");
+    assert.equal(sluiceLamp.material.name, "valve-state-basement-sluice");
+    const beforeWheel = sluiceWheel.rotation.z;
+    w.data.basement.power = w.data.basement.sluice = true; models.animate(w, .1);
+    assert.equal(basementPower.material.name, "valve-state-ready"); assert.equal(sluiceLamp.material.name, "valve-state-ready");
+    assert.ok(sluiceWheel.rotation.z > beforeWheel, "the actual sluice wheel responds to its own completed task");
+    w.data.power = false; w.data.basement.power = w.data.basement.sluice = false; models.animate(w, .1);
+    assert.equal(basementPower.material.name, "power-state-off"); assert.equal(sluiceLamp.material.name, "valve-state-basement-sluice");
     assert.equal(models.actorRoot.position.x, w.data.hunter.x * CELL);
     for (const mesh of models.actorMeshes) {
       assert.equal(mesh.billboardMode, Mesh.BILLBOARDMODE_Y, "camera pitch never tips the character");

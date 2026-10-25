@@ -71,6 +71,28 @@ function assert(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
 }
 
+function markerOrientation(actor: any) {
+  actor.marker.scaling.setAll(4);
+  render();
+  actor.marker.computeWorldMatrix(true);
+  const points = actor.marker.getBoundingInfo().boundingBox.vectorsWorld.map((v: Vector3) => project(v));
+  const left = Math.min(...points.map((p: {x:number}) => p.x)), right = Math.max(...points.map((p: {x:number}) => p.x));
+  const bottom = Math.min(...points.map((p: {y:number}) => p.y)), top = Math.max(...points.map((p: {y:number}) => p.y));
+  const ctx = actor.markerMaterial.diffuseTexture.getContext() as CanvasRenderingContext2D;
+  const reference = ctx.getImageData(0, 0, 128, 128).data;
+  let aa = 0, uu = 0, ff = 0, au = 0, af = 0;
+  const refInk = (u:number,v:number) => {const i=(Math.min(127,Math.max(0,Math.floor(v*128)))*128+Math.min(127,Math.max(0,Math.floor(u*128))))*4;return Math.max(0,Math.min(reference[i],reference[i+1],reference[i+2])-200);};
+  for(let y=bottom;y<=top;y++)for(let x=left;x<=right;x++){
+    const u=(x-left)/(right-left),v=(top-y)/(top-bottom),rgb=pixel(x,y);
+    const a=Math.max(0,Math.min(...rgb)-150),up=refInk(u,v),flipped=refInk(u,1-v);
+    aa+=a*a;uu+=up*up;ff+=flipped*flipped;au+=a*up;af+=a*flipped;
+  }
+  actor.marker.scaling.setAll(1);render();
+  const upright=au/Math.sqrt(aa*uu),flipped=af/Math.sqrt(aa*ff);
+  assert(Number.isFinite(upright)&&upright>flipped+.05,`slot 2 must match upright canvas text rather than upside-down text: ${upright} vs ${flipped}`);
+  return {upright,flipped};
+}
+
 async function run() {
   render();
   for (let attempt = 0; attempt < 120 && players.some(player => !actorFor(player.id)?.atlas?.isReady()); attempt++) { await flush(); render(); }
@@ -100,6 +122,8 @@ async function run() {
   assert(visibleDistance > 25, `body should render when no wall blocks it; body=${visibleBodyPixel} background=${backgroundPixel}`);
   const slotLumas = markerPoints.map(point => maxLuma(point, 13));
   assert(slotLumas.every(luma => luma > 150), `slot numbers 1/2/3 should render through the wall; lumas=${slotLumas}, points=${JSON.stringify(markerPoints)}`);
+  const slotOrientation = markerOrientation(centerActor);
+  assert(players.every(player => actorFor(player.id).markerMaterial.diffuseTexture.hasAlpha && actorFor(player.id).atlas.hasAlpha), "marker and survivor textures must retain transparent pixels");
 
   const cameraForward = camera.getDirection(Vector3.Forward());
   const viewFrom = Math.atan2(cameraForward.z, cameraForward.x) + Math.PI;
@@ -125,7 +149,7 @@ async function run() {
   peersRenderer.clear(); engine.beginFrame(); scene.render(); engine.endFrame();
   const meshesAfterClear = scene.meshes.filter(mesh => mesh.name.startsWith("coop-peer-")).length;
   assert(meshesBeforeClear === 6 && meshesAfterClear === 0, `clear must destroy every peer body and marker mesh (${meshesBeforeClear} -> ${meshesAfterClear})`);
-  return { bodyVisibleWithoutWall: visibleBodyPixel, bodyPixelBehindWall: blockedBodyPixel, wallPixel: sampledWallPixel, slotMarkerLumas: slotLumas, directionHashes, atlasCells, shaderCompileFrames: compileFrames, meshesBeforeClear, meshesAfterClear };
+  return { bodyVisibleWithoutWall: visibleBodyPixel, bodyPixelBehindWall: blockedBodyPixel, wallPixel: sampledWallPixel, slotMarkerLumas: slotLumas, slotOrientation, directionHashes, atlasCells, shaderCompileFrames: compileFrames, meshesBeforeClear, meshesAfterClear };
 }
 
 (window as any).__coopPeerReport = run().catch((error: unknown) => ({ error: error instanceof Error ? error.stack ?? error.message : String(error) }));

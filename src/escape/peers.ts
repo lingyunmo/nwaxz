@@ -154,6 +154,7 @@ export class PeerActorsRenderer {
     const definition = peerAvatarDefinition(avatar);
     actor.atlas?.dispose();
     const atlas = new Texture(definition.asset, this.scene, true, true, Texture.BILINEAR_SAMPLINGMODE);
+    atlas.hasAlpha = true;
     atlas.uScale = .25;
     atlas.vScale = .5;
     atlas.vOffset = .5;
@@ -169,6 +170,7 @@ export class PeerActorsRenderer {
     if (existing) return existing;
     const color = SLOT_COLORS[slot];
     const texture = new DynamicTexture(`coop-peer-slot-texture-${slot}`, { width: 128, height: 128 }, this.scene, false);
+    texture.hasAlpha = true;
     const ctx = texture.getContext() as unknown as CanvasRenderingContext2D;
     const glow = ctx.createRadialGradient(64, 64, 6, 64, 64, 58);
     glow.addColorStop(0, `${color}55`); glow.addColorStop(.48, `${color}24`); glow.addColorStop(1, `${color}00`);
@@ -176,7 +178,7 @@ export class PeerActorsRenderer {
     ctx.strokeStyle = color; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(64, 64, 27, 0, Math.PI * 2); ctx.stroke();
     ctx.fillStyle = "#f5f1df"; ctx.font = "bold 52px Georgia, serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.shadowColor = color; ctx.shadowBlur = 14; ctx.fillText(String(slot), 64, 66);
-    texture.update(false);
+    texture.update(true);
     const material = new StandardMaterial(`coop-peer-slot-material-${slot}`, this.scene);
     material.diffuseTexture = texture;
     material.emissiveColor = new Color3(.8, .8, .8);

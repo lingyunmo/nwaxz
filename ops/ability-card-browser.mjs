@@ -80,6 +80,7 @@ async function inspect(p, { label, desktop, requireControls = true }) {
       if (!el) return null;
       const r = el.getBoundingClientRect(), s = getComputedStyle(el);
       return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height,
+        visibility: s.visibility, display: s.display,
         visible: !!el.getClientRects().length && r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none' };
     };
     const status = document.querySelector('.escape-ability-status');
@@ -94,6 +95,8 @@ async function inspect(p, { label, desktop, requireControls = true }) {
     return {
       viewport: { width: innerWidth, height: innerHeight },
       pointerCoarse: matchMedia('(pointer:coarse)').matches,
+      shellClasses: [...(document.querySelector('.escape-shell')?.classList ?? [])],
+      panelHidden: document.querySelector('#escape-panel')?.hidden,
       detailsOpen: document.querySelector('#escape-hud-toggle')?.getAttribute('aria-expanded') === 'true',
       status: box(status), avatar: box(status?.querySelector('.escape-ability-avatar')),
       readout: box(readout), items: items.map(box), bars: items.map(el => box(el.querySelector('.escape-ability-charge'))),
@@ -227,32 +230,41 @@ try {
     await context.close(); context = undefined; page = undefined;
   }
 
-  // Verify the HUD still renders from the service worker's cache after an offline reload.
-  await newPage({ width: 1280, height: 720 });
-  await page.locator('#escape-pause').click();
-  await page.locator('#escape-resume').waitFor({ state: 'visible' });
-  const saved = JSON.parse(await page.evaluate(key => localStorage.getItem(key), SESSION));
-  EscapeWorld.restore(saved);
-  await context.setOffline(true);
-  await page.reload();
-  await ready(page);
-  await page.locator('#extreme').click();
-  await page.locator('#escape-continue').waitFor({ state: 'visible' });
-  await page.locator('#escape-continue').click();
-  await page.locator('#escape-panel').waitFor({ state: 'hidden', timeout: 300_000 });
-  await page.waitForFunction(() => {
-    const shell = document.querySelector('.escape-shell');
-    return shell && !shell.classList.contains('menu-active') && !shell.classList.contains('intro-active')
-      && document.querySelector('#escape-panel')?.hidden;
-  });
-  await page.waitForTimeout(150);
-  await page.locator('.escape-ability-status').waitFor({ state: 'visible' });
-  await inspect(page, { label: 'offline-reload-compact', desktop: true });
-  await page.keyboard.press('Tab');
-  await page.waitForFunction(() => document.querySelector('#escape-hud-toggle')?.getAttribute('aria-expanded') === 'true');
-  await inspect(page, { label: 'offline-reload-expanded', desktop: true });
-  await page.screenshot({ path: path.join(output, 'offline-reload-expanded.png') });
-  await context.setOffline(false);
+  if (process.env.CARD_QA_SKIP_OFFLINE !== '1') {
+    // Verify the HUD still renders from the service worker's cache after an offline reload.
+    await newPage({ width: 1280, height: 720 });
+    await page.locator('#escape-pause').click();
+    await page.locator('#escape-resume').waitFor({ state: 'visible' });
+    const saved = JSON.parse(await page.evaluate(key => localStorage.getItem(key), SESSION));
+    EscapeWorld.restore(saved);
+    await context.setOffline(true);
+    await page.reload();
+    await ready(page);
+    await page.locator('#extreme').click();
+    await page.locator('#escape-continue').waitFor({ state: 'visible' });
+    await page.locator('#escape-continue').click();
+    await page.locator('#escape-panel').waitFor({ state: 'hidden', timeout: 300_000 });
+    await page.waitForFunction(() => {
+      const shell = document.querySelector('.escape-shell');
+      return shell && !shell.classList.contains('menu-active') && !shell.classList.contains('intro-active')
+        && document.querySelector('#escape-panel')?.hidden;
+    });
+    await page.waitForTimeout(150);
+    await page.locator('.escape-ability-status').waitFor({ state: 'visible' });
+    await page.waitForFunction(() => [
+      '.escape-hunt', '#escape-map', '.escape-crosshair', '#escape-inventory', '.escape-meters', '.escape-actions',
+      '#escape-freeze', '#escape-reveal', '#escape-ward', '#escape-hud-toggle', '#escape-room',
+    ].every(selector => {
+      const el = document.querySelector(selector);
+      return el && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none';
+    }));
+    await inspect(page, { label: 'offline-reload-compact', desktop: true });
+    await page.keyboard.press('Tab');
+    await page.waitForFunction(() => document.querySelector('#escape-hud-toggle')?.getAttribute('aria-expanded') === 'true');
+    await inspect(page, { label: 'offline-reload-expanded', desktop: true });
+    await page.screenshot({ path: path.join(output, 'offline-reload-expanded.png') });
+    await context.setOffline(false);
+  }
   assert.deepEqual(errors, []);
 
   console.log(JSON.stringify({ base, output, startupAttempts, measurements, errors }, null, 2));

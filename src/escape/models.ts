@@ -1,6 +1,7 @@
 import type { AssetContainer } from "@babylonjs/core/assetContainer.js";
 import type { Scene } from "@babylonjs/core/scene.js";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh.js";
+import type { Material } from "@babylonjs/core/Materials/material.js";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode.js";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder.js";
 import { Vector3, Color3 } from "@babylonjs/core/Maths/math.js";
@@ -17,6 +18,8 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, texture
   const wheels = new Map<string, TransformNode>();
   let drainWheel: TransformNode | undefined;
   const valveLamps = new Map<string, ReturnType<typeof MeshBuilder.CreateSphere>>();
+  const powerLamps = new Map<string, ReturnType<typeof MeshBuilder.CreateSphere>>();
+  const powerMaterials = new Map<string, Material & { emissiveColor: Color3 }>();
   const crystals = new Map<string, ReturnType<typeof MeshBuilder.CreatePolyhedron>>();
   const crystalMaterials = new Map<string, ReturnType<typeof colorMaterial>>();
   for (const [kind, color] of [["freeze", "#8be5ff"], ["reveal", "#e49aff"]] as const) crystalMaterials.set(kind, colorMaterial(scene, `crystal-${kind}`, color, true));
@@ -25,8 +28,9 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, texture
     mesh.position.set(crystal.x * CELL, floorYAt(crystal) + .66, crystal.z * CELL); mesh.material = crystalMaterials.get(crystal.kind)!; mesh.isPickable = false;
     crystals.set(crystal.id, mesh);
   }
-  const lampColors: Record<string, string> = { "valve-cold": "#74b9ce", "valve-return": "#d2a655", "valve-vent": "#c6c8b6" };
+  const lampColors: Record<string, string> = { "valve-cold": "#74b9ce", "valve-return": "#d2a655", "valve-vent": "#c6c8b6", "basement-sluice": "#875c53" };
   const readyLamp = colorMaterial(scene, "valve-state-ready", "#52bf75", true);
+  const powerOffLamp = colorMaterial(scene, "power-state-off", "#87443c", true);
   const idleLamps = new Map(Object.entries(lampColors).map(([id, color]) => [id, colorMaterial(scene, `valve-state-${id}`, color, true)]));
   const sources = [...props.transformNodes, ...props.meshes];
   for (const object of PROPS) {
@@ -45,6 +49,18 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, texture
     }
     propRoots.set(object.id, clone);
     for (const mesh of clone.getChildMeshes()) { mesh.receiveShadows = true; mesh.isPickable = false; }
+    if (object.kind === "power") {
+      for (const mesh of clone.getChildMeshes()) if (mesh.material?.name === "fuse_on_green") {
+        const material = powerMaterials.get(object.id) ?? mesh.material.clone(`fuse-indicator:${object.id}`);
+        if (material && "emissiveColor" in material) {
+          mesh.material = material;
+          powerMaterials.set(object.id, material as typeof material & { emissiveColor: Color3 });
+        }
+      }
+      const lamp = MeshBuilder.CreateSphere(`power-state:${object.id}`, { diameter: .12 }, scene);
+      lamp.position.set(object.x * CELL, ground + 1.6, object.z * CELL + .29);
+      lamp.material = powerOffLamp; lamp.isPickable = false; powerLamps.set(object.id, lamp);
+    }
     const descendants = clone.getDescendants() as TransformNode[];
     if (object.kind === "wardrobe") {
       const left = descendants.find(n => n.name.includes("wardrobe_door_left"))!, right = descendants.find(n => n.name.includes("wardrobe_door_right"))!;
@@ -115,16 +131,20 @@ export function installEscapeModels(scene: Scene, props: AssetContainer, texture
         doors.left.rotation.y += (-ajar - doors.left.rotation.y) * blend;
         doors.right.rotation.y += (ajar - doors.right.rotation.y) * blend;
       }
-      for (const [id, wheel] of wheels) if (d.expansion?.valves.includes(id)) wheel.rotation.z += dt * 1.7;
+      const valveActive = (id: string) => id === "basement-sluice" ? d.basement.sluice : d.expansion?.valves.includes(id);
+      for (const [id, wheel] of wheels) if (valveActive(id)) wheel.rotation.z += dt * 1.7;
       if (drainWheel && d.drained) drainWheel.rotation.z += dt * 1.7;
-      for (const [id, lamp] of valveLamps) lamp.material = d.expansion?.valves.includes(id) ? readyLamp : idleLamps.get(id)!;
+      for (const [id, lamp] of valveLamps) lamp.material = valveActive(id) ? readyLamp : idleLamps.get(id)!;
+      for (const [id, lamp] of powerLamps) {
+        const active = id === "basement-relay" ? d.basement.power : d.power;
+        lamp.material = active ? readyLamp : powerOffLamp;
+        powerMaterials.get(id)?.emissiveColor.set(0, active ? .6 : .015, 0);
+      }
       for (const [id, root] of propRoots) {
         const expansionProp = EXPANSION_PROP_IDS.has(id);
         root.setEnabled((!expansionProp || !!d.expansion?.enabled) && (!id.endsWith("note") || !d.notes.includes(id)));
       }
-      const powerMat = props.materials.find(m => m.name === "fuse_on_green");
-      if (powerMat && "emissiveColor" in powerMat) (powerMat.emissiveColor as Color3).set(0, d.power ? .6 : .015, 0);
     },
-    dispose() { actor.dispose(); },
+    dispose() { actor.dispose(); for (const material of powerMaterials.values()) material.dispose(); },
   };
 }

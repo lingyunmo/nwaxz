@@ -403,12 +403,17 @@ try {
     }
     const hudText = await page.locator('.escape-ability-readout').innerText();
     assert.doesNotMatch(hudText, /\d|%|下轮|命中率|发动率|秒/);
-    const chargeBars = await page.locator('.escape-ability-charge').evaluateAll(els => els.map(el => ({ max: el.max, value: el.value })));
-    assert.deepEqual(chargeBars.map(bar => bar.max), [35, 45]);
-    assert.deepEqual(chargeBars.map(bar => Math.round(bar.value)), [12, 8]);
     mobileLayouts.push({ viewport, layout, hudText });
     await fullPhoto(page, `mobile-${viewport.width}x${viewport.height}`);
-    await pause(page);
+    const paused = await pause(page);
+    const chargeBars = await page.locator('.escape-ability-charge').evaluateAll(els => els.map(el => ({ max: el.max, value: el.value })));
+    assert.deepEqual(chargeBars.map(bar => bar.max), [35, 45]);
+    for (const [index, kind] of ['sense', 'teleport'].entries()) {
+      const expected = chargeBars[index].max - paused.abilities.cooldowns[kind];
+      // HUD refreshes every100ms. Compare the saved model, not wall-clock timing
+      // assumptions about how long screenshots or a public page should take.
+      assert.ok(Math.abs(chargeBars[index].value - expected) <= .25, JSON.stringify({ kind, chargeBars, paused: paused.abilities }));
+    }
     await exit(page);
   }
 

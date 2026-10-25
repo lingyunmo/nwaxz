@@ -133,7 +133,12 @@
 .escape-crystals button b { position:static; padding:0; color:#ffe3a1; background:none; font:700 23px/1 ui-monospace,monospace; }
 .escape-crystals button small { position:static; grid-column:2/4; padding:0; background:none; color:#cfdee0; font:12px/1.3 ui-monospace,monospace; text-align:left; }
 .escape-crystals button kbd { position:absolute; top:-9px; bottom:auto; left:10px; right:auto; width:auto; height:auto; min-width:22px; padding:2px 4px; border:1px solid #d8c48c; border-radius:3px; background:#151b18; color:#ffdfa0; font:700 12px/1.2 ui-monospace,monospace; }
-.crystal-icon { grid-row:1/3; font-style:normal; font-size:25px; line-height:1; }.crystal-icon.freeze { color:#9be4ff; text-shadow:0 0 9px #66cefa88; }.crystal-icon.reveal { color:#e4acff; text-shadow:0 0 9px #c273ef88; }
+.crystal-icon { grid-row:1/3; font-style:normal; font-size:25px; line-height:1; }.crystal-icon.freeze { color:#9be4ff; text-shadow:0 0 9px #66cefa88; }.crystal-icon.reveal { color:#e4acff; text-shadow:0 0 9px #c273ef88; }.crystal-icon.ward { color:#a5e0a2; text-shadow:0 0 9px #83d48088; }
+#escape-ward.active { border-color:#a5e0a2; background:#203a25ee; box-shadow:0 0 16px #83d48055; }
+#escape-ward-progress { display:block; position:absolute; grid-column:auto; grid-row:auto; bottom:5px; left:43px; right:auto; width:89px; height:5px; margin:0; accent-color:#a5e0a2; }
+#escape-ward-progress::-webkit-progress-bar { border:1px solid #829188; border-radius:3px; background:#182321; }
+#escape-ward-progress::-webkit-progress-value { border-radius:2px; background:#a5e0a2; }
+#escape-ward-progress::-moz-progress-bar { border-radius:2px; background:#a5e0a2; }
 .escape-meters { gap:10px; }.escape-meters label { display:grid; grid-template-columns:30px 20px 120px 30px; gap:6px; color:#f2e8cb; font-size:14px; }.escape-meters label span { font-weight:700; }.escape-meters label b { color:#ffe6a8; font:700 14px ui-monospace,monospace; text-align:right; }.escape-meters meter { width:120px; height:12px; }#escape-battery { --meter-fill:#efd18f; }
 .escape-meters.panting label:nth-child(2) { color:#ffc6a6; }.escape-meters.panting #escape-effort { --meter-fill:#e68f6c; }
 .escape-movement { position:absolute; left:0; bottom:119px; padding:7px 10px; border-left:3px solid #b2bf94; border-radius:3px; background:#0d1615e3; color:#f2e2bf; font-size:13px; white-space:nowrap; }
@@ -154,19 +159,20 @@
  .escape-exposure meter { height:12px; margin:6px 0 4px; }.escape-exposure p { font-size:11px; }.escape-secondary-meters { gap:6px; margin-top:7px; padding-top:7px; }.escape-source { padding:6px 5px; gap:4px; grid-template-rows:auto 9px minmax(38px,auto) auto; }.escape-source strong { font-size:12px; }.escape-source b { font-size:16px; }.escape-source small { font-size:11px; line-height:1.4; }.escape-source em { font-size:12px; line-height:1.4; }.escape-source meter { height:9px; }
  .escape-movement { left:0; bottom:212px; max-width:calc(100vw - 44px); white-space:normal; font-size:12px; padding:5px 8px; }
  .escape-bottom .escape-meters { bottom:137px; left:0; transform:none; display:grid; gap:6px; }.escape-meters label { grid-template-columns:26px 14px 72px 24px; gap:4px; font-size:12px; }.escape-meters label b { font-size:12px; }.escape-meters svg { width:14px; height:14px; }.escape-meters meter { width:72px; height:10px; }
- .escape-actions { display:grid; grid-template-columns:repeat(2,54px); grid-template-rows:repeat(3,54px); gap:7px 12px; }.escape-actions>button,.escape-crystals button { width:54px; height:54px; min-width:54px; min-height:54px; padding:8px; }.escape-actions>button span { display:none; }.escape-actions>button kbd { display:none; }.escape-actions>button svg { width:25px; height:25px; }
- .escape-crystals { display:contents; }.escape-crystals button { display:grid; grid-template-columns:1fr; grid-template-rows:1fr; padding:7px; }.escape-crystals button span { display:none; }.crystal-icon { grid-row:auto; font-size:27px; }.escape-crystals button b { position:absolute; top:-5px; right:-4px; min-width:20px; padding:1px 3px; border:1px solid #c6b879; border-radius:4px; background:#14201e; font-size:18px; }.escape-crystals button small { position:absolute; bottom:1px; top:auto; left:0; right:0; grid-column:auto; text-align:center; font-size:11px; }.escape-crystals button kbd { display:none; }
+ .escape-actions { display:grid; grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,46px); gap:6px 8px; width:154px; }.escape-actions>button,.escape-crystals button { width:46px; height:46px; min-width:46px; min-height:46px; padding:6px; }.escape-actions>button span { display:none; }.escape-actions>button kbd { display:none; }.escape-actions>button svg { width:25px; height:25px; }
+ .escape-crystals { display:contents; }.escape-crystals button { display:grid; grid-template-columns:1fr; grid-template-rows:1fr; padding:7px; }.escape-crystals button span { display:none; }.crystal-icon { grid-row:auto; font-size:27px; }.escape-crystals button b { position:absolute; top:-5px; right:-4px; min-width:20px; padding:1px 3px; border:1px solid #c6b879; border-radius:4px; background:#14201e; font-size:18px; }.escape-crystals button small { position:absolute; bottom:6px; top:auto; left:0; right:0; grid-column:auto; text-align:center; font-size:11px; }.escape-crystals button kbd { display:none; }#escape-ward-progress { position:absolute; grid-column:auto; grid-row:auto; bottom:2px; left:4px; right:auto; width:38px; height:3px; margin:0; }
+ .escape-crystals button small { display:none; }
  .escape-shell .escape-interact { bottom:220px; font-size:13px; }.escape-search { top:53%; width:min(300px,72vw); font-size:15px; }.escape-danger { top:57%; font-size:12px; }.escape-notice { bottom:310px; font-size:12px; }
 }
 @media (pointer:coarse) and (max-height:650px) and (orientation:portrait) {
  .escape-hunt { top:114px; left:8px; width:calc(100vw - 16px); padding:7px; }.escape-exposure p { display:none; }.escape-exposure-heading b { font-size:23px; }.escape-exposure-heading strong:first-child { font-size:12px; }#escape-hunt-state { max-width:124px; font-size:10px; }.escape-secondary-meters { margin-top:5px; padding-top:5px; gap:5px; }.escape-source { padding:5px 4px; gap:3px; grid-template-rows:auto 8px minmax(32px,auto) auto; }.escape-source small { font-size:11px; line-height:1.3; }.escape-source b { font-size:15px; }.escape-source em { font-size:12px; letter-spacing:-.5px; }.escape-source meter { height:8px; }
  .escape-movement { bottom:203px; font-size:11px; }.escape-bottom .escape-meters { bottom:132px; gap:5px; }.escape-meters label { grid-template-columns:25px 12px 59px 23px; gap:3px; }.escape-meters meter { width:59px; }
- .escape-actions { grid-template-columns:repeat(2,48px); grid-template-rows:repeat(3,48px); gap:6px 8px; }.escape-actions>button,.escape-crystals button { width:48px; height:48px; min-width:48px; min-height:48px; padding:6px; }.escape-shell .escape-interact { bottom:204px; padding:10px 12px; font-size:12px; }.escape-notice { top:auto; bottom:250px; max-width:90%; font-size:11px; }.escape-danger { top:52%; }.escape-search { top:52%; padding:10px 15px; }
+ .escape-actions { grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,46px); gap:6px 8px; width:154px; }.escape-actions>button,.escape-crystals button { width:46px; height:46px; min-width:46px; min-height:46px; padding:6px; }#escape-ward-progress { width:38px; }.escape-shell .escape-interact { bottom:204px; padding:10px 12px; font-size:12px; }.escape-notice { top:auto; bottom:250px; max-width:90%; font-size:11px; }.escape-danger { top:52%; }.escape-search { top:52%; padding:10px 15px; }
 }
 @media (pointer:coarse) and (orientation:landscape) and (max-height:540px) {
  .escape-hunt { top:8px; left:50%; transform:translateX(-50%); width:min(440px,51vw); padding:6px 8px; }.escape-exposure-heading { min-height:25px; }.escape-exposure-heading b { font-size:22px; }.escape-exposure-heading strong:first-child { font-size:12px; }.escape-exposure p { display:none; }.escape-exposure meter { height:10px; margin:4px 0; }.escape-secondary-meters { margin-top:4px; padding-top:4px; gap:5px; }.escape-source { grid-template-rows:auto 8px minmax(30px,auto) auto; gap:3px; padding:4px; }.escape-source small { font-size:11px; line-height:1.25; }.escape-source b { font-size:15px; }
  .escape-inventory,.escape-inventory.expansion-inventory { top:115px; left:auto; right:10px; grid-template-columns:repeat(6,24px); }.escape-inventory .escape-slot { width:24px; height:24px; }
- .escape-movement { bottom:177px; font-size:11px; }.escape-bottom .escape-meters { bottom:109px; left:0; gap:4px; }.escape-meters label { grid-template-columns:25px 12px 60px 23px; font-size:12px; }.escape-meters meter { width:60px; }.escape-actions { grid-template-columns:repeat(2,46px); grid-template-rows:repeat(3,46px); gap:5px 8px; }.escape-actions>button,.escape-crystals button { width:46px; height:46px; min-width:46px; min-height:46px; padding:6px; }
+ .escape-movement { bottom:177px; font-size:11px; }.escape-bottom .escape-meters { bottom:109px; left:0; gap:4px; }.escape-meters label { grid-template-columns:25px 12px 60px 23px; font-size:12px; }.escape-meters meter { width:60px; }.escape-actions { grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,46px); gap:5px 8px; width:154px; }.escape-actions>button,.escape-crystals button { width:46px; height:46px; min-width:46px; min-height:46px; padding:6px; }#escape-ward-progress { width:38px; }
  .escape-shell .escape-interact { bottom:110px; }.escape-notice { bottom:32%; top:auto; max-width:42%; font-size:11px; }.escape-danger { top:48%; }.escape-search { top:55%; width:240px; }
 }
 .escape-shell #escape-hud-toggle { display:flex; gap:5px; align-items:center; justify-content:center; flex-shrink:0; width:auto; min-height:30px; padding:4px 7px; color:#fff0cb; border:1px solid #b8a576; border-radius:4px; background:#28352df2; font-size:12px; pointer-events:auto; }
@@ -178,9 +184,17 @@
 @media (pointer:fine) and (max-height:540px) {
  .escape-hunt { padding:8px 10px; }.escape-exposure p { display:none; }.escape-exposure-heading { min-height:28px; }.escape-exposure meter { height:12px; margin:6px 0; }.escape-secondary-meters { margin-top:6px; padding-top:6px; }.escape-source { grid-template-rows:auto 10px minmax(30px,auto) auto; gap:4px; padding:5px; }
 }
+@media (pointer:fine) and (max-width:760px) {
+ .escape-crystals { right:12px; gap:6px; }
+ .escape-crystals button { width:clamp(90px,30vw,132px); min-width:0; padding:8px; }
+}
 @media (pointer:coarse) { #escape-hud-toggle kbd { display:none; }.escape-shell #escape-hud-toggle { min-height:28px; font-size:12px; padding:4px 6px; }.escape-movement { display:none; }.escape-stick::after { content:attr(data-mode); position:absolute; top:11px; left:0; right:0; color:#f2dfb9; text-align:center; font-size:12px; pointer-events:none; text-shadow:0 1px 3px #000; } }
 @media (pointer:coarse) and (max-height:650px) and (orientation:portrait) {
  .escape-hunt { top:112px; }.escape-shell .escape-map-button { top:8px; }.escape-source { grid-template-rows:auto 8px minmax(28px,auto) auto; }#escape-hunt-state { max-width:98px; font-size:10px; }.escape-shell .escape-interact { bottom:204px; }
+}
+@media (pointer:coarse) and (orientation:portrait) {
+ .escape-hud #escape-room { display:block; max-width:calc(100vw - 184px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+ .escape-shell:has(.escape-hunt.details-open) .escape-hud #escape-room { max-width:74px; }
 }
 .escape-exposure { position:relative; }
 .escape-hunt.interfered { border-color:#ae8dc3; background:#1a1324ef; box-shadow:0 0 18px #31213a77; }
@@ -212,4 +226,8 @@
  .escape-map-panel #escape-map-current { grid-area:current; font-size:11px; }
  .escape-map-panel #escape-map-close { grid-area:close; margin:0; }
 }
-@media(pointer:coarse) and (max-width:360px) { .escape-hunt.interfered .escape-exposure-heading { gap:4px; }.escape-hunt.interfered #escape-hunt-state { max-width:74px; padding:2px 4px; font-size:10px; }.escape-map-panel>.escape-card { padding:12px; } }
+@media(pointer:coarse) and (max-width:360px) { .escape-hunt.interfered .escape-exposure-heading { gap:4px; }.escape-hunt.interfered #escape-hunt-state { max-width:74px; padding:2px 4px; font-size:10px; }.escape-map-panel>.escape-card { padding:12px; }.escape-actions { grid-template-columns:repeat(3,44px); grid-template-rows:repeat(3,44px); gap:6px; width:144px; }.escape-actions>button,.escape-crystals button { width:44px; height:44px; min-width:44px; min-height:44px; padding:6px; }#escape-ward-progress { width:36px; } }
+@media(pointer:fine) and (max-width:900px) {
+ .escape-inventory { bottom:76px; left:auto; right:12px; transform:none; gap:4px; }
+ .escape-inventory .escape-slot { width:30px; height:30px; }
+}

@@ -89,7 +89,7 @@ export class EscapeGame {
       <div class="escape-crosshair" aria-hidden="true"></div><div class="escape-danger" id="escape-danger" role="status"></div><div class="escape-notice" id="escape-notice" role="status" aria-live="polite" hidden></div>
       <div class="escape-search" id="escape-search" hidden><span>搜索中</span><progress max="1.15" value="0" aria-label="搜索进度"></progress></div>
       <div class="escape-bottom"><div id="escape-movement" class="escape-movement">步行 · Shift 切换奔跑 · C 蹲行</div><div class="escape-meters"><label title="体力"><span>体力</span>${icon("run")}<meter id="escape-stamina" aria-label="体力" min="0" max="100" value="100"></meter><b id="escape-stamina-value">100</b></label><label title="疲劳"><span id="escape-effort-label">疲劳</span>${icon("run")}<meter id="escape-effort" aria-label="行走疲劳" min="0" max="100" value="0"></meter><b id="escape-effort-value">0</b></label><label title="手电电量"><span>电量</span>${icon("light")}<meter id="escape-battery" aria-label="手电电量" min="0" max="100" value="100"></meter><b id="escape-battery-value">100</b></label></div>
-      <div class="escape-controls"><div class="escape-stick" id="escape-stick" aria-label="移动摇杆"><span></span></div><div class="escape-actions"><button id="escape-light" aria-label="开关手电" title="手电 F">${icon("light")}<span>手电</span><kbd>F</kbd></button><button id="escape-crouch" aria-label="切换蹲行，按 C 切换" title="蹲行 C：切换">${icon("crouch")}<span>蹲行</span><kbd>C</kbd></button><button id="escape-stone" aria-label="丢石子" title="石子 Q">${icon("stone")}<span>石子</span><b id="escape-stones">2</b><kbd>Q</kbd></button><button id="escape-sprint" aria-label="切换奔跑" title="奔跑 Shift：切换">${icon("run")}<span>奔跑</span><kbd>Shift</kbd></button><div class="escape-crystals"><button id="escape-freeze" aria-label="使用冻结晶，快捷键1"><i class="crystal-icon freeze">❄</i><span>冻结</span><b id="escape-freeze-count">0</b><small id="escape-freeze-time">余 0s</small><kbd>1</kbd></button><button id="escape-reveal" aria-label="使用显形晶，快捷键2"><i class="crystal-icon reveal">◇</i><span>显形</span><b id="escape-reveal-count">0</b><small id="escape-reveal-time">余 0s</small><kbd>2</kbd></button></div></div></div>
+      <div class="escape-controls"><div class="escape-stick" id="escape-stick" aria-label="移动摇杆"><span></span></div><div class="escape-actions"><button id="escape-light" aria-label="开关手电" title="手电 F">${icon("light")}<span>手电</span><kbd>F</kbd></button><button id="escape-crouch" aria-label="切换蹲行，按 C 切换" title="蹲行 C：切换">${icon("crouch")}<span>蹲行</span><kbd>C</kbd></button><button id="escape-stone" aria-label="丢石子" title="石子 Q">${icon("stone")}<span>石子</span><b id="escape-stones">2</b><kbd>Q</kbd></button><button id="escape-sprint" aria-label="切换奔跑" title="奔跑 Shift：切换">${icon("run")}<span>奔跑</span><kbd>Shift</kbd></button><div class="escape-crystals"><button id="escape-freeze" aria-label="使用冻结晶，快捷键1"><i class="crystal-icon freeze">❄</i><span>冻结</span><b id="escape-freeze-count">0</b><small id="escape-freeze-time">余 0s</small><kbd>1</kbd></button><button id="escape-reveal" aria-label="使用显形晶，快捷键2"><i class="crystal-icon reveal">◇</i><span>显形</span><b id="escape-reveal-count">0</b><small id="escape-reveal-time">余 0s</small><kbd>2</kbd></button><button id="escape-ward" aria-label="使用净化晶，快捷键3" title="净化晶 3"><i class="crystal-icon ward">✦</i><span>净化</span><b id="escape-ward-count">0</b><small id="escape-ward-label">净化保护</small><progress id="escape-ward-progress" max="60" value="0" aria-label="净化保护剩余进度"></progress><kbd>3</kbd></button></div></div></div>
       <button class="escape-interact" id="escape-interact" hidden>${icon("hand")}<span></span><kbd>E</kbd></button></div>
       <div id="escape-panel" class="escape-panel" role="dialog" aria-modal="true" aria-label="逃生菜单"></div><input id="escape-import" type="file" accept=".json,application/json" hidden></main>`;
     this.abilityHud = new AbilityHud(this.$(".escape-shell"));
@@ -268,8 +268,8 @@ export class EscapeGame {
   private help(fromPause: boolean) {
     const touch = matchMedia("(pointer:coarse)").matches;
     const expanded = !!this.world.data.expansion?.enabled;
-    const controls = touch ? [["移动", "左侧摇杆"], ["观察", "滑动右侧画面"], ["互动", "靠近目标后点击手掌"], ["奔跑", "点击切换奔跑"], ["蹲行", "点击切换蹲行"], ["冻结 / 显形", "屏幕晶体按钮"]] : [["移动", "WASD / 方向键"], ["观察", "点击画面后移动鼠标"], ["抬头 / 低头", "PageUp / PageDown"], ["互动", "E / 空格"], ["奔跑", "Shift 切换"], ["蹲行", "C 切换"], ["手电", "F"], ["石子 / 地图", "Q / M"], ["警戒详情", "Tab 展开 / 收起"], ["冻结 / 显形", "1 / 2"], ["暂停 / 释放鼠标", "Esc"]];
-    const tips = ["地下的感官干扰会污染全部暴露读数30秒，紫色条倒计时可信，数值不可信。消退后正常10秒，再逐秒尝试施加，第30秒必发动。","负一楼每轮等待30秒后抽选感测或瞬移，再逐秒提高发动概率，第30秒必发动。三秒预警后执行，独立冷却35／45秒。", "感测时静止命中20%，移动80%；定身会暂停技能。感测命中会填满位置线索并追击，普通视线仍受墙体遮挡。", "瞬移按周围高斯权重选择合法落脚点，至少离你4.5米。地下秘密记录和水晶能帮助你规划路线。","找齐钥匙和工具，打开下水道铁网。", ...(expanded ? ["旧更衣室里有缺失的手轮；锅炉房维修纸条记着泄压顺序。", "走廊碎玻璃可以绕开或蹲行通过。"] : []), "连续移动会积累疲劳，到100会喘息引来奶蛙；停下休息可恢复。", "持续照中奶蛙会增加警觉，达到100会引来调查；移开光束后下降。", "冻结晶和显形晶各持续10秒；按1/2使用，激活时不会重复消耗。", "被抓后进入下一夜，物品保留。第三次被抓则失败。"];
+    const controls = touch ? [["移动", "左侧摇杆"], ["观察", "滑动右侧画面"], ["互动", "靠近目标后点击手掌"], ["奔跑", "点击切换奔跑"], ["蹲行", "点击切换蹲行"], ["冻结 / 显形 / 净化", "屏幕晶体按钮"]] : [["移动", "WASD / 方向键"], ["观察", "点击画面后移动鼠标"], ["抬头 / 低头", "PageUp / PageDown"], ["互动", "E / 空格"], ["奔跑", "Shift 切换"], ["蹲行", "C 切换"], ["手电", "F"], ["石子 / 地图", "Q / M"], ["警戒详情", "Tab 展开 / 收起"], ["冻结 / 显形 / 净化", "1 / 2 / 3"], ["暂停 / 释放鼠标", "Esc"]];
+    const tips = ["被发现时拉开距离，躲进衣柜并保持安静。", "被干扰时仪表不可信，绿晶能驱散杂讯。", "找到钥匙和工具，打开下水道铁网。", "冻住奶蛙能争取调整位置的机会；显形晶可查看奶蛙方向。", ...(expanded ? ["旧更衣室里有缺失的手轮；锅炉房维修纸条记着泄压顺序。", "走廊碎玻璃可以绕开或蹲行通过。"] : []), "连续移动会积累疲劳，停下休息可恢复。", "照中奶蛙会增加警觉，移开光束后警觉会下降。", "被抓后进入下一夜，物品保留。第三次被抓则失败。"];
     this.panel(`<h2>操作</h2><dl class="escape-bindings">${controls.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("")}</dl><ul class="escape-help">${tips.map(tip => `<li>${tip}</li>`).join("")}</ul><details class="escape-perception-help"><summary>暴露值与追击规则</summary><p>声音、灯光、视觉分别累积 0–100。总分由三路共同计算：</p><p class="escape-formula">100 × [1 − (1 − 声音/100)(1 − 灯光/100)(1 − 视觉/100)]</p><p>例：声音50、灯光50为75；三路各50为87.5；声音和灯光各99会封顶100；任一路100也为100。原始分达到99.5即封顶并进入追击。</p><p>总分达到45会警觉，感知速度变为×1.5。蹲行、步行、跑步的基础听距为5、13、24米，喘息22米；墙门缩短听距，离得越近涨分越快。贡献按线索重叠程度公平分摊，相加等于总分；显示值四舍五入。追击时总分锁定100，贡献按比例显示，甩开视线和声光线索后转为搜查。</p></details><button id="escape-help-close" class="escape-primary">返回</button>`);
     this.button("escape-help-close", () => fromPause ? this.pause() : this.intro());
   }
@@ -326,6 +326,7 @@ export class EscapeGame {
     this.button("escape-stone", () => { if (!this.paused) this.world.throwStone(); });
     this.button("escape-freeze", () => { if (!this.paused) this.world.useCrystal("freeze"); });
     this.button("escape-reveal", () => { if (!this.paused) this.world.useCrystal("reveal"); });
+    this.button("escape-ward", () => { if (!this.paused) this.world.useCrystal("ward"); });
     const stick = this.$("#escape-stick");
     const moveStick = (e: PointerEvent) => { const r = stick.getBoundingClientRect(), dx = (e.clientX - r.x - r.width / 2) / 42, dy = (e.clientY - r.y - r.height / 2) / 42, norm = Math.max(1, Math.hypot(dx, dy)); this.stick = { x: dx / norm, y: dy / norm }; stick.querySelector<HTMLElement>("span")!.style.transform = `translate(${this.stick.x * 38}px,${this.stick.y * 38}px)`; };
     let stickId: number | undefined;
@@ -354,7 +355,7 @@ export class EscapeGame {
         return;
       }
       const key = e.key.toLowerCase();
-      if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", "pageup", "pagedown", "shift", "e", "q", "c", "f", "m", "escape", "tab", " ", "1", "2"].includes(key)) e.preventDefault(); else return;
+      if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", "pageup", "pagedown", "shift", "e", "q", "c", "f", "m", "escape", "tab", " ", "1", "2", "3"].includes(key)) e.preventDefault(); else return;
       this.keys.add(key);
       if (e.repeat) return;
       if (key === "tab") { this.toggleHudDetails(); return; }
@@ -366,6 +367,7 @@ export class EscapeGame {
       if (key === "shift") this.world.toggleSprint();
       if (key === "1") this.world.useCrystal("freeze");
       if (key === "2") this.world.useCrystal("reveal");
+      if (key === "3") this.world.useCrystal("ward");
     }, { signal: this.signal });
     document.addEventListener("keyup", e => this.keys.delete(e.key.toLowerCase()), { signal: this.signal });
     window.addEventListener("blur", () => { this.clearInput(); if (this.started && !this.paused) this.pause(); }, { signal: this.signal });
@@ -524,13 +526,20 @@ export class EscapeGame {
     direction.classList.toggle("left", wrappedBearing < 0);
     direction.textContent = wrappedBearing < 0 ? "‹ 奶蛙" : "奶蛙 ›";
     direction.setAttribute("aria-label", wrappedBearing < 0 ? "奶蛙在左侧" : "奶蛙在右侧");
-    const freezeButton = this.$<HTMLButtonElement>("#escape-freeze"), revealButton = this.$<HTMLButtonElement>("#escape-reveal");
+    const freezeButton = this.$<HTMLButtonElement>("#escape-freeze"), revealButton = this.$<HTMLButtonElement>("#escape-reveal"), wardButton = this.$<HTMLButtonElement>("#escape-ward");
     freezeButton.disabled = this.world.crystalCharges("freeze") <= 0 || freeze > 0;
     revealButton.disabled = this.world.crystalCharges("reveal") <= 0 || reveal > 0;
+    const ward = hunt?.ward ?? 0;
+    wardButton.disabled = this.world.crystalCharges("ward") <= 0 || ward > 0;
     this.$("#escape-freeze-count").textContent = String(this.world.crystalCharges("freeze")); this.$("#escape-reveal-count").textContent = String(this.world.crystalCharges("reveal"));
+    this.$("#escape-ward-count").textContent = String(this.world.crystalCharges("ward"));
     this.$("#escape-freeze-time").textContent = freeze > 0 ? `剩 ${freeze.toFixed(1)}s` : "持续10秒";
     this.$("#escape-reveal-time").textContent = reveal > 0 ? `剩 ${reveal.toFixed(1)}s` : "持续10秒";
+    this.$<HTMLProgressElement>("#escape-ward-progress").value = ward;
+    this.$("#escape-ward-label").textContent = ward > 0 ? "保护中" : "净化保护";
+    wardButton.setAttribute("aria-label", ward > 0 ? "净化保护中" : `使用净化晶，剩余${this.world.crystalCharges("ward")}枚，快捷键3`);
     freezeButton.classList.toggle("active", freeze > 0); revealButton.classList.toggle("active", reveal > 0);
+    wardButton.classList.toggle("active", ward > 0);
     this.$("#escape-night").textContent = `第${Math.min(3, d.captures + 1)}夜 · ${time(d.elapsed)}`;
     this.$(".escape-hunt").classList.toggle("interfered", interfered);
     this.$("#escape-exposure-label").textContent = interfered ? "被干扰" : "暴露值";

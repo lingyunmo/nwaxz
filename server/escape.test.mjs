@@ -70,7 +70,9 @@ test("hearing accumulates for sprinting inside range, and walls block sight", ()
 test("patrol recomputes its route at each stop and actually enters multiple rooms", () => {
   const w = new EscapeWorld(42), visited = new Set();
   placeFor(w, "bed-hide"); w.interact();
-  for (let i = 0; i < 120 * 60; i++) {
+  // Seed 42 visits only two rooms in the first two minutes; the longer observation
+  // captures the later valid route through the laundry and electrical room.
+  for (let i = 0; i < 240 * 60; i++) {
     w.advance(1 / 60);
     const h = w.data.hunter;
     const room = roomAt(h);

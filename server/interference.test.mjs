@@ -12,6 +12,8 @@ function environment(options = {}) {
   return {
     active: options.active ?? true,
     suspended: options.suspended ?? false,
+    floor: options.floor,
+    immune: options.immune,
     random: options.random ?? (() => 0.99),
   };
 }
@@ -86,6 +88,90 @@ test('independent n/30 rolls reach the guaranteed thirtieth attempt', () => {
   assert.equal(state.remaining, 30);
   assert.equal(state.seed, Math.floor(0.375 * 0x1_0000_0000) >>> 0);
   assert.equal(random.count(), 30, 'the final attempt is guaranteed, then one seed is drawn');
+});
+
+test('ground profile has thirty clear seconds and ten corruption seconds with the same attempt odds', () => {
+  const random = sequence([0.01, 0.4]);
+  let state = createInterference(0);
+  assert.equal(state.clear, 30);
+  state = advanceInterference(state, 30, environment({ floor: 0, random }));
+  assert.equal(state.stage, 'attempt');
+  state = advanceInterference(state, 1, environment({ floor: 0, random }));
+  assert.equal(state.stage, 'corrupt');
+  assert.equal(state.remaining, 10);
+  state = advanceInterference(state, 10, environment({ floor: 0, random }));
+  assert.deepEqual(state, createInterference(0));
+});
+
+test('changing floors preserves clear progress proportionally and never refreshes the cycle', () => {
+  let state = advanceInterference(createInterference(), 5, environment());
+  state = advanceInterference(state, 0, environment({ floor: 0 }));
+  assert.equal(state.clear, 15, 'half of the old interval remains in the longer interval');
+  state = advanceInterference(state, 0, environment({ floor: -1 }));
+  assert.equal(state.clear, 5, 'moving back retains the same fractional progress');
+  state = advanceInterference(state, 0, environment({ floor: 0 }));
+  assert.equal(state.clear, 15, 'repeated floor changes cannot reset accumulated progress');
+});
+
+test('a curse keeps its cast profile and duration after moving upstairs', () => {
+  let state = advanceInterference(createInterference(0), 31, environment({ floor: 0, random: sequence([0.01, 0.6]) }));
+  assert.equal(state.stage, 'corrupt');
+  assert.equal(state.remaining, 10);
+  state = advanceInterference(state, 2, environment({ floor: -1 }));
+  assert.equal(state.profile, 0);
+  assert.equal(state.remaining, 8);
+  state = advanceInterference(state, 8, environment({ floor: -1 }));
+  assert.equal(state.stage, 'clear');
+  assert.equal(state.clear, 10, 'the next cycle uses the current floor');
+});
+
+test('ward immediately clears curses and blocks a guaranteed attempt without banking it', () => {
+  let { state } = corruptionState();
+  const random = sequence([]);
+  state = advanceInterference(state, 0, environment({ immune: true, random }));
+  assert.equal(state.stage, 'clear');
+  assert.equal(state.clear, 10);
+
+  state = advanceInterference(createInterference(), 39, environment({ random }));
+  assert.equal(state.stage, 'attempt');
+  assert.equal(state.attempt, 29);
+  state = advanceInterference(state, 1, environment({ immune: true, random }));
+  assert.equal(state.stage, 'clear');
+  assert.equal(state.clear, 10);
+  assert.equal(random.count(), 29, 'guaranteed blocked cast does not draw a fake-perception seed');
+  state = advanceInterference(state, 0, environment());
+  assert.equal(state.stage, 'clear', 'blocked cast does not survive the ward');
+});
+
+test('ward clearing is not blocked by suspension, and blocked draws still use selection RNG', () => {
+  const { state } = corruptionState();
+  const random = sequence([]);
+  const cleared = advanceInterference(state, 2, environment({ immune: true, suspended: true, random }));
+  assert.equal(cleared.stage, 'clear');
+  closeTo(cleared.clear, 10, 'suspension pauses the newly reset interval');
+
+  let attempt = attemptState(sequence([]));
+  attempt = advanceInterference(attempt, 1, environment({ immune: true, random: sequence([0.01]) }));
+  assert.equal(attempt.stage, 'clear');
+});
+
+test('profile serialization accepts legacy seven-field state and validates profile values', () => {
+  const legacy = createInterference();
+  assert.equal(isInterferenceState(legacy), true);
+  assert.equal(isInterferenceState(createInterference(0)), true);
+  assert.equal(isInterferenceState({ ...legacy, profile: 1 }), false);
+  assert.equal(isInterferenceState({ ...legacy, profile: 0, clear: 31 }), false);
+  assert.equal(isInterferenceState({ ...legacy, profile: 0 }), true);
+});
+
+test('advancing one interval or deterministic subintervals produces identical profile state', () => {
+  const rng = sequence([0.01, 0.4]);
+  const one = advanceInterference(createInterference(0), 31.5, environment({ floor: 0, random: rng }));
+  const framesRng = sequence([0.01, 0.4]);
+  let frames = createInterference(0);
+  for (let i = 0; i < 63; i++) frames = advanceInterference(frames, 0.5, environment({ floor: 0, random: framesRng }));
+  assert.deepEqual(frames, one);
+  assert.equal(framesRng.count(), rng.count());
 });
 
 test('corruption begins immediately, advances on model time, and returns to a fresh ten-second clear', () => {

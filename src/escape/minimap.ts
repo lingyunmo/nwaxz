@@ -1,10 +1,10 @@
-import { CRYSTALS, DOORS, HAZARDS, MAP, PROPS, SIZE, HEIGHT, type EscapeWorld, type Prop, type Vec } from "./world.ts";
+import { CRYSTALS, DOORS, HAZARDS, MAP, PROPS, SIZE, HEIGHT, type CrystalKind, type EscapeWorld, type Prop, type Vec } from "./world.ts";
 import { floorAt, stairsAt } from "./basement-map.ts";
 
 export type MapReveal = "explored" | "near" | "fog";
 export type MapTerrain = "floor" | "wall" | "outside";
 export type MapDoor = { id: string; open: boolean; locked: boolean };
-export type MapFeature = { id: string; kind: Prop["kind"] | "hazard" | "crystal-freeze" | "crystal-reveal" };
+export type MapFeature = { id: string; kind: Prop["kind"] | "hazard" | `crystal-${CrystalKind}` };
 export type MapTile = {
   x: number;
   z: number;
@@ -317,8 +317,8 @@ export class EscapeMap {
       ctx.lineTo(centerX + inset / 3, y + cell - inset); ctx.lineTo(x + inset, centerY - inset / 3); ctx.closePath(); ctx.fill(); ctx.stroke();
       return;
     }
-    if (feature.kind === "crystal-freeze" || feature.kind === "crystal-reveal") {
-      ctx.fillStyle = feature.kind === "crystal-freeze" ? "#8be5ff" : "#e49aff"; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 7;
+    if (feature.kind === "crystal-freeze" || feature.kind === "crystal-reveal" || feature.kind === "crystal-ward") {
+      ctx.fillStyle = feature.kind === "crystal-freeze" ? "#8be5ff" : feature.kind === "crystal-reveal" ? "#e49aff" : "#a5e0a2"; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 7;
       ctx.beginPath(); ctx.moveTo(centerX, y + inset); ctx.lineTo(x + cell - inset, centerY); ctx.lineTo(centerX, y + cell - inset); ctx.lineTo(x + inset, centerY); ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0; return;
     }
     if (feature.kind === "note") {

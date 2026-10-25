@@ -2,6 +2,8 @@ import { combinePerception, type Sense } from './perception.ts';
 
 export type InterferenceStage = 'clear' | 'attempt' | 'corrupt';
 export type InterferenceState = {
+  /** Profile that owns the current clear/attempt cycle, or the cast profile during corruption. */
+  profile?: 0 | -1;
   stage: InterferenceStage;
   clear: number;
   attempt: number;
@@ -14,23 +16,28 @@ export type InterferenceState = {
 export type InterferenceEnvironment = {
   active: boolean;
   suspended: boolean;
+  floor?: 0 | -1;
+  immune?: boolean;
   random: () => number;
 };
 
 export type PerceptionDisplay = ReturnType<typeof combinePerception>;
 
-const CLEAR_DURATION = 10;
 const ATTEMPT_DURATION = 30;
-const CORRUPTION_DURATION = 30;
+const B1_CLEAR_DURATION = 10;
+const FLOOR_CLEAR_DURATION = 30;
+const B1_CORRUPTION_DURATION = 30;
+const FLOOR_CORRUPTION_DURATION = 10;
 const EPSILON = 1e-10;
 const MAX_SEED = 0xffffffff;
 const STAGES = new Set<InterferenceStage>(['clear', 'attempt', 'corrupt']);
-const STATE_KEYS = new Set(['stage', 'clear', 'attempt', 'tick', 'remaining', 'clock', 'seed']);
+const STATE_KEYS = new Set(['profile', 'stage', 'clear', 'attempt', 'tick', 'remaining', 'clock', 'seed']);
 
-export function createInterference(): InterferenceState {
+export function createInterference(floor: 0 | -1 = -1): InterferenceState {
   return {
+    ...(floor === 0 ? { profile: 0 as const } : {}),
     stage: 'clear',
-    clear: CLEAR_DURATION,
+    clear: clearDuration(floor),
     attempt: 0,
     tick: 0,
     remaining: 0,
@@ -39,7 +46,7 @@ export function createInterference(): InterferenceState {
   };
 }
 
-/** Advance the independent B1 interference timer using simulation time only. */
+/** Advance interference timers using simulation time only. */
 export function advanceInterference(
   state: InterferenceState,
   dt: number,
@@ -49,7 +56,21 @@ export function advanceInterference(
   if (!Number.isFinite(dt) || dt < 0) throw new RangeError('Interference dt must be a finite non-negative number');
 
   const next: InterferenceState = { ...state };
-  if (!env.active) return createInterference();
+  const floor = env.floor ?? -1;
+  if (!env.active) return createInterference(floor);
+
+  // A ward clears an existing curse immediately, even while the caster is frozen.
+  if (env.immune && next.stage === 'corrupt') Object.assign(next, createInterference(floor));
+
+  // A clear interval keeps its fractional progress when moving between floors. Attempts keep
+  // their accumulated rolls and partial second; a live curse keeps its original cast profile.
+  const currentProfile = next.profile ?? -1;
+  if (next.stage !== 'corrupt' && currentProfile !== floor) {
+    if (next.stage === 'clear') {
+      next.clear = clean(next.clear / clearDuration(currentProfile) * clearDuration(floor));
+    }
+    setProfile(next, floor);
+  }
 
   // A live curse is tied to world time; freeze only suspends its future cast cycle.
   if (env.suspended && next.stage !== 'corrupt') return next;
@@ -80,11 +101,18 @@ export function advanceInterference(
       const fires = next.attempt === ATTEMPT_DURATION || roll(env.random) < next.attempt / ATTEMPT_DURATION;
       if (!fires) continue;
 
+      // A blocked cast is spent, not banked for after the ward expires.
+      if (env.immune) {
+        Object.assign(next, createInterference(floor));
+        continue;
+      }
+
       next.stage = 'corrupt';
       next.attempt = 0;
-      next.remaining = CORRUPTION_DURATION;
+      next.remaining = corruptionDuration(floor);
       next.clock = 0;
       next.seed = seedFromRoll(roll(env.random));
+      setProfile(next, floor);
       continue;
     }
 
@@ -95,37 +123,47 @@ export function advanceInterference(
     if (next.remaining > EPSILON) break;
 
     next.stage = 'clear';
-    next.clear = CLEAR_DURATION;
+    next.clear = clearDuration(floor);
     next.attempt = 0;
     next.tick = 0;
     next.remaining = 0;
     next.clock = 0;
     next.seed = 0;
+    setProfile(next, floor);
   }
 
   return next;
 }
 
 export function isInterferenceState(raw: unknown): raw is InterferenceState {
-  if (!record(raw) || Object.keys(raw).length !== STATE_KEYS.size
-    || Object.keys(raw).some(key => !STATE_KEYS.has(key))
+  if (!record(raw) || Object.keys(raw).some(key => !STATE_KEYS.has(key))
+    || Object.keys(raw).length !== STATE_KEYS.size - (Object.hasOwn(raw, 'profile') ? 0 : 1)
+    || (Object.hasOwn(raw, 'profile') && raw.profile !== 0 && raw.profile !== -1)
     || !STAGES.has(raw.stage as InterferenceStage)
-    || !finiteIn(raw.clear, 0, CLEAR_DURATION)
+    || !finiteIn(raw.clear, 0, FLOOR_CLEAR_DURATION)
     || !integerIn(raw.attempt, 0, ATTEMPT_DURATION - 1)
     || !finiteIn(raw.tick, 0, 1)
-    || !finiteIn(raw.remaining, 0, CORRUPTION_DURATION)
-    || !finiteIn(raw.clock, 0, CORRUPTION_DURATION)
+    || !finiteIn(raw.remaining, 0, B1_CORRUPTION_DURATION)
+    || !finiteIn(raw.clock, 0, B1_CORRUPTION_DURATION)
     || !integerIn(raw.seed, 0, MAX_SEED)) return false;
 
   if (raw.stage === 'clear') {
-    return raw.clear > 0 && raw.attempt === 0 && raw.tick === 0 && raw.remaining === 0 && raw.clock === 0 && raw.seed === 0;
+    return raw.clear > 0 && raw.clear <= clearDuration(profileOf(raw)) && raw.attempt === 0 && raw.tick === 0 && raw.remaining === 0 && raw.clock === 0 && raw.seed === 0;
   }
   if (raw.stage === 'attempt') {
     return raw.clear === 0 && raw.attempt <= ATTEMPT_DURATION - 1 && raw.tick < 1
       && raw.remaining === 0 && raw.clock === 0 && raw.seed === 0;
   }
   return raw.clear === 0 && raw.attempt === 0 && raw.tick === 0 && raw.remaining > 0
-    && Math.abs(raw.remaining + raw.clock - CORRUPTION_DURATION) <= 1e-8;
+    && Math.abs(raw.remaining + raw.clock - corruptionDuration(profileOf(raw))) <= 1e-8;
+}
+
+function profileOf(state: Pick<InterferenceState, 'profile'>): 0 | -1 { return state.profile ?? -1; }
+function clearDuration(floor: 0 | -1): number { return floor === 0 ? FLOOR_CLEAR_DURATION : B1_CLEAR_DURATION; }
+function corruptionDuration(floor: 0 | -1): number { return floor === 0 ? FLOOR_CORRUPTION_DURATION : B1_CORRUPTION_DURATION; }
+function setProfile(state: InterferenceState, floor: 0 | -1): void {
+  if (floor === -1) delete state.profile;
+  else state.profile = floor;
 }
 
 /**

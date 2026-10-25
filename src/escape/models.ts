@@ -3,15 +3,14 @@ import type { Scene } from "@babylonjs/core/scene.js";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh.js";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode.js";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder.js";
-import type { Texture } from "@babylonjs/core/Materials/Textures/texture.js";
 import { Vector3, Color3 } from "@babylonjs/core/Maths/math.js";
-import { PaintedFrog } from "./frog.ts";
+import { PaintedFrog, type FrogTextures } from "./frog.ts";
 import { CELL, colorMaterial } from "./scene.ts";
 import { CRYSTALS, PROPS, VALVE_ORDER, type EscapeWorld } from "./world.ts";
 
 const EXPANSION_PROP_IDS = new Set(["changing-drawer", "changing-hide", "boiler-note", "boiler-hide", ...VALVE_ORDER]);
 
-export function installEscapeModels(scene: Scene, props: AssetContainer, textures: { original: Texture; actions: Texture }, reduced = false) {
+export function installEscapeModels(scene: Scene, props: AssetContainer, textures: FrogTextures, reduced = false) {
   const propRoots = new Map<string, TransformNode>();
   const cabinets = new Map<string, { left: TransformNode; right: TransformNode }>();
   const wheels = new Map<string, TransformNode>();

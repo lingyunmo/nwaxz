@@ -48,6 +48,8 @@ test("built preload covers revisioned game resources, including all whole videos
     "assets/scenes/escape-materials-v1.webp",
     "assets/models/escape-props-v1.glb",
     "assets/character/haunted-frog-actions-v2.webp",
+    "assets/character/haunted-frog-directions-idle-v1.webp",
+    "assets/character/haunted-frog-directions-walk-v1.webp",
     "assets/ui/escape-map-atlas-v1.webp",
     "assets/props/escape-props-v1.webp",
     "assets/props/escape-details-v1.webp",

@@ -67,15 +67,15 @@ export class EscapeRenderer {
         this.containers.push(container);
       }
       onStage("奶蛙正在就位…");
-      const texture = (url: string) => {
+      const texture = (url: string, noMipmaps = false) => {
         let image: Texture;
         return withTimeout(new Promise<Texture>((resolve, reject) => {
-          image = new Texture(url, this.view.scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, () => resolve(image), message => reject(new Error(message || "奶蛙贴图未能载入")));
+          image = new Texture(url, this.view.scene, noMipmaps, true, noMipmaps ? Texture.BILINEAR_SAMPLINGMODE : Texture.TRILINEAR_SAMPLINGMODE, () => resolve(image), message => reject(new Error(message || "奶蛙贴图未能载入")));
         }), "奶蛙贴图准备超时，请重试。");
       };
-      const [original, actions] = await Promise.all([texture("/assets/character/haunted-frog-v1.webp"), texture("/assets/character/haunted-frog-actions-v2.webp")]);
+      const [original, actions, directionIdle, directionWalk] = await Promise.all([texture("/assets/character/haunted-frog-v1.webp"), texture("/assets/character/haunted-frog-actions-v2.webp"), texture("/assets/character/haunted-frog-directions-idle-v1.webp", true), texture("/assets/character/haunted-frog-directions-walk-v1.webp", true)]);
       if (this.disposed) throw new Error("场景已关闭");
-      this.models = installEscapeModels(this.view.scene, this.containers[0], { original, actions }, this.reduced);
+      this.models = installEscapeModels(this.view.scene, this.containers[0], { original, actions, directionIdle, directionWalk }, this.reduced);
       for (const mesh of [...this.models.propRoots.values()].flatMap(n => n.getChildMeshes())) this.shadow.addShadowCaster(mesh, false);
       for (const door of this.view.doors.values()) for (const mesh of door.getChildMeshes()) this.shadow.addShadowCaster(mesh, false);
       onStage("正在点亮浴室…");

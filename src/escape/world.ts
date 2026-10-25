@@ -242,7 +242,7 @@ export class EscapeWorld {
     const d = this.data, p = d.player, h = d.hunter;
     if (d.hidden || d.elapsed < 4) return false;
     const range = h.state === "chase" ? 13 : p.light ? 9 : p.crouched ? 3.8 : 6;
-    return dist(p, h) < range && (h.state === "chase" || Math.abs(angleDelta(Math.atan2(p.z - h.z, p.x - h.x), h.angle)) < 1.05) && this.clearSight(h, p);
+    return dist(p, h) < range && Math.abs(angleDelta(Math.atan2(p.z - h.z, p.x - h.x), h.angle)) < 1.05 && this.clearSight(h, p);
   }
   private clearSight(a: Vec, b: Vec) {
     if (!this.lineOfSight(a, b)) return false;

@@ -53,7 +53,7 @@ export function createApp({ distDir, revision = "development", coopService, soci
         setHeaders(res, filename) {
           res.set(
             "Cache-Control",
-            /[\\/]assets[\\/]materials[\\/]escape[\\/].+\.png$/.test(filename)
+            /[\\/]assets[\\/](?:materials[\\/]escape|character[\\/]haunted-frog-extra-v3)[\\/].+\.png$/.test(filename)
               ? "no-cache, no-transform"
               : /[\\/]assets[\\/][^\\/]+-[A-Za-z0-9_-]{8}\.(?:js|css)$/.test(filename)
               ? "public, max-age=31536000, immutable"

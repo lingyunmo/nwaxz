@@ -1,0 +1,342 @@
+{
+  "generator": "built-in imagegen",
+  "columns": 4,
+  "rows": 2,
+  "directions": [
+    "front",
+    "front-left",
+    "left",
+    "back-left",
+    "back",
+    "back-right",
+    "right",
+    "front-right"
+  ],
+  "assets": {
+    "directionStalk": {
+      "url": "/assets/character/haunted-frog-extra-v3/stalk-a.png",
+      "width": 1774,
+      "height": 887,
+      "bytes": 1729707,
+      "sha256": "02814136ca5e59a319778d4da77873634dee4bdb01d07f467ffd21237cee866b",
+      "frames": [
+        {
+          "x": 46,
+          "y": 16,
+          "width": 398,
+          "height": 428,
+          "ground": 0
+        },
+        {
+          "x": 471,
+          "y": 16,
+          "width": 399,
+          "height": 428,
+          "ground": 2
+        },
+        {
+          "x": 917,
+          "y": 15,
+          "width": 377,
+          "height": 429,
+          "ground": 0
+        },
+        {
+          "x": 1342,
+          "y": 17,
+          "width": 394,
+          "height": 427,
+          "ground": 2
+        },
+        {
+          "x": 31,
+          "y": 453,
+          "width": 413,
+          "height": 407,
+          "ground": 3
+        },
+        {
+          "x": 502,
+          "y": 453,
+          "width": 385,
+          "height": 399,
+          "ground": 3
+        },
+        {
+          "x": 940,
+          "y": 451,
+          "width": 360,
+          "height": 417,
+          "ground": 3
+        },
+        {
+          "x": 1373,
+          "y": 451,
+          "width": 394,
+          "height": 417,
+          "ground": 3
+        }
+      ]
+    },
+    "directionStalkB": {
+      "url": "/assets/character/haunted-frog-extra-v3/stalk-b.png",
+      "width": 1774,
+      "height": 887,
+      "bytes": 1638106,
+      "sha256": "d24d0305f89f88b1e039de3a9090d51bb0a3cc4ccd1e5f69117d4b9fda495287",
+      "frames": [
+        {
+          "x": 56,
+          "y": 15,
+          "width": 388,
+          "height": 429,
+          "ground": 0
+        },
+        {
+          "x": 476,
+          "y": 14,
+          "width": 399,
+          "height": 430,
+          "ground": 0
+        },
+        {
+          "x": 928,
+          "y": 14,
+          "width": 395,
+          "height": 430,
+          "ground": 3
+        },
+        {
+          "x": 1366,
+          "y": 14,
+          "width": 390,
+          "height": 430,
+          "ground": 0
+        },
+        {
+          "x": 51,
+          "y": 451,
+          "width": 393,
+          "height": 417,
+          "ground": 3
+        },
+        {
+          "x": 504,
+          "y": 449,
+          "width": 378,
+          "height": 422,
+          "ground": 3
+        },
+        {
+          "x": 909,
+          "y": 449,
+          "width": 392,
+          "height": 417,
+          "ground": 3
+        },
+        {
+          "x": 1364,
+          "y": 451,
+          "width": 402,
+          "height": 423,
+          "ground": 3
+        }
+      ]
+    },
+    "directionSearch": {
+      "url": "/assets/character/haunted-frog-extra-v3/listen.png",
+      "width": 1774,
+      "height": 887,
+      "bytes": 1941236,
+      "sha256": "dad6082548d2715da1be3cf787f54e822f3c97e84c644f243afc96472e84127b",
+      "frames": [
+        {
+          "x": 40,
+          "y": 6,
+          "width": 387,
+          "height": 438,
+          "ground": 3
+        },
+        {
+          "x": 493,
+          "y": 6,
+          "width": 380,
+          "height": 438,
+          "ground": 1
+        },
+        {
+          "x": 968,
+          "y": 7,
+          "width": 320,
+          "height": 437,
+          "ground": 0
+        },
+        {
+          "x": 1380,
+          "y": 8,
+          "width": 356,
+          "height": 436,
+          "ground": 2
+        },
+        {
+          "x": 36,
+          "y": 445,
+          "width": 392,
+          "height": 426,
+          "ground": 3
+        },
+        {
+          "x": 501,
+          "y": 447,
+          "width": 354,
+          "height": 430,
+          "ground": 3
+        },
+        {
+          "x": 956,
+          "y": 446,
+          "width": 312,
+          "height": 432,
+          "ground": 3
+        },
+        {
+          "x": 1389,
+          "y": 445,
+          "width": 369,
+          "height": 433,
+          "ground": 3
+        }
+      ]
+    },
+    "directionAttack": {
+      "url": "/assets/character/haunted-frog-extra-v3/grab.png",
+      "width": 1774,
+      "height": 887,
+      "bytes": 1896253,
+      "sha256": "063be29936aa16349123e7baadc581927f4c9d1c17d603aaf8d1df71ca40fcb4",
+      "frames": [
+        {
+          "x": 42,
+          "y": 12,
+          "width": 402,
+          "height": 429,
+          "ground": 3
+        },
+        {
+          "x": 473,
+          "y": 7,
+          "width": 414,
+          "height": 430,
+          "ground": 3
+        },
+        {
+          "x": 906,
+          "y": 7,
+          "width": 424,
+          "height": 434,
+          "ground": 3
+        },
+        {
+          "x": 1331,
+          "y": 8,
+          "width": 430,
+          "height": 428,
+          "ground": 3
+        },
+        {
+          "x": 22,
+          "y": 444,
+          "width": 408,
+          "height": 411,
+          "ground": 3
+        },
+        {
+          "x": 461,
+          "y": 444,
+          "width": 426,
+          "height": 420,
+          "ground": 3
+        },
+        {
+          "x": 896,
+          "y": 444,
+          "width": 434,
+          "height": 420,
+          "ground": 3
+        },
+        {
+          "x": 1330,
+          "y": 444,
+          "width": 436,
+          "height": 418,
+          "ground": 3
+        }
+      ]
+    },
+    "directionLaugh": {
+      "url": "/assets/character/haunted-frog-extra-v3/laugh.png",
+      "width": 1774,
+      "height": 887,
+      "bytes": 1877378,
+      "sha256": "65bf57b7f66950cb54067b949ff5796bf8ec86008bc8aa5b61dbd174acce7b1a",
+      "frames": [
+        {
+          "x": 35,
+          "y": 9,
+          "width": 401,
+          "height": 435,
+          "ground": 0
+        },
+        {
+          "x": 490,
+          "y": 10,
+          "width": 385,
+          "height": 434,
+          "ground": 0
+        },
+        {
+          "x": 942,
+          "y": 7,
+          "width": 366,
+          "height": 437,
+          "ground": 0
+        },
+        {
+          "x": 1399,
+          "y": 7,
+          "width": 355,
+          "height": 437,
+          "ground": 0
+        },
+        {
+          "x": 36,
+          "y": 452,
+          "width": 399,
+          "height": 427,
+          "ground": 3
+        },
+        {
+          "x": 512,
+          "y": 450,
+          "width": 349,
+          "height": 430,
+          "ground": 3
+        },
+        {
+          "x": 928,
+          "y": 455,
+          "width": 338,
+          "height": 428,
+          "ground": 3
+        },
+        {
+          "x": 1376,
+          "y": 464,
+          "width": 375,
+          "height": 416,
+          "ground": 3
+        }
+      ]
+    }
+  }
+}

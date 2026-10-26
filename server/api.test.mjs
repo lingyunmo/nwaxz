@@ -20,6 +20,9 @@ test("release readiness, UTF-8, asset caching, and private-file isolation", asyn
   const original = fs.readFileSync(new URL("../public/assets/materials/escape/01-wall-tile-v1.png", import.meta.url));
   fs.mkdirSync(path.join(directory, "assets", "materials", "escape"), {recursive:true});
   fs.writeFileSync(path.join(directory, "assets", "materials", "escape", "01-wall-tile-v1.png"), original);
+  const action = fs.readFileSync(new URL("../public/assets/character/haunted-frog-extra-v3/laugh.png", import.meta.url));
+  fs.mkdirSync(path.join(directory, "assets", "character", "haunted-frog-extra-v3"));
+  fs.writeFileSync(path.join(directory, "assets", "character", "haunted-frog-extra-v3", "laugh.png"), action);
   fs.writeFileSync(path.join(directory, ".env"), "private-value");
   fs.writeFileSync(path.join(directory, "sw.js"), 'self.addEventListener("install",()=>{})');
   const server = createApp({
@@ -61,6 +64,10 @@ test("release readiness, UTF-8, asset caching, and private-file isolation", asyn
   assert.equal(material.headers.get("cache-control"),"no-cache, no-transform");
   assert.match(material.headers.get("content-type"),/image\/png/);
   assert.ok(Buffer.from(await material.arrayBuffer()).equals(original),"original PNG bytes survive HTTP delivery");
+  const performance = await request("/assets/character/haunted-frog-extra-v3/laugh.png");
+  assert.equal(performance.headers.get("cache-control"),"no-cache, no-transform");
+  assert.match(performance.headers.get("content-type"),/image\/png/);
+  assert.ok(Buffer.from(await performance.arrayBuffer()).equals(action),"action PNG bytes survive HTTP delivery");
   for (const endpoint of ["/game-worker", "/sw.js"]) {
     const worker = await request(endpoint);
     assert.equal(worker.status, 200);

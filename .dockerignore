@@ -14,6 +14,7 @@
 !server/index.mjs
 !server/coop-service.mjs
 !server/coop-socket.mjs
+!server/social-service.mjs
 !ops
 !ops/smoke.mjs
 !ops/pwa.test.mjs

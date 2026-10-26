@@ -89,6 +89,15 @@ test('timed reveal uses the same directional UV and proportions without changing
  }finally{clean(s)}
 });
 
+test('timed reveal outline remains visible when hunter and viewer are on different floors',()=>{
+ const s=setup();try{
+  s.w.data.player.z=40.5;s.w.data.hunter.z=9.5;s.w.data.hunt.reveal=5;
+  s.actor.animate(s.w,.11,false);
+  const overlay=s.view.scene.meshes.find(m=>m.name.startsWith('hunter-reveal-overlay')&&m.visibility>0);
+  assert.ok(overlay,'depth-bypassing reveal outline renders through the inter-floor slab');
+ }finally{clean(s)}
+});
+
 test('capture always uses the original clear belly laugh, and a reused renderer cannot freeze that pose into a new save',()=>{
  const s=setup();try{
   place(s.w,Math.PI);s.actor.animate(s.w,.11,false);s.w.capture();s.actor.animate(s.w,.11,false);

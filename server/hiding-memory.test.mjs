@@ -13,11 +13,16 @@ test('a pursuing hunter cannot witness wardrobe entry through the back of its he
  assert.equal(w.data.hidden,'bed-hide');assert.equal(w.snapshot().pursuit.seenHide,undefined);
  assert.match(w.message,/已躲进/);
 });
-test('visible wardrobe entry is remembered and the correct occupied cabinet is searched',()=>{
+test('visible wardrobe entry is remembered and the occupied cabinet remains safe when searched',()=>{
  const w=entry(0);assert.equal(w.seesPlayer(),true);w.interact();
  assert.equal(w.snapshot().pursuit.seenHide,'bed-hide');
  Object.assign(w.data.hunter,{x:5.5,z:3.3});w.advance(.1);
- assert.equal(w.data.phase,'caught');
+ assert.equal(w.data.phase,'playing');assert.equal(w.data.hidden,'bed-hide');
+});
+test('a sense reveal can guide the hunter to a wardrobe without capturing its occupant',()=>{
+ const w=entry(Math.PI);w.interact();assert.equal(w.data.hidden,'bed-hide');
+ w.seenHide='bed-hide';Object.assign(w.data.hunter,{x:5.5,z:3.3});w.advance(.1);
+ assert.equal(w.data.phase,'playing');assert.equal(w.data.hidden,'bed-hide');
 });
 test('searching an old empty cabinet cannot capture the player hiding in another room',()=>{
  const w=entry(0);w.interact();w.interact();

@@ -21,21 +21,43 @@ async function harness(t, options = {}) {
     });
     return { status: response.status, body: await response.json(), headers: response.headers };
   };
-  const create = async (name = '值班员', avatar = 0) => {
-    const response = await request('/rooms', { version: packageInfo.version, name, avatar });
+  const social = async (path, body, token) => {
+    const response = await fetch(base + '/api/social' + path, {
+      method: body === undefined ? 'GET' : path === '/me' ? 'PATCH' : 'POST',
+      headers: { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(5000),
+    });
+    return { status: response.status, body: await response.json(), headers: response.headers };
+  };
+  const registerGuest = async (name, avatar) => {
+    const response = await social('/guest', { name, avatar });
     assert.equal(response.status, 200, JSON.stringify(response.body));
     return response.body;
+  };
+  const create = async (name = '值班员', avatar = 0) => {
+    const profile = await registerGuest(name, avatar);
+    const response = await fetch(base + '/api/coop/rooms', {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${profile.token}` },
+      body: JSON.stringify({ version: packageInfo.version, name, avatar }), signal: AbortSignal.timeout(5000),
+    }).then(async result => ({ status: result.status, body: await result.json() }));
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    return { ...response.body, profile };
   };
   const join = async (session, name = '维修员', avatar = 2) => {
-    const response = await request(`/${session.code}/join`, { version: packageInfo.version, name, avatar });
+    const profile = await registerGuest(name, avatar);
+    const response = await fetch(base + `/api/coop/${session.code}/join`, {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${profile.token}` },
+      body: JSON.stringify({ version: packageInfo.version, name, avatar }), signal: AbortSignal.timeout(5000),
+    }).then(async result => ({ status: result.status, body: await result.json() }));
     assert.equal(response.status, 200, JSON.stringify(response.body));
-    return response.body;
+    return { ...response.body, profile };
   };
-  return { service, base, request, create, join };
+  return { service, base, request, social, registerGuest, create, join };
 }
 
 test('HTTP rooms require current clients, valid profiles, ready peers and the leader', async t => {
-  const { request, create, join } = await harness(t);
+  const { base, request, create, join, registerGuest } = await harness(t);
   assert.equal((await request('/rooms', { version: 'obsolete', name: '旧版', avatar: 0 })).status, 409);
   assert.equal((await request('/rooms', { version: packageInfo.version, name: ' ', avatar: 0 })).status, 400);
   assert.equal((await request('/rooms', { version: packageInfo.version, name: '同伴', avatar: 99 })).status, 400);
@@ -47,7 +69,9 @@ test('HTTP rooms require current clients, valid profiles, ready peers and the le
   const started = await request(`/${host.code}/start`, {}, host.token);
   assert.equal(started.status, 200);
   assert.deepEqual(started.body.players.map(p => p.lives), [2, 2]);
-  assert.equal((await request(`/${host.code}/join`, { version: packageInfo.version, name: '迟到', avatar: 1 })).status, 409);
+  const late = await registerGuest('迟到', 1);
+  const lateResponse = await fetch(`${base}/api/coop/${host.code}/join`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${late.token}` }, body: JSON.stringify({ version: packageInfo.version, name: '迟到', avatar: 1 }) });
+  assert.equal(lateResponse.status, 409);
 });
 
 test('SSE is private, unbuffered and sends a valid personally projected snapshot', async t => {
@@ -98,7 +122,9 @@ test('HTTP commands reject coordinates, stale sequences, remote interactions and
 
 test('oversized/malformed requests return bounded JSON failures, and room capacity is enforced', async t => {
   const { base, request, create } = await harness(t, { maxRooms: 1 });
-  await create(); assert.equal((await request('/rooms', { version: packageInfo.version, name: '额外', avatar: 0 })).status, 503);
+  await create();
+  const extra = await fetch(base + '/api/social/guest', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: '额外', avatar: 0 }) }).then(response => response.json());
+  assert.equal((await request('/rooms', { version: packageInfo.version, name: '额外', avatar: 0 }, extra.token)).status, 503);
   for (const [body, expected] of [['{"bad":', 400], [JSON.stringify({ huge: 'x'.repeat(10_000) }), 413]]) {
     const response = await fetch(base + '/api/coop/rooms', { method: 'POST', headers: { 'content-type': 'application/json' }, body });
     assert.equal(response.status, expected); assert.match(response.headers.get('content-type'), /application\/json/);

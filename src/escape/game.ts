@@ -18,9 +18,11 @@ import { prepareEscape, returnPreparedEscape, takePreparedEscape } from "./prepa
 import { EscapeLook, type MouseLookMode } from "./look.ts";
 import { CoopClient, type CoopConnectionState } from "./coop-client.ts";
 import {CoopMovement} from './coop-movement.ts';
+import {SocialClient} from './social-client.ts';
+import {renderLobbyView,type LobbyModel,type LobbyScreen} from './lobby-view.ts';
+import './lobby-view.css';
 import type { CoopInput, CoopSnapshot } from "./coop-protocol.ts";
 import { version as APP_VERSION } from "../../package.json";
-import { peerAvatarOptions } from "./peer-art.ts";
 import "./coop.css";
 export { prepareEscape } from "./preparation.ts";
 
@@ -89,6 +91,15 @@ export class EscapeGame {
   private coopRequesting = false;
   private coopMovement=new CoopMovement();
   private coopTeamSignature='';
+  private social=new SocialClient();
+  private lobbyScreen:LobbyScreen='home';
+  private lobbyVisible=false;
+  private lobbyDisposer?:()=>void;
+  private lobbyTimer=0;
+  private lobbyRefreshing=false;
+  private lobbyMessage?:string;
+  private lobbyServerData?:Awaited<ReturnType<SocialClient['servers']>>;
+  private lobbyFriendData:Awaited<ReturnType<SocialClient['friends']>>={friends:[],requests:[],invitations:[]};
   private coopUnsubscribers: (() => void)[] = [];
   private readonly signal = this.controller.signal;
   constructor(private root: HTMLElement, private audio: AudioManager, private settings: Settings, private exit: () => void) {
@@ -144,6 +155,7 @@ export class EscapeGame {
   }
   private button(id: string, fn: () => void) { this.$(`#${id}`).addEventListener("click", fn, { signal: this.signal }); }
   private panel(html: string) {
+    this.lobbyVisible=false;this.lobbyDisposer?.();this.lobbyDisposer=undefined;
     this.abilityHud.update({ ...this.world.data.abilities, floor: floorAt(this.world.data.player) }, false, this.settings.reducedMotion);
     this.look?.suspend();
     this.$(".escape-shell").classList.remove("intro-active");
@@ -156,12 +168,55 @@ export class EscapeGame {
   }
   private intro() {
     this.paused = true; this.audio.setPlaying(false);
-    this.panel(`<p class="escape-eyebrow">极限恐怖</p><h1>奶蛙<br><em>下水道逃生</em></h1><p>找到出口。躲开奶蛙。</p>
-      <nav class="escape-main-menu" aria-label="游戏模式"><button id="escape-menu-solo" class="escape-primary">单人游戏</button><button id="escape-menu-coop" class="escape-secondary">多人游戏</button><button id="escape-menu-help" class="escape-secondary">操作</button><button id="escape-intro-exit" class="escape-secondary">返回</button></nav>
-      ${this.record ? `<p class="escape-record">逃出 ${this.record.escapes} 次 · 最佳 ${time(this.record.bestTimeMs / 1000)}</p>` : ""}<p class="escape-storage">${safe(this.storageWarning)}</p>`);
-    this.$(".escape-shell").classList.add("intro-active"); this.$("#escape-panel").classList.add("escape-intro");
-    this.button("escape-menu-solo", () => this.soloMenu()); this.button("escape-menu-coop", () => this.coopMenu());
-    this.button("escape-menu-help", () => this.help(false)); this.button("escape-intro-exit", this.exit);
+    this.showSocialLobby('home');
+  }
+  private showSocialLobby(screen:LobbyScreen){
+    this.panel('');this.lobbyVisible=true;this.lobbyScreen=screen;this.lobbyMessage=undefined;this.renderSocialLobby();
+    if(!this.lobbyTimer)this.lobbyTimer=window.setInterval(()=>{if(this.lobbyVisible)void this.refreshSocialLobby();else if(this.started&&!this.coopMode&&this.social.identity)void this.social.ensure().catch(()=>{});},15000);
+    void this.refreshSocialLobby();
+  }
+  private socialMessage(message:string){
+    if(this.disposed)return;
+    this.lobbyMessage=message;
+    const main=this.root.querySelector('.lv-main');if(!main)return;let notice=main.querySelector<HTMLElement>('.lv-message');
+    if(!notice){notice=document.createElement('p');notice.className='lv-message';notice.setAttribute('role','status');main.prepend(notice);}notice.textContent=message;
+  }
+  private async refreshSocialLobby(){
+    if(this.lobbyRefreshing||this.disposed||!navigator.onLine)return;this.lobbyRefreshing=true;
+    try{
+      const results=await Promise.allSettled([this.social.ensure(),this.social.servers()]);
+      if(results[1].status==='fulfilled')this.lobbyServerData=results[1].value;else this.lobbyServerData=undefined;
+      if(results[0].status==='fulfilled')this.lobbyFriendData=await this.social.friends();
+      if(this.lobbyVisible&&!this.root.querySelector('.lv-modal')&&!this.root.querySelector('input:focus'))this.renderSocialLobby();
+      const failure=results.find(r=>r.status==='rejected');if(failure?.status==='rejected')this.socialMessage(failure.reason instanceof Error?failure.reason.message:'暂时无法连接服务器');
+    }catch(error){this.socialMessage(error instanceof Error?error.message:'连接失败');}finally{this.lobbyRefreshing=false;}
+  }
+  private renderSocialLobby(){
+    if(!this.lobbyVisible||this.disposed)return;
+    const room=this.coopSnapshot?.room??(this.coop?{code:this.coop.session.code,phase:'lobby' as const,leaderId:this.coop.session.leader?this.coop.session.playerId:'',players:[]}:undefined);
+    const profile=this.social.identity??{uid:'—',name:'幸存者',avatar:0};
+    const model:LobbyModel={profile,version:APP_VERSION,selfPlayerId:this.coop?.session.playerId,screen:this.lobbyScreen,servers:this.lobbyServerData?[this.lobbyServerData.server]:[],rooms:this.lobbyServerData?.rooms??[],...this.lobbyFriendData,selectedRoom:room,selectedRoomName:'name' in (room??{})?(room as {name?:string}).name:undefined,message:this.lobbyMessage??(this.coop&&this.coopState!=='connected'?this.coopMessage:undefined)};
+    this.lobbyDisposer?.();
+    const operation=(fn:()=>Promise<unknown>,success:string)=>{void fn().then(()=>{this.socialMessage(success);return this.refreshSocialLobby();}).catch(error=>this.socialMessage(error instanceof Error?error.message:'操作失败'));};
+    this.lobbyDisposer=renderLobbyView(this.$('#escape-panel'),model,{
+      screen:screen=>{this.lobbyMessage=undefined;this.lobbyScreen=screen==='room'&&!this.coop?'servers':screen;this.renderSocialLobby();void this.refreshSocialLobby();},
+      single:()=>{if(this.coop)void this.leaveCoop().then(()=>this.soloMenu());else this.soloMenu();},controls:()=>this.help(false),settings:()=>this.settingsMenu(),
+      exit:()=>{if(this.coop)void this.leaveCoop().then(()=>this.exit());else this.exit();},
+      create:input=>{void this.openSocialRoom('create',input);},join:(code,password)=>{void this.openSocialRoom('join',{code,password});},
+      leave:()=>{void this.leaveCoop();},start:()=>{void this.coop?.startRoom().then(()=>this.startCoopGame()).catch(error=>this.socialMessage(error.message));},
+      avatar:avatar=>operation(()=>this.social.update({avatar}),'形象已更换'),rename:name=>operation(()=>this.social.update({name}),'昵称已保存'),
+      addFriend:uid=>operation(()=>this.social.requestFriend(uid),'好友申请已发送'),acceptFriend:uid=>operation(()=>this.social.acceptFriend(uid),'已添加好友'),removeFriend:uid=>operation(()=>this.social.removeFriend(uid),'已移除好友'),
+      inviteFriend:uid=>operation(()=>this.coop?this.social.invite(uid,this.coop.session.code):Promise.reject(new Error('先加入一个房间')),'邀请已发送'),acceptInvite:code=>{void this.openSocialRoom('join',{code});},
+    });
+  }
+  private async openSocialRoom(kind:'create'|'join',input:{name?:string;visibility?:'public'|'private';password?:string;code?:string}){
+    if(this.coopRequesting)return;
+    if(this.coop){this.socialMessage('先离开当前房间');return;}
+    this.coopRequesting=true;
+    try{const profile=await this.social.ensure();if(this.disposed||!this.lobbyVisible)return;const common={version:APP_VERSION,name:profile.name,avatar:profile.avatar as 0|1|2|3,profileToken:profile.token,password:input.password};
+      const client=kind==='create'?await CoopClient.create({...common,title:input.name,visibility:input.visibility}):await CoopClient.join({...common,code:input.code??''});
+      if(this.disposed||!this.lobbyVisible){await client.leave();return;}this.attachCoop(client);this.showSocialLobby('room');void this.prepareCoopRoom(client);
+    }catch(error){this.socialMessage(error instanceof Error?error.message:'无法进入房间');}finally{this.coopRequesting=false;}
   }
   private soloMenu() {
     const canResume = this.saved && ["playing", "caught"].includes(this.saved.phase);
@@ -174,35 +229,6 @@ export class EscapeGame {
     this.$<HTMLInputElement>("#escape-menu-music").onchange = e => { this.music = (e.target as HTMLInputElement).checked; this.saveSound(); };
     this.$<HTMLInputElement>("#escape-menu-sound").onchange = e => { this.sound = (e.target as HTMLInputElement).checked; this.saveSound(); };
     this.button("escape-settings-back", () => this.started ? this.pause() : this.intro());
-  }
-  private coopMenu() {
-    this.panel(`<p class="escape-eyebrow">多人游戏</p><h2>和朋友一起逃生</h2><label class="escape-coop-field">昵称<input id="escape-coop-name" maxlength="12" value="玩家" autocomplete="nickname"></label><div class="escape-avatar-picker" role="group" aria-label="选择头像">${peerAvatarOptions.map(({ id, label }) => `<button type="button" class="escape-avatar" data-avatar="${id}" aria-label="${safe(label)}" title="${safe(label)}" aria-pressed="${id === 0}"><span class="escape-avatar-art" data-avatar="${id}"></span></button>`).join("")}</div><label class="escape-coop-field">房间码<input id="escape-coop-code" maxlength="6" autocomplete="off" placeholder="输入房间码"></label><p id="escape-coop-error" class="escape-coop-error" role="status"></p><button id="escape-coop-create" class="escape-primary">创建房间</button><button id="escape-coop-join" class="escape-secondary">加入房间</button><button id="escape-coop-back" class="escape-secondary">返回</button>`);
-    let avatar = 0;
-    this.root.querySelectorAll<HTMLButtonElement>("[data-avatar]").forEach(button => button.onclick = () => {
-      avatar = Number(button.dataset.avatar); this.root.querySelectorAll("[data-avatar]").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
-    });
-    const details = () => ({ name: this.$<HTMLInputElement>("#escape-coop-name").value.trim().slice(0, 12) || "玩家", avatar: avatar as 0 | 1 | 2 | 3 });
-    this.button("escape-coop-create", () => void this.openCoopRoom("create", details()));
-    this.button("escape-coop-join", () => void this.openCoopRoom("join", { ...details(), code: this.$<HTMLInputElement>("#escape-coop-code").value.trim().toUpperCase() }));
-    this.button("escape-coop-back", () => this.intro());
-  }
-  private async openCoopRoom(kind: "create" | "join", input: { name: string; avatar: 0 | 1 | 2 | 3; code?: string }) {
-    if (this.coopRequesting) return;
-    this.coopRequesting = true;
-    const create = this.root.querySelector<HTMLButtonElement>("#escape-coop-create"), join = this.root.querySelector<HTMLButtonElement>("#escape-coop-join");
-    if (create) create.disabled = true; if (join) join.disabled = true;
-    const error = this.$<HTMLElement>("#escape-coop-error");
-    error.textContent = "正在进入房间…";
-    try {
-      const version = APP_VERSION;
-      const client = kind === "create"
-        ? await CoopClient.create({ version, name: input.name, avatar: input.avatar })
-        : await CoopClient.join({ version, name: input.name, avatar: input.avatar, code: input.code ?? "" });
-      this.attachCoop(client);
-      this.renderCoopLobby();
-      void this.prepareCoopRoom(client);
-    } catch (reason) { error.textContent = reason instanceof Error ? reason.message : "暂时无法进入房间"; }
-    finally { this.coopRequesting = false; if (create?.isConnected) create.disabled = false; if (join?.isConnected) join.disabled = false; }
   }
   private attachCoop(client: CoopClient) {
     this.detachCoop(); this.coopMode = true; this.$(".escape-shell").classList.add("coop-active"); this.coop = client; this.coopState = "connecting"; this.coopMessage = "正在连接房间"; this.coopLobbySignature = ""; this.coopFinal = false; this.coopWasCaught = false; this.coopSyncFaulted = false; this.coopRecovering = false; this.coopAssetsReady = !!this.renderer?.usable; this.coopMovement.reset();
@@ -238,6 +264,7 @@ export class EscapeGame {
     }));
     this.coopUnsubscribers.push(client.onState((state, message, latency) => {
       this.coopState = state; this.coopMessage = message; if (latency !== undefined) this.coopLatency = latency; this.renderCoopStatus();
+      if(this.coopMode&&this.lobbyVisible)this.renderCoopLobby();
       if(this.started&&state==='connected'&&message!=='已连接')this.world.say(message);
       if (state === "closed" && this.coopMode && !this.coopFinal) { this.paused = true; this.clearInput(); this.cinematic?.close(); this.panel('<h2>房间已关闭</h2><button id="escape-coop-closed-leave" class="escape-primary">返回</button>'); this.button("escape-coop-closed-leave", () => void this.leaveCoop()); }
     }));
@@ -257,20 +284,12 @@ export class EscapeGame {
     this.renderer?.clearPeers();
   }
   private renderCoopLobby() {
-    const room = this.coopSnapshot?.room;
-    const me = room?.players.find(player => player.id === this.coop?.session.playerId);
-    const leader = this.coop?.session.leader || room?.leaderId === this.coop?.session.playerId;
-    const signature = JSON.stringify([room?.code, room?.phase, room?.players.map(player => [player.id, player.status, player.ready, player.lives, player.avatar, player.name]), this.coopMessage]);
-    if (signature === this.coopLobbySignature && !this.$("#escape-panel").hidden) return;
-    this.coopLobbySignature = signature;
-    const code = room?.code ?? this.coop?.session.code ?? "…";
-    this.panel(`<p class="escape-eyebrow">逃生小队</p><h2>房间 <code id="escape-coop-room-code">${safe(code)}</code></h2><button id="escape-coop-copy" class="escape-secondary">复制房间码</button><div class="escape-coop-lobby">${[1, 2, 3].map(slot => { const player = room?.players.find(item => item.slot === slot); return `<div class="escape-coop-slot ${player ? "occupied" : "empty"}"><span class="escape-avatar-art" data-avatar="${player?.avatar ?? 0}"></span><span>${player ? safe(player.name) : "等待队友"}</span><small>${player ? (player.id === room?.leaderId ? "队长" : player.status === "connected" ? "已加入" : "重连中") : ""} · ${player?.ready ? "已就绪" : player ? "准备中" : ""}</small></div>`; }).join("")}</div><p id="escape-coop-lobby-status" class="escape-coop-status-line">${safe(this.coopMessage || "等待队友加入")}</p>${leader ? '<button id="escape-coop-start" class="escape-primary" disabled>开始逃生</button>' : ""}<button id="escape-coop-leave" class="escape-secondary">退出房间</button>`);
-    this.button("escape-coop-copy", () => { const status = this.root.querySelector<HTMLElement>("#escape-coop-lobby-status"); if (!navigator.clipboard) { if (status) status.textContent = "长按房间码复制"; return; } void navigator.clipboard.writeText(code).then(() => { if (status) status.textContent = "房间码已复制"; }).catch(() => { if (status) status.textContent = "长按房间码复制"; }); });
-    if (leader) this.button("escape-coop-start", () => void this.coop?.startRoom().then(() => this.startCoopGame()).catch(error => { this.coopMessage = error instanceof Error ? error.message : "暂时无法开始"; this.coopLobbySignature = ""; this.renderCoopLobby(); }));
-    this.button("escape-coop-leave", () => void this.leaveCoop());
-    const start = this.root.querySelector<HTMLButtonElement>("#escape-coop-start");
-    if (start) start.disabled = (room?.players.length ?? 0) < 2 || !!room?.players.some(player => player.status !== "connected" || !player.ready);
-    this.renderCoopStatus();
+    const room=this.coopSnapshot?.room;
+    const signature=JSON.stringify([room?.code,room?.phase,room?.players.map(p=>[p.id,p.status,p.ready,p.lives,p.avatar,p.name]),this.coopMessage]);
+    if(signature===this.coopLobbySignature&&this.lobbyVisible)return;
+    this.coopLobbySignature=signature;
+    if(!this.lobbyVisible)this.showSocialLobby('room');else this.renderSocialLobby();
+    void this.refreshSocialLobby();
   }
   private async leaveCoop() { await this.coop?.leave().catch(() => {}); this.started = false; this.paused = true; this.world = new EscapeWorld(); this.detachCoop(); this.$("#escape-coop-team").hidden = true; this.$("#escape-coop-status").hidden = true; this.intro(); }
   private async startCoopGame() {
@@ -560,8 +579,8 @@ export class EscapeGame {
       if (key === "3") this.coopMode ? this.coopActionInput("ward") : this.world.useCrystal("ward");
     }, { signal: this.signal });
     document.addEventListener("keyup", e => this.keys.delete(e.key.toLowerCase()), { signal: this.signal });
-    window.addEventListener("blur", () => { this.clearInput(); if (this.started && !this.paused) this.pause(); }, { signal: this.signal });
-    document.addEventListener("visibilitychange", () => { if (document.hidden && !this.paused) this.pause(); }, { signal: this.signal });
+    window.addEventListener("blur", () => { this.clearInput(); if (!this.cinematic && this.started && !this.paused) this.pause(); }, { signal: this.signal });
+    document.addEventListener("visibilitychange", () => { if (!this.cinematic && document.hidden && !this.paused) this.pause(); }, { signal: this.signal });
     document.addEventListener("fullscreenchange", () => { this.renderer?.resize(this.settings.quality === "high"); if (!document.fullscreenElement && !this.paused) this.pause(); }, { signal: this.signal });
     window.addEventListener("resize", () => { this.renderer?.resize(this.settings.quality === "high"); if (this.renderer && this.paused) this.renderer.draw(this.world); }, { signal: this.signal });
     window.addEventListener("pagehide", () => this.save(), { signal: this.signal });
@@ -577,7 +596,7 @@ export class EscapeGame {
         const entries: [string, string][] = best ? [[RECORD, JSON.stringify(best)], [SESSION, JSON.stringify(saved)]] : [[SESSION, JSON.stringify(saved)]];
         writeSaveBatch(localStorage, entries);
         this.saved = saved; this.record = best;
-        this.storageWarning = "存档已导入。"; this.intro();
+        this.storageWarning = "存档已导入。"; this.intro(); this.socialMessage(this.storageWarning);
       } catch (error) {
         this.storageWarning = !validated ? "存档无效，原进度已保留。" : error instanceof SaveWriteError && error.restored ? "写入失败，原存档已保留。请检查存储空间。" : "存档写入失败，请重试或从备份恢复。";
         this.intro();
@@ -749,10 +768,11 @@ export class EscapeGame {
     const bearing = Math.atan2(dz, dx) - d.player.angle;
     const wrappedBearing = Math.atan2(Math.sin(bearing), Math.cos(bearing));
     const direction = this.$<HTMLElement>("#escape-hunter-bearing");
-    direction.hidden = reveal <= 0 || Math.abs(wrappedBearing) < 1.35;
+    const otherFloor=floorAt(d.player)!==floorAt(d.hunter);
+    direction.hidden = reveal <= 0 || !otherFloor&&Math.abs(wrappedBearing) < 1.35;
     direction.classList.toggle("left", wrappedBearing < 0);
-    direction.textContent = wrappedBearing < 0 ? "‹ 奶蛙" : "奶蛙 ›";
-    direction.setAttribute("aria-label", wrappedBearing < 0 ? "奶蛙在左侧" : "奶蛙在右侧");
+    direction.textContent = otherFloor?(floorAt(d.hunter)===-1?'↓ 奶蛙·下层':'↑ 奶蛙·上层'):wrappedBearing < 0 ? "‹ 奶蛙" : "奶蛙 ›";
+    direction.setAttribute("aria-label", otherFloor?(floorAt(d.hunter)===-1?'奶蛙在下层':'奶蛙在上层'):wrappedBearing < 0 ? "奶蛙在左侧" : "奶蛙在右侧");
     const freezeButton = this.$<HTMLButtonElement>("#escape-freeze"), revealButton = this.$<HTMLButtonElement>("#escape-reveal"), wardButton = this.$<HTMLButtonElement>("#escape-ward");
     freezeButton.disabled = this.world.crystalCharges("freeze") <= 0 || freeze > 0;
     revealButton.disabled = this.world.crystalCharges("reveal") <= 0 || reveal > 0;
@@ -793,6 +813,7 @@ export class EscapeGame {
     this.roomCueUntil = this.world.data.elapsed + 1.6;
   }
   destroy() {
+    this.lobbyVisible=false;clearInterval(this.lobbyTimer);this.lobbyDisposer?.();this.lobbyDisposer=undefined;
     if (this.disposed) return; this.save(); if (this.coop) void this.coop.leave().catch(() => {}); this.detachCoop(); this.disposed = true; this.cinematic?.close(); this.controller.abort(); cancelAnimationFrame(this.raf); this.audio.setPlaying(false); this.audio.stopPreview();
     if (this.renderer && this.art) returnPreparedEscape({ renderer: this.renderer, art: this.art, canvas: this.$("#escape-view") });
     this.renderer = undefined; this.abilityHud.destroy(); this.noteDialog.destroy();

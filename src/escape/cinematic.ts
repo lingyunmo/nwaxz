@@ -5,6 +5,11 @@ export const randomOpeningClip = () => openingClips[Math.floor(Math.random() * o
 export const caughtClips = [1, 2, 3].map(n => `/assets/video/escape-caught-${n}-v1.mp4`);
 export const randomCaughtClip = () => caughtClips[Math.floor(Math.random() * caughtClips.length)];
 
+/** Wall-clock playback position when a browser suspends media in a hidden tab. */
+export function cinematicTimeAt(startTime: number, startedAt: number, now: number, rate = 1) {
+  return startTime + Math.max(0, now - startedAt) / 1000 * rate;
+}
+
 export class CinematicPlayer {
   readonly done: Promise<void>;
   private finish!: () => void;
@@ -13,6 +18,10 @@ export class CinematicPlayer {
   private video: HTMLVideoElement;
   private closed = false;
   private timeout = 0;
+  private userPaused = false;
+  private timelineStartAt = 0;
+  private timelineStartTime = 0;
+  private timelineRunning = false;
   constructor(root: HTMLElement, path: string, sound: boolean) {
     this.done = new Promise(resolve => { this.finish = resolve; });
     this.element = document.createElement("div");
@@ -25,17 +34,38 @@ export class CinematicPlayer {
     const signal = this.controller.signal, play = this.button("cinematic-play"), mute = this.button("cinematic-sound");
     const status = this.element.querySelector<HTMLElement>(".cinematic-status")!;
     const sync = () => { play.textContent = this.video.paused ? "播放" : "暂停"; mute.textContent = this.video.muted ? "开启声音" : "静音"; mute.setAttribute("aria-pressed", String(!this.video.muted)); };
-    const attempt = () => { if (document.hidden || this.closed) return; void this.video.play().catch(() => { if (!this.closed) { status.textContent = "点击播放"; sync(); } }); };
-    play.onclick = () => this.video.paused ? attempt() : this.video.pause();
+    const resetTimeline = () => {
+      this.timelineStartAt = Date.now(); this.timelineStartTime = this.video.currentTime; this.timelineRunning = true;
+    };
+    const catchUpTimeline = () => {
+      if (!this.timelineRunning || this.userPaused || this.closed) return;
+      const expected = cinematicTimeAt(this.timelineStartTime, this.timelineStartAt, Date.now(), this.video.playbackRate);
+      const duration = this.video.duration;
+      if (Number.isFinite(duration) && duration > 0 && expected >= duration) { this.close(); return; }
+      if (Number.isFinite(expected) && this.video.currentTime < expected) {
+        try { this.video.currentTime = expected; } catch { /* Metadata may not permit seeking yet. */ }
+      }
+    };
+    const attempt = () => {
+      if (document.hidden || this.closed || this.userPaused) return;
+      void this.video.play().catch(() => { if (!this.closed) { status.textContent = "点击播放"; sync(); } });
+    };
+    play.onclick = () => {
+      if (this.video.paused) { this.userPaused = false; this.timelineRunning = false; attempt(); }
+      else { catchUpTimeline(); if (this.closed) return; this.userPaused = true; this.timelineRunning = false; this.video.pause(); }
+    };
     mute.onclick = () => { this.video.muted = !this.video.muted; sync(); if (this.video.paused) attempt(); };
     this.button("cinematic-skip").onclick = () => this.close();
     this.video.addEventListener("ended", () => this.close(), { signal });
     this.video.addEventListener("error", () => this.close(), { signal });
-    this.video.addEventListener("playing", () => { clearTimeout(this.timeout); status.textContent = ""; sync(); }, { signal });
+    this.video.addEventListener("playing", () => { if (!this.timelineRunning) resetTimeline(); clearTimeout(this.timeout); status.textContent = ""; sync(); }, { signal });
     this.video.addEventListener("pause", sync, { signal });
     this.video.addEventListener("waiting", () => { status.textContent = "载入中…"; this.armTimeout(); }, { signal });
-    document.addEventListener("visibilitychange", () => { if (document.hidden) this.video.pause(); }, { signal });
-    window.addEventListener("blur", () => this.video.pause(), { signal });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden || this.userPaused || this.closed) return;
+      catchUpTimeline();
+      if (!this.closed) attempt();
+    }, { signal });
     document.addEventListener("keydown", e => {
       e.stopImmediatePropagation();
       if (e.key === "Escape" || e.key === " ") { e.preventDefault(); play.click(); }

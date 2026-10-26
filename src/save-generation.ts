@@ -4,6 +4,8 @@ export const SAVE_GENERATION_KEY = "nwaxz-save-generation";
 
 const DATABASE_NAME = "nwaxz";
 const DATABASE_TIMEOUT_MS = 8_000;
+// Guest credentials identify a server account, independent of game save formats.
+const isGameKey=(key:string)=>key.startsWith('nwaxz-')&&key!=='nwaxz-social-identity-v1';
 
 type StorageLike = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
 export type SaveGenerationEnvironment = { storage: StorageLike; indexedDB: IDBFactory; timeoutMs?: number };
@@ -11,7 +13,7 @@ export type SaveGenerationEnvironment = { storage: StorageLike; indexedDB: IDBFa
 function localStorageHasGameData(storage: StorageLike) {
   for (let index = 0; index < storage.length; index++) {
     const key = storage.key(index);
-    if (key?.startsWith("nwaxz-") && key !== SAVE_GENERATION_KEY) return true;
+    if (key && isGameKey(key) && key !== SAVE_GENERATION_KEY) return true;
   }
   return false;
 }
@@ -97,7 +99,7 @@ export async function prepareSaveGeneration(environment?: SaveGenerationEnvironm
     const ownedKeys: string[] = [];
     for (let index = 0; index < storage.length; index++) {
       const key = storage.key(index);
-      if (key?.startsWith("nwaxz-")) ownedKeys.push(key);
+      if (key && isGameKey(key)) ownedKeys.push(key);
     }
     for (const key of ownedKeys) storage.removeItem(key);
   }

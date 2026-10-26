@@ -16,14 +16,23 @@ test('a moving teammate cannot raise a stationary scan target to the moving scan
   assert.equal(world.data.abilities.scanChance, .2);
 });
 
-test('a successful scan remembers the correct hidden teammate and can search that wardrobe', () => {
+test('a successful scan can search a known occupied wardrobe without capturing its teammate', () => {
   const world = new EscapeWorld(1);
   world.data.hunter = { x: 9.5, z: 32.5, angle: Math.PI, state: 'patrol' };
   world.data.abilities = warning(.01);
   const target = { id: 'hidden', player: { ...world.data.player, x: 7.5, z: 32.58, light: false }, hidden: 'basement-wardrobe-entrance', exposure: 0, living: true, moving: false };
   const caught = new Set();
   for (let n = 0; n < 200 && !caught.size; n++) for (const id of world.advanceEnemyAuthoritative(.05, [target])) caught.add(id);
-  assert.ok(caught.has(target.id));
+  assert.equal(caught.has(target.id), false);
+  assert.equal(world.data.phase, 'playing');
+});
+
+test('authoritative proximity never captures a hidden teammate, including a witnessed wardrobe', () => {
+  const world = new EscapeWorld(2);
+  const candidate = { id: 'hidden', player: { ...world.data.player, x: 5.5, z: 2.58 }, hidden: 'bed-hide', seenHide: 'bed-hide', exposure: 0, living: true };
+  Object.assign(world.data.hunter, { x: 5.5, z: 2.7, angle: Math.PI / 2, state: 'search' });
+  assert.deepEqual(world.advanceEnemyAuthoritative(.05, [candidate]), []);
+  assert.equal(world.data.phase, 'playing');
 });
 
 test('respawning chooses a clear ground-floor spawn away from a hunter camping the bedroom', t => {

@@ -3,9 +3,12 @@ import { fileURLToPath } from "node:url";
 import { createApp } from "./app.mjs";
 import { attachCoopSockets } from "./coop-socket.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const profilePath=process.env.NWAXZ_PROFILE_DB??(process.env.NODE_ENV==='production'?undefined:path.join(root,'.local','guest-social-v1.sqlite'));
+if(!profilePath||process.env.NODE_ENV==='production'&&profilePath===':memory:')throw new Error('NWAXZ_PROFILE_DB must point to persistent nwaxz storage in production');
 const app = createApp({
   distDir: path.join(root, "dist"),
   revision: process.env.APP_REVISION,
+  profilePath,
 });
 const server = app.listen(
   Number(process.env.PORT ?? 3000),
@@ -19,6 +22,7 @@ function stop() {
   stopping = true;
   closeSockets();
   app.locals.coop?.shutdown();
+  app.locals.social?.close();
   const deadline = setTimeout(() => {
     server.closeAllConnections();
     process.exit(1);

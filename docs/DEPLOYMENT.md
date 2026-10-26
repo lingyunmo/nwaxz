@@ -34,3 +34,9 @@
 首发记录和修复版本验证是两组独立证据：首发运行见 [run 38606468423](https://github.com/lingyunmo/nwaxz/actions/runs/38606468423)，当时健康接口报告修订 `1180b4fa9b5710d10169147110fc87598688c224`。离线缓存修复通过 PR #4 squash 合并，修复提交为 `282aa6ddb179cc4a1271981cdea16a32bd7a3714`；对应 [main workflow run 38612644262](https://github.com/lingyunmo/nwaxz/actions/runs/38612644262) 的 Verify、Build image、Deploy nwaxz 均成功，公网 smoke 精确核对该 SHA 成功。详细验证结果见[发布验证记录](VERIFICATION.md)。这些证据针对所列修复版本；其他提交均须根据各自工作流和线上检查判断。
 
 源码仓库现为公开，main 分支保护已启用：必须通过 PR，Verify 成功且分支最新；管理员同样受限，要求线性历史并禁止强制推送和删除。单人仓库所需审阅人数为 0。规则由 GitHub 强制执行。
+
+## 0.24 游客好友存储
+
+本批新增 nwaxz 独立命名卷 profile-data，挂载 /app/data，容器内 UID/GID 10001。NWAXZ_PROFILE_DB 指向 guest-social-v1.sqlite；生产缺少该变量会拒绝启动，避免身份静默落入内存。CI 与部署预检使用单独的临时可写 /app/data，不访问生产卷。
+
+服务器上的 compose.prod.yml 和 ops/deploy.sh 不随镜像自动更新；本次发布前已仅在 nwaxz 固定目录核对两文件旧 SHA，保留原件，验证新 Compose 后替换部署支持文件，没有重启容器。之后继续既有受限 Actions 发布入口。新卷仅由下一次 nwaxz compose up 创建，其他服务、数据库和共享网络不变。已在本地验证 SQLite 重开保留身份与好友；具体线上部署状态以 Issue72 发布证据为准。

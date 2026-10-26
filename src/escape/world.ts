@@ -537,10 +537,6 @@ export class EscapeWorld {
       for (const candidate of living) {
       const player = candidate.player;
       if (!candidate.hidden && dist(this.data.hunter, player) < .55 && this.lineOfSight(this.data.hunter, player)) caught.push(candidate.id);
-      else if (candidate.hidden) {
-        const knownHide = candidate.seenHide ?? (candidate.id === this.seenHidePlayerId ? this.seenHide : undefined);
-        if (candidate.hidden === knownHide && dist(this.data.hunter, PROPS.find(p => p.id === knownHide) ?? player) < 1.2) caught.push(candidate.id);
-      }
       }
     };
     addCollisions();
@@ -628,7 +624,8 @@ export class EscapeWorld {
       const cabinet = PROPS.find(p => p.id === this.seenHide)!;
       this.target = { x: cabinet.x, z: cabinet.z + .65 }; h.state = "search";
       if (dist(h, cabinet) < 1.2) {
-        if (d.hidden === this.seenHide) { if (!cooperative) this.capture(); return; }
+        // A wardrobe remains safe even when sight/sense exposed its location.
+        // The hunter can search it, then gives up without capturing its occupant.
         this.seenHide = undefined; this.wait = 4;
       }
     } else if ((!cooperative || cooperativeTargetActive) && !d.hidden && dist(h, d.player) < .55 && this.lineOfSight(h, d.player)) { if (!cooperative) this.capture(); return; }
@@ -656,7 +653,10 @@ export class EscapeWorld {
     if (distance < .08) { this.path.shift(); return; }
     const speed = h.state === "chase" ? 1.95 : h.state === "patrol" ? .9 : 1.25;
     const desired = Math.atan2(next.z - h.z, next.x - h.x);
-    h.angle = angleDelta(h.angle + Math.max(-dt * 4, Math.min(dt * 4, angleDelta(desired, h.angle))), 0);
+    // The painted 8-way views use this angle as the hunter's body heading.
+    // Movement follows `desired` exactly, so a smoothed angle falsely shows a
+    // backward or diagonal gait while moving between waypoints.
+    h.angle = angleDelta(desired, 0);
     const door = DOORS.find(o => o.x === Math.floor(next.x) && o.z === Math.floor(next.z));
     if (door && !d.opened.includes(door.id) && d.unlocked.includes(door.id) && dist(h, { x: door.x + .5, z: door.z + .5 }) < 1) { d.opened.push(door.id); this.events.push({ type: "door" }); }
     const step = Math.min(distance, speed * dt);

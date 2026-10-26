@@ -16,7 +16,7 @@ const FULL_EXPLORATION_TILES = legalFloorTiles.length;
 
 function runScenario(roomCount, fullExploration = false) {
   let now = 1_000_000;
-  const service = new CoopService({ now: () => now, maxRooms: 4, autoTick: false });
+  const service = new CoopService({ now: () => now, maxRooms: 8, autoTick: false });
   const rooms = [], sessions = [];
   try {
     global.gc?.();
@@ -93,7 +93,7 @@ function runScenario(roomCount, fullExploration = false) {
 }
 
 const median = values => { const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor(sorted.length / 2)]; };
-for (const rooms of [0, 1, 4]) for (const fullExploration of [false, true]) {
+for (const rooms of [0, 1, 8]) for (const fullExploration of [false, true]) {
   const runs = [runScenario(rooms, fullExploration), runScenario(rooms, fullExploration), runScenario(rooms, fullExploration)];
   const fields = ["activeTicks", "cpuMs", "totalOneCorePercent", "perRoomOneCorePercent", "staticHeapBytesAfterGc", "heapDeltaDuringSampleBytes", "snapshotCount", "snapshotBytes", "egressBytesPerSecond"];
   const medianMetrics = Object.fromEntries(fields.map(field => {

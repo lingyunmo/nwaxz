@@ -231,3 +231,53 @@
  .escape-inventory { bottom:76px; left:auto; right:12px; transform:none; gap:4px; }
  .escape-inventory .escape-slot { width:30px; height:30px; }
 }
+
+/* Compact skill controls and keep their names and counts visible at every size. */
+.escape-hunt { padding:9px 11px; }
+.escape-source b,.escape-source em { display:none; }
+.escape-source small,.escape-source b,.escape-exposure p,#escape-hud-help { display:none; }
+.escape-source { grid-template-rows:auto 8px; }
+.escape-crystals button b,.escape-crystals button kbd { display:none; }
+.escape-crystals { gap:7px; }
+.escape-crystals button { grid-template-columns:22px 1fr auto; grid-template-rows:1fr; gap:4px; width:112px; min-width:112px; height:48px; min-height:48px; padding:6px 8px; }
+.crystal-icon { grid-row:auto; font-size:20px; }
+.escape-crystals button span { font-size:13px; white-space:nowrap; }
+.escape-crystals button small { display:none; }
+#escape-ward-progress { display:none; }
+.escape-pause-panel .escape-card { font-size:15px; }
+.escape-pause-menu h2 { font-size:28px; }
+.escape-pause-menu button,.escape-pause-panel .escape-setting-row button { min-height:44px; padding:10px 14px; font-size:15px; }
+.escape-journal p { font-size:15px; line-height:1.5; }
+.escape-pause-panel .escape-setting-row { gap:8px; }
+.escape-shell .escape-map-button { width:194px; }
+@media (pointer:coarse) {
+  .escape-shell .escape-map-button { width:158px; }
+  .escape-crystals { display:contents; }
+  .escape-crystals button { display:grid; grid-template-columns:1fr; grid-template-rows:1fr; width:46px; min-width:46px; height:46px; min-height:46px; padding:5px; }
+  .escape-crystals button span { position:absolute; left:0; right:0; bottom:2px; display:block; font-size:8px; line-height:1; text-align:center; text-shadow:0 1px 2px #000; }
+  .crystal-icon { font-size:21px; transform:translateY(-3px); }
+  .escape-crystals button b { top:-4px; right:-3px; min-width:17px; padding:1px 3px; font-size:14px; }
+  #escape-ward-progress { display:none; }
+  .escape-pause-panel .escape-card { padding:16px; }
+}
+@media (pointer:coarse) and (max-width:360px) {
+  .escape-crystals button,.escape-actions>button { width:44px; min-width:44px; height:44px; min-height:44px; }
+  .escape-crystals button span { font-size:8px; }
+  .escape-shell .escape-map-button { width:140px; }
+  .escape-pause-panel .escape-card { padding:12px; }
+  .escape-pause-menu button,.escape-pause-panel .escape-setting-row button { padding:8px 10px; }
+}
+
+@media(pointer:fine){.escape-hunt{width:min(480px,44vw)}.escape-crystals button{display:flex;align-items:center;justify-content:center;gap:6px;min-width:84px;width:84px;min-height:44px;height:44px}.escape-crystals button span{position:static;font-size:13px}.escape-ability-hud{width:clamp(148px,12vw,180px)}.escape-ability-status{height:86px}.escape-coop-team{top:254px}}
+@media(pointer:fine) and (max-height:600px){.escape-shell .escape-map-button{width:146px}.escape-coop-team{top:188px}}
+@media(pointer:coarse) and (orientation:portrait){
+ .escape-hud .escape-location{max-width:calc(100vw - 245px)}.escape-hud #escape-room{max-width:100%}
+ .escape-hunt{top:204px;width:calc(100vw - 16px);left:8px;right:auto;transform:none;padding:6px 8px}
+ .escape-exposure-heading{min-height:26px}.escape-exposure meter{height:10px;margin:4px 0}
+ .escape-secondary-meters{margin-top:4px;padding-top:4px;gap:4px}.escape-source{grid-template-rows:auto 5px;padding:3px;gap:2px}.escape-source strong{font-size:10px;line-height:12px}
+ .escape-inventory,.escape-inventory.expansion-inventory{top:280px;right:8px;left:auto;bottom:auto;transform:none;gap:3px}.escape-inventory .escape-slot{width:24px;height:24px}
+ .escape-shell .escape-ability-hud{top:276px;left:8px;width:132px;font-size:10px}.escape-ability-status{height:70px}
+ .escape-shell:has(.escape-hunt.details-open) .escape-ability-hud{top:312px;left:8px;width:144px}.escape-shell:has(.escape-hunt.details-open) .escape-ability-status{height:36px;padding:4px 6px}.escape-shell:has(.escape-hunt.details-open) .escape-ability-readout{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:1fr;gap:8px}
+ .escape-shell:has(.escape-hunt.details-open) .escape-inventory{visibility:hidden}
+ .escape-crystals button span{position:static;font-size:11px;line-height:12px}.escape-crystals button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}.crystal-icon{font-size:17px;transform:none}
+}

@@ -12,7 +12,6 @@ import type { Scene } from "@babylonjs/core/scene.js";
 import type { EscapeWorld } from "./world.ts";
 import { frogViewDirection } from "./facing.ts";
 import { DIRECTIONAL_ART } from "./directional-art.ts";
-import { floorAt } from "./basement-map.ts";
 
 export type FrogPose = { sheet: "original" | "actions" | "directionIdle" | "directionWalk"; frame: number; mirror?: boolean; direction?: number; motion: "idle" | "walk" | "run" | "search" | "peek" | "lunge" | "laugh" };
 export type FrogTextures = Record<FrogPose["sheet"], Texture>;
@@ -184,7 +183,7 @@ export class PaintedFrog {
       overlay.mesh.scaling.copyFrom(l.mesh.scaling);
       overlay.material.diffuseTexture = l.material.diffuseTexture;
       overlay.mesh.visibility = (world.data.hunt?.reveal ?? 0) > 0 && world.data.phase === "playing"
-        && floorAt(d.player) === floorAt(d.hunter) && i === this.active ? .56 : 0;
+        && i === this.active ? .56 : 0;
       overlay.material.emissiveColor.set(.82, .36, 1);
       overlay.material.alpha = .56;
     }

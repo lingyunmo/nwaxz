@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "policy": "Original PNG bytes, no resize or re-encoding",
+  "entries": [
+    {
+      "index": 1,
+      "role": "wall",
+      "url": "/assets/materials/escape/01-wall-tile-v1.png",
+      "source": "ChatGPT 图像 2026年10月27日 01_17_15-1.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 3074931,
+      "sha256": "1d09c871fa3603e2fbfe97e4d3bebb72028f3005229ef54ffe1965d507e9bfd0"
+    },
+    {
+      "index": 2,
+      "role": "floor",
+      "url": "/assets/materials/escape/02-floor-tile-v1.png",
+      "source": "ChatGPT 图像 2026年10月27日 01_17_16-2.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 4081464,
+      "sha256": "d596ed7647ace07f01dc0839aedce78bcde7e57be8723ee138c0b30704a59f66"
+    },
+    {
+      "index": 3,
+      "role": "ceiling",
+      "url": "/assets/materials/escape/03-ceiling-plaster-v1.png",
+      "source": "ChatGPT 图像 2026年10月27日 01_17_17-3.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 3756877,
+      "sha256": "39cff7adba9ec5a35c2570a826c77c990abe84e394ce423722d212e1d8ec4167"
+    },
+    {
+      "index": 4,
+      "role": "wood",
+      "url": "/assets/materials/escape/04-aged-wood-v1.png",
+      "source": "ChatGPT 图像 2026年10月27日 01_17_18-4.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 2909299,
+      "sha256": "cfb2ce22c17d8c9d0098e6c88c41cfdbee0efdd81430cc55fcad834eef729c63"
+    },
+    {
+      "index": 5,
+      "role": "basementWall",
+      "url": "/assets/materials/escape/05-basement-wall-v1.png",
+      "source": "ChatGPT 图像 2026年10月27日 01_17_20-5.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 4199905,
+      "sha256": "f010c250796263c1be8a136759707d31ea486995614c564f36da6c13d2408e4c"
+    },
+    {
+      "index": 6,
+      "role": "basementFloor",
+      "url": "/assets/materials/escape/06-basement-floor-v1.png",
+      "source": "ChatGPT 图像 2026年10月27日 01_17_22-6.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 3920387,
+      "sha256": "ca9ba959bc7eeea1fa80d3e74a2e401ac24912d3ea17301a21ae391efe7e14c2"
+    },
+    {
+      "index": 7,
+      "role": "basementCeiling",
+      "url": "/assets/materials/escape/07-basement-ceiling-v1.png",
+      "source": "ChatGPT 图像 2026年10月27日 01_17_23-7.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 3872063,
+      "sha256": "d39ef698d2ce332ac898a3c8494727f1afa3f86081872b6c6145103d13de39c5"
+    },
+    {
+      "index": 8,
+      "role": "rustedIron",
+      "url": "/assets/materials/escape/08-rusted-iron-v1.png",
+      "source": "ChatGPT 图像 2026年10月27日 01_17_24-8.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 3834742,
+      "sha256": "44eacf526d8d3c93a3343a2a6749a080b19b58f6fa3474b6835444a29923af47"
+    },
+    {
+      "index": 9,
+      "role": "paintedMetal",
+      "url": "/assets/materials/escape/09-painted-metal-v1.png",
+      "source": "ChatGPT 图像 2026年10月27日 01_17_25-9.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 3585447,
+      "sha256": "7496d4f2df4c7c4e924a47112eefd19d1ac7799ef5deea73dbb6af10ec00896a"
+    }
+  ]
+}

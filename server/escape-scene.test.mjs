@@ -13,6 +13,15 @@ import "@babylonjs/loaders/glTF/2.0/Extensions/KHR_materials_emissive_strength.j
 import { createEscapeScene, aimCamera, CELL } from "../src/escape/scene.ts";
 import { installEscapeModels } from "../src/escape/models.ts";
 import { EscapeWorld, PROPS } from "../src/escape/world.ts";
+import { nativeRenderSize } from "../src/escape/material-assets.ts";
+
+test("3D render resolution follows physical display pixels at full HD, retina and mobile sizes", () => {
+  assert.deepEqual(nativeRenderSize(1920,1080,1),{width:1920,height:1080});
+  assert.deepEqual(nativeRenderSize(1280,720,2),{width:2560,height:1440});
+  assert.deepEqual(nativeRenderSize(390,844,3),{width:1170,height:2532});
+  assert.deepEqual(nativeRenderSize(3840,2160,1),{width:3840,height:2160});
+  assert.deepEqual(nativeRenderSize(0,0,NaN),{width:1,height:1});
+});
 
 test("flashlight projection stays centered after moving, turning and looking up/down", () => {
   const engine = new NullEngine(), view = createEscapeScene(engine), world = new EscapeWorld();

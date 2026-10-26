@@ -4,6 +4,8 @@
 
 ## 当前功能
 
+0.25.0 候选：接入用户1–9号原始PNG地图材质，保留1254×1254和原始字节；移除材质512与画布1100/1600限制，按实际设备像素绘制，门柜/管道/设备同步换材质。原图加入离线缓存。[素材与SHA](docs/art/escape-original-materials-v1.md) · [发布状态](https://github.com/lingyunmo/nwaxz/issues/74)。
+
 0.24.0 候选：极限恐怖改为角色主菜单、服务器列表和三人全身队伍；最多8房、实际延迟、公开/密码房、游客UID与服务器好友/邀请。HUD精简、探索区汉字、衣柜安全、跨层显形与CG切页恢复一并修正。资料/好友使用 nwaxz 独立卷，游戏存档仍只在本地。发布状态见 [Issue72](https://github.com/lingyunmo/nwaxz/issues/72)，候选验收见[验证记录](docs/VERIFICATION.md)。
 
 0.23.1 候选：联机改用同源 WSS，客户端逐帧预测移动与碰撞，服务器校验共享判定。修复水晶／柜子缺少目标 ID、出柜位置回滚及操作拒绝误报重连；队友透明原画在暗处可读，八方向按实际相对位置，发光编号正向显示。[实现](docs/COOP_GAME.md) · [实玩修正与发布](https://github.com/lingyunmo/nwaxz/issues/71)。

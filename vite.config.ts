@@ -45,9 +45,9 @@ export default defineConfig({
       },
       injectManifest: {
         additionalManifestEntries: extraPrecacheEntries,
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         globPatterns: ["**/*.{js,css,html,svg,png,webp,json,woff2,mp3,mp4,glb}"],
-        // Keep editable masters published; gameplay loads their smaller WebPs.
+        // Legacy sprite masters stay published; the new map surfaces use original PNGs.
         globIgnores: [
           "assets/character/milk-frog-atlas.png",
           "assets/models/extreme-milk-frog-v1.glb",

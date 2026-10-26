@@ -1,4 +1,4 @@
-import { CRYSTALS, DOORS, HAZARDS, MAP, PROPS, SIZE, HEIGHT, type CrystalKind, type EscapeWorld, type Prop, type Vec } from "./world.ts";
+import { CRYSTALS, DOORS, HAZARDS, MAP, PROPS, ROOMS, SIZE, HEIGHT, type CrystalKind, type EscapeWorld, type Prop, type Vec } from "./world.ts";
 import { floorAt, stairsAt } from "./basement-map.ts";
 
 export type MapReveal = "explored" | "near" | "fog";
@@ -138,6 +138,8 @@ export class EscapeMap {
       if (tile.feature) this.drawFeature(ctx, x, y, cell, tile.feature);
     }
 
+    this.drawRoomLabels(ctx, world, view, left, top, cell, floor, compact);
+
     const playerX = Math.floor(world.data.player.x), playerZ = Math.floor(world.data.player.z);
     const arrowX = left + (playerX - view.x + .5) * cell;
     const arrowY = top + (playerZ - view.z + .5) * cell;
@@ -154,6 +156,35 @@ export class EscapeMap {
     }
     this.drawCompass(ctx, width, height, compact, padding);
     ctx.imageSmoothingEnabled = previousSmoothing;
+    ctx.restore();
+  }
+
+  private drawRoomLabels(ctx: CanvasRenderingContext2D, world: EscapeWorld, view: MapWindow,
+    left: number, top: number, cell: number, floor: 0 | -1, compact: boolean) {
+    const data = world.data as ExploredData;
+    const explored = new Set(Array.isArray(data.explored) ? data.explored : []);
+    const playerX = Math.floor(data.player.x), playerZ = Math.floor(data.player.z);
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `bold ${Math.max(7, Math.min(compact ? 9 : 12, Math.floor(cell * .78)))}px 'Microsoft YaHei', sans-serif`;
+    for (const room of ROOMS) {
+      const centerX = Math.floor(room.x + room.w / 2), centerZ = Math.floor(room.z + room.h / 2);
+      if (floorAt({ x: centerX, z: centerZ }) !== floor) continue;
+      let anchor: {x:number;z:number;distance:number}|undefined;
+      for(let z=Math.max(room.z,view.z);z<Math.min(room.z+room.h,view.z+view.rows);z++)for(let x=Math.max(room.x,view.x);x<Math.min(room.x+room.w,view.x+view.columns);x++){
+        if(!explored.has(z*SIZE+x)&&!(x===playerX&&z===playerZ))continue;
+        const distance=(x-centerX)**2+(z-centerZ)**2;if(!anchor||distance<anchor.distance)anchor={x,z,distance};
+      }
+      if(!anchor)continue;
+      const x = left + (anchor.x - view.x + .5) * cell;
+      const y = top + (anchor.z - view.z + .5) * cell;
+      ctx.lineWidth = Math.max(2, cell * .2);
+      ctx.strokeStyle = "#071012d9";
+      ctx.fillStyle = "#f0dfb2";
+      ctx.strokeText(room.name, x, y, Math.max(cell * 2, room.w * cell - 2));
+      ctx.fillText(room.name, x, y, Math.max(cell * 2, room.w * cell - 2));
+    }
     ctx.restore();
   }
 

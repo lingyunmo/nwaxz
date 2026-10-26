@@ -12,7 +12,7 @@ const server = createApp({distDir:fileURLToPath(new URL('../dist/', import.meta.
 await new Promise(r=>server.once('listening',r));
 const base=`http://127.0.0.1:${server.address().port}`;
 let browser;
-const errors=[], offlineVideoMisses=[];
+const errors=[], offlineVideoMisses=[], offlineApiMisses=[];
 let networkOffline=false;
 try {
   browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH,headless:true,args:['--disable-gpu','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--renderer-process-limit=1','--disable-background-networking']});
@@ -73,7 +73,7 @@ try {
   if(JSON.stringify(JSON.parse(backup).session)!==JSON.stringify(leaving)) throw new Error('backup differs from paused session');
   await page.locator('#escape-exit').click(); await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click();
   await page.locator('#escape-import').setInputFiles({name:'escape-backup.json',mimeType:'application/json',buffer:Buffer.from(backup)});
-  await page.waitForFunction(()=>document.querySelector('.escape-storage')?.textContent.includes('存档已导入'));
+  await page.waitForFunction(()=>document.querySelector('.lv-message')?.textContent.includes('存档已导入'));
   const imported=JSON.parse(await page.evaluate(()=>localStorage.getItem('nwaxz-escape-session-v1')));
   if(JSON.stringify(imported)!==JSON.stringify(leaving)) throw new Error('import changed saved session');
   await page.locator('#escape-intro-exit').click();
@@ -84,6 +84,7 @@ try {
     if(m.type()!=='error')return;
     const url=m.location().url;
     if(networkOffline && /\/assets\/video\/escape-(opening|caught-[123])-v1\.mp4$/.test(url) && m.text().includes('net::ERR_FAILED')) offlineVideoMisses.push(url);
+    else if(networkOffline && /\/api\/(social\/me|coop\/servers)$/.test(url) && /net::ERR_(INTERNET_DISCONNECTED|FAILED)/.test(m.text())) offlineApiMisses.push(url);
     else errors.push('mobile: '+m.text()+' '+url);
   });
   await phone.goto(base); await phone.locator('#extreme').tap();await phone.locator('#escape-menu-solo').tap(); await phone.locator('#escape-new').tap();
@@ -132,6 +133,6 @@ try {
   await phone.screenshot({path:path.join(output,'mobile-laugh.png')});
   await mobile.close();
   await context.close();
-  console.log(JSON.stringify({base, errors, offlineVideoMisses, pitch:current.player.pitch, nextNight:save.phase, mobileSave, cached, offline:true}));
+  console.log(JSON.stringify({base, errors, offlineVideoMisses, offlineApiMisses, pitch:current.player.pitch, nextNight:save.phase, mobileSave, cached, offline:true}));
   if(errors.length) process.exitCode=1;
 } catch(e){console.error(e);console.error(JSON.stringify(errors));process.exitCode=1;} finally {await browser?.close();await new Promise(r=>server.close(r));}

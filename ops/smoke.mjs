@@ -15,5 +15,9 @@ try {
   if (!sw.ok || !(await sw.text()).includes('precache')) throw new Error('offline worker unavailable');
   const ping = await fetch(`${base}/api/coop/ping`, { signal: AbortSignal.timeout(3000) });
   if (!ping.ok || !Number.isFinite((await ping.json()).serverTime)) throw new Error('room transport unavailable');
+  const servers=await fetch(`${base}/api/coop/servers`,{signal:AbortSignal.timeout(3000)});
+  if(!servers.ok||(await servers.json()).server?.capacity!==8)throw new Error('server lobby unavailable');
+  const profile=await fetch(`${base}/api/social/me`,{signal:AbortSignal.timeout(3000)});
+  if(profile.status!==401)throw new Error('guest authentication boundary unavailable');
   console.log(`nwaxz smoke passed: ${health.revision}`);
 } catch (error) { console.error(`nwaxz smoke failed: ${error.message}`); process.exit(1); }

@@ -12,6 +12,10 @@ services:
       HOST: 0.0.0.0
       PORT: "3000"
       APP_REVISION: ${APP_REVISION:?APP_REVISION must be supplied}
+      NWAXZ_PROFILE_DB: /app/data/guest-social-v1.sqlite
+      NWAXZ_COOP_MAX_ROOMS: "8"
+    volumes:
+      - profile-data:/app/data
     tmpfs:
       - /tmp:size=16m,mode=1777
     cap_drop: [ALL]
@@ -31,3 +35,7 @@ networks:
   common-net:
     external: true
     name: common-net
+volumes:
+  profile-data:
+    labels:
+      cn.bzlom.project: nwaxz

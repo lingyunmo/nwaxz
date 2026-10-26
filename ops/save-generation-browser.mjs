@@ -11,6 +11,8 @@ assert.ok(process.env.CHROMIUM_PATH, 'CHROMIUM_PATH must identify the independen
 const server = createApp({ distDir: fileURLToPath(new URL('../dist/', import.meta.url)) }).listen(0, '127.0.0.1');
 await new Promise(resolve => server.once('listening', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
+const guest=await(await fetch(base+'/api/social/guest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'保留身份',avatar:0})})).json();
+const guestValue=JSON.stringify({version:1,...guest});
 let browser;
 
 const readProgress = () => page.evaluate(() => new Promise((resolve, reject) => {
@@ -43,12 +45,13 @@ try {
 
   // Write previous-release data through an actual same-origin page before the app loads.
   await page.goto(`${base}/api/health`);
-  await page.evaluate(({ progress, marker }) => new Promise((resolve, reject) => {
+  await page.evaluate(({ progress, marker, guestValue }) => new Promise((resolve, reject) => {
     localStorage.setItem(marker, '2025-08-legacy');
     localStorage.setItem('nwaxz-settings', JSON.stringify({ music: true, sound: false, vibration: false, reducedMotion: true, quality: 'high' }));
     localStorage.setItem('nwaxz-escape-session-v1', JSON.stringify({ version: 1, player: { x: 3.5, z: 5.5 }, phase: 'playing' }));
     localStorage.setItem('nwaxz-escape-record-v1', JSON.stringify({ escapes: 3, bestTimeMs: 1 }));
     localStorage.setItem('independent-app-data', 'leave-this-alone');
+    localStorage.setItem('nwaxz-social-identity-v1',guestValue);
     const request = indexedDB.open('nwaxz', 1);
     request.onupgradeneeded = () => request.result.createObjectStore('state');
     request.onerror = () => reject(request.error);
@@ -60,6 +63,7 @@ try {
     };
   }), {
     marker: SAVE_GENERATION_KEY,
+    guestValue,
     progress: { version: 1, levels: { [levels[0].id]: { completed: true, collected: 7 } } },
   });
 
@@ -70,6 +74,7 @@ try {
   assert.equal(await page.evaluate(() => localStorage.getItem('nwaxz-escape-session-v1')), null);
   assert.equal(await page.evaluate(() => localStorage.getItem('nwaxz-escape-record-v1')), null);
   assert.equal(await page.evaluate(() => localStorage.getItem('independent-app-data')), 'leave-this-alone');
+  assert.equal(await page.evaluate(()=>localStorage.getItem('nwaxz-social-identity-v1')),guestValue,'game save reset preserves server guest identity');
   assert.deepEqual(await readProgress(), { version: 1, levels: {} }, 'old ordinary progress is reset');
 
   const normalRecord = { completed: true, collected: 5, bestScore: 2400, bestTimeMs: 90_000 };

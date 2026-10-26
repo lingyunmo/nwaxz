@@ -82,3 +82,17 @@ test("patrol and chase use the same forward field of view in a clear corridor", 
     assert.equal(turned.seesPlayer(), true, `${state}: hunter sees the same player after turning around`);
   }
 });
+
+test("the hunter's authored walk heading matches its actual waypoint displacement", () => {
+  const world = new EscapeWorld(42);
+  Object.assign(world.data.player, { x: 2.5, z: 5.5, light: false });
+  Object.assign(world.data.hunter, { x: 12.5, z: 9.5, angle: Math.PI, state: "chase" });
+  world.target = { x: 17.5, z: 9.5 };
+  world.pathTimer = 0;
+  const before = { ...world.data.hunter };
+  world.advance(.15);
+  const after = world.data.hunter;
+  const movementAngle = Math.atan2(after.z - before.z, after.x - before.x);
+  assert.ok(Math.hypot(after.x - before.x, after.z - before.z) > .1);
+  assert.ok(Math.abs(Math.atan2(Math.sin(after.angle - movementAngle), Math.cos(after.angle - movementAngle))) < 1e-8);
+});

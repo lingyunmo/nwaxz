@@ -12,6 +12,7 @@ const canvas = document.querySelector<HTMLCanvasElement>("#view")!;
 const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: false, powerPreference: "low-power" });
 engine.setSize(canvas.width, canvas.height);
 const scene = new Scene(engine);
+scene.useRightHandedSystem=true;
 scene.clearColor = new Color4(.012, .014, .016, 1);
 scene.ambientColor = new Color3(.18, .2, .18);
 new HemisphericLight("peer-test-light", new Vector3(0, 1, 0), scene).intensity = .8;
@@ -130,8 +131,7 @@ async function run() {
   assert(JSON.stringify(originalCells)===JSON.stringify(players.map(p=>[actorFor(p.id).atlas.uOffset,actorFor(p.id).atlas.vOffset])), 'turning the camera in place cannot change an actor body direction');
   camera.setTarget(originalTarget);render();
 
-  const cameraForward = camera.getDirection(Vector3.Forward());
-  const viewFrom = Math.atan2(cameraForward.z, cameraForward.x) + Math.PI;
+  const viewFrom = Math.atan2(camera.position.z-centerActor.root.position.z,camera.position.x-centerActor.root.position.x);
   const directionHashes: string[] = [];
   const atlasCells: Array<{ column: number; row: number }> = [];
   wall.setEnabled(false);

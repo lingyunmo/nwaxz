@@ -1,10 +1,10 @@
-import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual,scryptSync } from "node:crypto";
 import { isIP } from "node:net";
 import packageInfo from "../package.json" with { type: "json" };
 import { EscapeWorld } from "../src/escape/world.ts";
 
 const TICK_MS = 50, SNAPSHOT_MS = 125, GRACE_MS = 30_000, ROOM_TTL_MS = 30 * 60_000, EMPTY_LOBBY_TTL_MS = 2 * 60_000, TERMINAL_TTL_MS = 60_000;
-const HARD_ROOM_LIMIT = 32, MAX_STREAMS = 48, CODE_CHARS = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+const HARD_ROOM_LIMIT = 8, MAX_STREAMS = 48, CODE_CHARS = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 const validName = value => typeof value === "string" && value.trim().length > 0 && [...value.trim()].length <= 12 && !/[\u0000-\u001f\u007f]/u.test(value);
 const safeName = value => value.trim().replace(/[<>]/gu, "");
@@ -38,9 +38,9 @@ export function resolveCoopClientIp(req) {
 }
 
 export class CoopService {
-  constructor({ now = Date.now, randomBytesFn = randomBytes, maxRooms = Number(process.env.NWAXZ_COOP_MAX_ROOMS ?? 4), autoTick = true } = {}) {
+  constructor({ now = Date.now, randomBytesFn = randomBytes, maxRooms = Number(process.env.NWAXZ_COOP_MAX_ROOMS ?? 8), autoTick = true } = {}) {
     this.now = now; this.randomBytes = randomBytesFn; this.rooms = new Map(); this.ipBuckets = new Map();
-    this.maxRooms = clamp(Number.isInteger(maxRooms) ? maxRooms : 4, 1, HARD_ROOM_LIMIT);
+    this.maxRooms = clamp(Number.isInteger(maxRooms) ? maxRooms : 8, 1, HARD_ROOM_LIMIT);
     this.timer = autoTick ? setInterval(() => this.pulse(), TICK_MS) : undefined; this.timer?.unref?.();
     this.reaper = autoTick ? setInterval(() => this.cleanup(), 5_000) : undefined; this.reaper?.unref?.();
   }
@@ -53,27 +53,32 @@ export class CoopService {
     if (now - bucket.at >= 60_000) { bucket.at = now; bucket.count = 0; }
     bucket.count++; this.ipBuckets.set(ip, bucket); return bucket.count <= 60;
   }
-  create({ version, name, avatar }, ip = "") {
+  create({ version, name, avatar, title='逃生小队',visibility='public',password='',profileUid }, ip = "") {
     this.assertVersion(version); if (!this.checkRate(ip)) throw new CoopError(429, "请求太频繁");
     const owned = [...this.rooms.values()].filter(room => room.ownerIp === ip).length;
     if (owned >= 3) throw new CoopError(429, "同一网络的活跃房间已达上限");
     if (this.rooms.size >= this.maxRooms) throw new CoopError(503, "房间已满");
     this.validateProfile(name, avatar);
+    if(typeof title!=='string'||![...title.trim()].length||[...title.trim()].length>24||!['public','private'].includes(visibility)||typeof password!=='string'||password.length>32||visibility==='private'&&!password.length)throw new CoopError(400,'房间名称或密码无效');
     const code = this.code(), player = this.newPlayer(name, avatar, 1), room = {
       code, phase: "lobby", leaderId: player.id, players: new Map([[player.id, player]]), peers: new Map(),
       world: new EscapeWorld(randomInt(1, 0xffffffff)), sharedEvents: [], revision: 0, createdAt: this.now(), lastActive: this.now(), terminalAt: undefined,
       nextPulse: this.now(), nextSnapshot: this.now() + SNAPSHOT_MS, tickInputs: new Map(), tickCounter: 0, connectedAt: this.now(), startedAt: undefined, ownerIp: ip,
     };
+    room.name=title.trim();room.visibility=visibility;
+    if(visibility==='private'){room.passwordSalt=this.randomBytes(16);room.passwordHash=scryptSync(password,room.passwordSalt,32);}
+    player.profileUid=profileUid;
     player.actor = { ...room.world.data.player, ...player.position };
     player.actorWorld = EscapeWorld.restore(room.world.snapshot());
     player.actorWorld.data.player = { ...player.actorWorld.data.player, ...player.position };
     this.rooms.set(code, room); return this.session(room, player);
   }
-  join({ version, code, name, avatar }, ip = "") {
+  join({ version, code, name, avatar, password='',profileUid,invited=false }, ip = "") {
     this.assertVersion(version); if (!this.checkRate(ip)) throw new CoopError(429, "请求太频繁");
     const room = this.rooms.get(String(code ?? "").toUpperCase()); if (!room) throw new CoopError(404, "房间不存在");
     if (room.phase !== "lobby") throw new CoopError(409, "游戏已开始，不能加入");
     if (room.players.size >= 3) throw new CoopError(409, "房间已满");
+    if(room.passwordHash&&!invited&&(typeof password!=='string'||password.length>32||!timingSafeEqual(scryptSync(password,room.passwordSalt,32),room.passwordHash)))throw new CoopError(403,'房间密码错误');
     this.validateProfile(name, avatar);
     const used = new Set([...room.players.values()].map(p => p.slot));
     const slot = [1, 2, 3].find(n => !used.has(n)), player = this.newPlayer(name, avatar, slot);
@@ -81,6 +86,7 @@ export class CoopService {
     player.actorWorld = EscapeWorld.restore(room.world.snapshot());
     player.actorWorld.data.player = { ...player.actorWorld.data.player, ...player.position };
     room.players.set(player.id, player); room.lastActive = this.now(); room.revision++;
+    player.profileUid=profileUid;
     return this.session(room, player);
   }
   start(code, player) {
@@ -200,7 +206,7 @@ export class CoopService {
   }
   closePeer(peer) { if (peer && !peer.res.writableEnded) peer.res.end(); }
   electLeader(room) { const roster = [...room.players.values()].filter(p => !["left", "eliminated", "escaped"].includes(p.status)); const next = roster.find(p => p.status === "connected") ?? roster[0]; if (next) room.leaderId = next.id; }
-  view(room) { return { code: room.code, phase: room.phase, leaderId: room.leaderId, startedAt: room.startedAt, players: [...room.players.values()].map(p => ({ id: p.id, slot: p.slot, name: p.name, avatar: p.avatar, ready: p.ready, lives: p.lives, status: p.status, position: { ...p.position, angle: p.actor?.angle ?? -Math.PI / 2, pitch: p.actor?.pitch ?? 0, crouched: p.actor?.crouched ?? false, sprinting: p.actor?.sprinting ?? false, moving: p.moving } })) }; }
+  view(room) { return { code: room.code,name:room.name,locked:!!room.passwordHash, phase: room.phase, leaderId: room.leaderId, startedAt: room.startedAt, players: [...room.players.values()].map(p => ({ id: p.id,uid:p.profileUid, slot: p.slot, name: p.name, avatar: p.avatar, ready: p.ready, lives: p.lives, status: p.status, position: { ...p.position, angle: p.actor?.angle ?? -Math.PI / 2, pitch: p.actor?.pitch ?? 0, crouched: p.actor?.crouched ?? false, sprinting: p.actor?.sprinting ?? false, moving: p.moving } })) }; }
   snapshot(room, player) {
     const spectating = ["eliminated", "escaped"].includes(player.status) ? [...room.players.values()].find(other => other.status === "connected") : undefined;
     const projection = spectating ?? player;
@@ -307,8 +313,13 @@ export function mountCoopRoutes(app, { service = new CoopService(), express }) {
   const onlyKeys = (body, keys) => body === undefined && keys.length === 0 || !!body && typeof body === "object" && !Array.isArray(body) && !Object.keys(body).some(key => !keys.includes(key));
   const tokenFrom = req => /^Bearer ([A-Za-z0-9_-]{20,128})$/u.exec(req.get("authorization") ?? "")?.[1] ?? "";
   router.get("/ping", (_req, res) => res.json({ serverTime: Date.now() }));
-  router.post("/rooms", run(req => { if (!req.body || Object.keys(req.body).some(key => !["version", "name", "avatar"].includes(key))) throw new CoopError(400, "请求字段无效"); return service.create(req.body, resolveCoopClientIp(req)); }));
-  router.post("/:code/join", run(req => { if (!req.body || Object.keys(req.body).some(key => !["version", "name", "avatar"].includes(key))) throw new CoopError(400, "请求字段无效"); return service.join({ ...req.body, code: req.params.code }, resolveCoopClientIp(req)); }));
+  router.get('/servers',run(()=>({serverTime:Date.now(),server:{id:'primary',name:'奶蛙浴场',rooms:service.rooms.size,capacity:service.maxRooms,players:[...service.rooms.values()].reduce((n,r)=>n+[...r.players.values()].filter(p=>p.status==='connected').length,0),version:packageInfo.version},rooms:[...service.rooms.values()].map(room=>({code:room.code,name:room.name,players:[...room.players.values()].filter(p=>p.status!=='left').length,maxPlayers:3,locked:!!room.passwordHash,phase:room.phase,leaderName:room.players.get(room.leaderId)?.name??''}))})));
+  const identity=req=>{
+    service.assertVersion(req.body?.version);service.validateProfile(req.body?.name,req.body?.avatar);
+    return app.locals.social.auth(tokenFrom(req));
+  };
+  router.post("/rooms", run(req => { if (!req.body || Object.keys(req.body).some(key => !["version", "name", "avatar",'title','visibility','password'].includes(key))) throw new CoopError(400, "请求字段无效"); const profile=identity(req);return service.create({...req.body,name:profile.name,avatar:profile.avatar,profileUid:profile.uid}, resolveCoopClientIp(req)); }));
+  router.post("/:code/join", run(req => { if (!req.body || Object.keys(req.body).some(key => !["version", "name", "avatar",'password'].includes(key))) throw new CoopError(400, "请求字段无效");const profile=identity(req),code=String(req.params.code).toUpperCase();const result=service.join({ ...req.body, code,name:profile.name,avatar:profile.avatar,profileUid:profile.uid,invited:app.locals.social.invited(profile.uid,code) }, resolveCoopClientIp(req));app.locals.social.consume(profile.uid,code);return result; }));
   router.post("/:code/start", run(req => { if (!onlyKeys(req.body, [])) throw new CoopError(400, "请求字段无效"); const room = service.auth(req.params.code, tokenFrom(req)); const player = service.findPlayer(room, tokenFrom(req)); return service.start(req.params.code, player); }));
   router.post("/:code/ready", run(req => { if (!onlyKeys(req.body, ["ready"])) throw new CoopError(400, "请求字段无效"); return service.setReady(req.params.code, tokenFrom(req), req.body.ready); }));
   router.post("/:code/respawn", run(req => { if (!onlyKeys(req.body, [])) throw new CoopError(400, "请求字段无效"); return service.respawn(req.params.code, tokenFrom(req)); }));

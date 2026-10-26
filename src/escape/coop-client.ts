@@ -15,10 +15,10 @@ export class CoopClient {
  private pending=new Map<number,{resolve:(value:any)=>void;reject:(error:Error)=>void;timer:number;at:number;ping:boolean}>();
  private lastSnapshot?:CoopSnapshot;
  constructor(readonly session:CoopSessionResponse,private base='/api/coop'){}
- static create(request:CoopCreateRequest,base?:string){return this.sessionRequest('/rooms',request,base);}
- static join(request:CoopJoinRequest,base?:string){const{code,...profile}=request;return this.sessionRequest(`/${encodeURIComponent(code)}/join`,profile,base);}
- private static async sessionRequest(path:string,body:unknown,base='/api/coop'){
-  const response=await fetch(base+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}),data=await response.json();
+ static create(request:CoopCreateRequest,base?:string){const{profileToken,...body}=request;return this.sessionRequest('/rooms',body,base,profileToken);}
+ static join(request:CoopJoinRequest,base?:string){const{code,profileToken,...profile}=request;return this.sessionRequest(`/${encodeURIComponent(code)}/join`,profile,base,profileToken);}
+ private static async sessionRequest(path:string,body:unknown,base='/api/coop',profileToken?:string){
+  const response=await fetch(base+path,{method:'POST',headers:{'content-type':'application/json',...(profileToken?{authorization:`Bearer ${profileToken}`}:{})},body:JSON.stringify(body)}),data=await response.json();
   if(!response.ok)throw new Error(data.error??'暂时无法进入房间');return new CoopClient(data,base);
  }
  onSnapshot(fn:(snapshot:CoopSnapshot)=>void){this.listeners.add(fn);if(this.lastSnapshot)fn(this.lastSnapshot);return()=>this.listeners.delete(fn);}
@@ -78,7 +78,7 @@ export class CoopClient {
  ready(ready:boolean){return this.request('ready',{ready});}
  startRoom(){return this.request('start');}
  respawn(){return this.request('respawn');}
- async leave(){try{if(this.connected)await this.request('leave');}finally{this.stop();}}
+ async leave(){try{if(this.connected)await this.request('leave');else await fetch(`${this.base}/${encodeURIComponent(this.session.code)}/leave`,{method:'POST',headers:{authorization:`Bearer ${this.session.token}`,'content-type':'application/json'},body:'{}'}).catch(()=>{});}finally{this.stop();}}
  async ping(){const at=performance.now();await this.request('ping');return Math.round(performance.now()-at);}
  reconnect(){this.stop();this.start();this.startInputs();}
  stop(){this.alive=false;this.connected=false;const ws=this.socket;this.socket=undefined;ws?.close();this.rejectPending();clearInterval(this.inputTimer);clearInterval(this.pingTimer);this.inputTimer=this.pingTimer=0;this.latestInput=undefined;this.actions=[];}

@@ -3,8 +3,9 @@ const { version } = packageInfo;
 import express from "express";
 import path from "node:path";
 import fs from "node:fs";
-import { mountCoopRoutes } from "./coop-service.mjs";
-export function createApp({ distDir, revision = "development", coopService } = {}) {
+import { mountCoopRoutes,resolveCoopClientIp } from "./coop-service.mjs";
+import {SocialService,mountSocialRoutes} from './social-service.mjs';
+export function createApp({ distDir, revision = "development", coopService, socialService, profilePath=':memory:' } = {}) {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", false);
@@ -35,6 +36,7 @@ export function createApp({ distDir, revision = "development", coopService } = {
         revision,
       });
   });
+  app.locals.social=mountSocialRoutes(app,{express,service:socialService??new SocialService({filename:profilePath}),clientIp:resolveCoopClientIp});
   app.locals.coop = mountCoopRoutes(app, { express, ...(coopService ? { service: coopService } : {}) });
   app.use("/api", (_req, res) => res.status(404).json({ error: "接口不存在" }));
   // No extension: public .js responses previously carried month-long caching.

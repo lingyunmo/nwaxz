@@ -100,7 +100,7 @@ test("hiding unseen is safe, hiding in plain sight is remembered across save/res
   Object.assign(w.data.hunter, { x: 5.5, z: 5.5, angle: -Math.PI / 2 });
   w.interact(); assert.equal(w.data.hidden, "bed-hide");
   const resumed = EscapeWorld.restore(w.snapshot());
-  frames(resumed, 6); assert.equal(resumed.data.phase, "caught");
+  frames(resumed, 6); assert.equal(resumed.data.phase, "playing", "wardrobe safety also survives a witnessed entry and save/resume");
 });
 
 test("look pitch is required in current saves, clamped, and independent of yaw", () => {

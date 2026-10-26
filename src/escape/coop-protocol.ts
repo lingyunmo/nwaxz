@@ -6,6 +6,7 @@ export type CoopPhase = "lobby" | "playing" | "won" | "lost";
 export type CoopPlayerStatus = "connected" | "reconnecting" | "caught" | "eliminated" | "escaped" | "left";
 export type CoopPlayer = {
   id: string;
+  uid?: string;
   slot: 1 | 2 | 3;
   name: string;
   avatar: 0 | 1 | 2 | 3;
@@ -16,6 +17,8 @@ export type CoopPlayer = {
 };
 export type CoopRoomView = {
   code: string;
+  name?: string;
+  locked?: boolean;
   phase: CoopPhase;
   leaderId: string;
   players: CoopPlayer[];
@@ -43,8 +46,8 @@ export type CoopInput = {
   action?: CoopAction;
   targetId?: string;
 };
-export type CoopCreateRequest = { version: string; name: string; avatar: 0 | 1 | 2 | 3 };
-export type CoopJoinRequest = { version: string; code: string; name: string; avatar: 0 | 1 | 2 | 3 };
+export type CoopCreateRequest = { version: string; name: string; avatar: 0 | 1 | 2 | 3;profileToken?:string;title?:string;visibility?:'public'|'private';password?:string };
+export type CoopJoinRequest = { version: string; code: string; name: string; avatar: 0 | 1 | 2 | 3;profileToken?:string;password?:string };
 export type CoopSessionResponse = { code: string; playerId: string; token: string; leader: boolean; phase: CoopPhase; protocol: typeof COOP_PROTOCOL_VERSION };
 
 export function validCoopInput(value: unknown): value is CoopInput {

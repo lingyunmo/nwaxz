@@ -32,14 +32,21 @@ try {
   assert.equal(await page.evaluate(k=>localStorage.getItem(k),sessionKey),saved,'paused CG must not advance save or simulation');
   await page.screenshot({path:path.join(output,'opening.png')});
   await page.locator('#cinematic-sound').click(); assert.equal(await video.evaluate(v=>v.muted),true);
-  await page.locator('#cinematic-play').click(); // mute resumes a paused clip; pause it again
+  assert.equal(await video.evaluate(v=>v.paused),true,'changing sound must preserve an explicit manual pause');
   await page.locator('#cinematic-play').click();
-  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
-  assert.equal(await video.evaluate(v=>v.paused),true);
+  await page.waitForFunction(()=>{const v=document.querySelector('.escape-cinematic video');return v&&!v.paused;});
+  await page.waitForFunction(()=>{const v=document.querySelector('.escape-cinematic video');return v&&Number.isFinite(v.duration)&&v.duration-v.currentTime<1.5;},{},{timeout:30000});
+  await page.evaluate(()=>{
+    window.dispatchEvent(new Event('blur'));
+    Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));
+  });
+  assert.equal(await video.evaluate(v=>v.paused),false,'tab hiding and blur must not pause the cinematic');
+  // Model a browser suspending its media decoder in a hidden tab. The app's
+  // wall-clock timeline must seek to the end and finish when it becomes visible.
+  await video.evaluate(v=>v.pause());
+  await page.waitForTimeout(2200);
   await page.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
-  assert.equal(await video.evaluate(v=>v.paused),true,'returning to foreground must wait for a deliberate play');
-  await page.locator('#cinematic-play').click();
-  await page.locator('.escape-cinematic').waitFor({state:'detached',timeout:20000}); // natural ending
+  await page.locator('.escape-cinematic').waitFor({state:'detached',timeout:3000});
   await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   await page.keyboard.press('Escape'); await page.locator('#escape-exit').click();
   await page.locator('#extreme').click();await page.locator('#escape-menu-solo').click(); await page.locator('#escape-continue').click();
@@ -133,6 +140,6 @@ try {
   await page.screenshot({path:path.join(output,'offline.png')}); await page.locator('#cinematic-skip').click();
   await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   await blocked.close(); await context.close();
-  console.log(JSON.stringify({selected,openingNaturalEnd:true,captureNaturalEnd:true,skip:true,pausedSimulation:true,simulatedBackgroundPause:true,missingVideoFallback:true,blockedPlayRecovery:true,offlineRange:true,errors}));
+  console.log(JSON.stringify({selected,openingNaturalEnd:true,captureNaturalEnd:true,skip:true,pausedSimulation:true,manualPauseResume:true,hiddenTimelineCompletion:true,missingVideoFallback:true,blockedPlayRecovery:true,offlineRange:true,errors}));
   assert.deepEqual(errors,[]);
 } finally {await browser?.close();await new Promise(r=>server.close(r));}

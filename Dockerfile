@@ -17,9 +17,10 @@ WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
-COPY server/app.mjs server/index.mjs server/coop-service.mjs server/coop-socket.mjs ./server/
+COPY server/app.mjs server/index.mjs server/coop-service.mjs server/coop-socket.mjs server/social-service.mjs ./server/
 COPY src/escape/world.ts src/escape/basement-map.ts src/escape/perception.ts src/escape/abilities.ts src/escape/interference.ts src/escape/coop-protocol.ts ./src/escape/
 COPY ops/smoke.mjs ./ops/smoke.mjs
+RUN mkdir -p /app/data && chown 10001:10001 /app/data
 USER 10001:10001
 EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 CMD ["node", "ops/smoke.mjs"]

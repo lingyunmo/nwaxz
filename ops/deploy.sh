@@ -27,7 +27,7 @@ printf '%s' "$token" | docker --config "$registry" login ghcr.io -u lingyunmo --
 unset token
 docker --config "$registry" pull "$image@$digest"
 docker run -d --name "$candidate" --label cn.bzlom.project=nwaxz --network none \
-  --read-only --tmpfs /tmp:rw,size=16m --cap-drop ALL --security-opt no-new-privileges:true \
+  --read-only --tmpfs /tmp:rw,size=16m --tmpfs /app/data:rw,size=16m,uid=10001,gid=10001,mode=0700 -e NWAXZ_PROFILE_DB=/app/data/guest-social-v1.sqlite --cap-drop ALL --security-opt no-new-privileges:true \
   --memory 128m --cpus 0.25 --pids-limit 64 "$image@$digest" >/dev/null
 healthy=false
 for attempt in $(seq 1 20); do

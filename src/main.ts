@@ -130,7 +130,7 @@ function renderHome() {
     { id: "extreme", title: "极限恐怖", name: "下水道逃生", caption: "搜寻 · 躲藏", art: "/assets/scenes/escape-cover-v1.webp" },
   ];
   chrome(`<main class="game-hub screen-enter" aria-label="游戏主界面"><header class="hub-header"><h1>奶蛙<span>爱洗澡</span></h1>${buttonIcon("settings", "设置", "settings")}</header>
-    <nav class="mode-posters" aria-label="选择模式">${modes.map(m => `<button id="${m.id}" class="mode-poster mode-${m.id}" aria-label="${m.title} · ${m.name}"><img class="mode-art" src="${m.art}" alt=""/><span class="mode-content"><span class="mode-caption">${m.caption}</span><strong>${m.title}</strong><span class="mode-name">${m.name}</span><span class="mode-enter">进入模式 ${icon("play")}</span></span></button>`).join("")}</nav>
+    <nav class="mode-posters" aria-label="选择模式">${modes.map(m => `<button id="${m.id}" class="mode-poster mode-${m.id}" aria-label="${m.title} · ${m.name}"><img class="mode-art" src="${m.art}" alt=""/>${m.id==='extreme'?'<span class="mode-hot">HOT</span>':''}<span class="mode-content"><span class="mode-caption">${m.caption}</span><strong>${m.title}</strong><span class="mode-name">${m.name}</span><span class="mode-enter">进入模式 ${icon("play")}</span></span></button>`).join("")}</nav>
     <footer class="hub-footer"><span>v${version}</span><button id="update" ${updateAvailable ? "" : "hidden"}>有新版本 ${icon("restart")}</button></footer></main>`);
   $("#normal").onclick = () => openMode("normal");
   $("#horror").onclick = () => openMode("horror");

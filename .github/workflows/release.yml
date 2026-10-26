@@ -48,7 +48,7 @@ jobs:
           image=ghcr.io/lingyunmo/nwaxz
           docker build --build-arg APP_REVISION="$REVISION" -t "$image:$REVISION" .
           trap 'docker rm -f nwaxz-ci-smoke >/dev/null 2>&1 || true' EXIT
-          docker run -d --name nwaxz-ci-smoke --network none --read-only --tmpfs /tmp "$image:$REVISION"
+          docker run -d --name nwaxz-ci-smoke --network none --read-only --tmpfs /tmp --tmpfs /app/data:rw,size=16m,uid=10001,gid=10001,mode=0700 -e NWAXZ_PROFILE_DB=/app/data/guest-social-v1.sqlite "$image:$REVISION"
           ready=false
           for attempt in $(seq 1 20); do
             if docker exec nwaxz-ci-smoke node ops/smoke.mjs "$REVISION"; then ready=true; break; fi

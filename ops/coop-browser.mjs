@@ -50,51 +50,87 @@ async function openPlayer(name, { phone = false } = {}) {
   const context = await browser.newContext({ viewport: phone ? { width: 390, height: 844 } : { width: 1280, height: 800 }, deviceScaleFactor: phone ? 2 : 1, isMobile: phone, hasTouch: phone, serviceWorkers: 'allow' });
   contexts.push(context); await context.addInitScript(instrumentation);
   const page = await context.newPage(); pages.push(page); page.on('pageerror', error => pageErrors.push(error.message)); page.on('console', message => { if (message.type() === 'error' && /Content Security Policy|Refused to (?:apply|load|connect)/i.test(message.text())) cspViolations.push(message.text()); }); page.on('response', response => { if (response.url().endsWith('/escape-survivor-portraits.webp')) portraitResponses.push(response.status()); });
-  await page.goto(base); await page.locator('#extreme').click(); await page.locator('#escape-menu-coop').click();
+  await page.goto(base); await page.locator('#extreme').click();
+  await page.locator('.lv-user').waitFor({ state: 'visible', timeout: 15000 });
+  await page.locator('.lv-user').click();
+  await page.locator('#lv-name').fill(name);
+  await page.locator('[data-action="rename"]').click();
+  await page.waitForFunction(value => document.querySelector('.lv-user')?.textContent?.includes(value), name, { timeout: 10000 });
   await page.evaluate(({ session, record }) => {
     localStorage.setItem('nwaxz-escape-session-v1', session); localStorage.setItem('nwaxz-escape-record-v1', record);
     window.__soloSaveWrites = 0; const setItem = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key, value) { if (key === 'nwaxz-escape-session-v1' || key === 'nwaxz-escape-record-v1') window.__soloSaveWrites++; return setItem.call(this, key, value); };
   }, { session: sessionValue, record: recordValue });
-  await page.locator('#escape-coop-name').fill(name);
+  await page.locator('#escape-menu-coop').click();
   return { context, page };
 }
+async function selectAvatar(page, avatar) {
+  await page.locator('.lv-user').click();
+  await page.locator(`[data-action="avatar"][data-avatar="${avatar}"]`).click();
+  await page.waitForFunction(value => document.querySelector('.lv-user .lv-portrait')?.classList.contains(`lv-avatar-${value}`), avatar, { timeout: 10000 });
+}
+async function showServers(page) {
+  if (await page.locator('.lv-room-bottom').count()) {
+    await page.locator('[data-action="leave"]').click();
+    await page.waitForFunction(() => !document.querySelector('.escape-shell')?.classList.contains('coop-active') && !document.querySelector('.lv-roster'), undefined, { timeout: 15000 });
+  }
+  if (!await page.locator('.lv-main .lv-list-tools').count()) await page.locator('#escape-menu-coop').click();
+  await page.locator('.lv-main .lv-list-tools').waitFor({ state: 'visible', timeout: 15000 });
+}
 async function createRoom(page, avatar = 0) {
-  if (await page.locator('#escape-coop-name').count() === 0) await page.locator('#escape-menu-coop').click();
-  await page.locator(`button[data-avatar="${avatar}"]`).click(); await page.locator('#escape-coop-create').click();
-  await page.locator('#escape-coop-room-code').waitFor({ timeout: 15000 });
-  return page.locator('#escape-coop-room-code').textContent();
+  await showServers(page); await selectAvatar(page, avatar);
+  if (!await page.locator('.lv-main .lv-list-tools').count()) await page.locator('#escape-menu-coop').click();
+  const previous = await page.evaluate(() => window.__coopSessions.length);
+  await page.locator('[data-open-create]').click();
+  const form = page.locator('form.lv-modal');
+  await form.locator('input[name="name"]').fill('浏览器验收小队');
+  await form.locator('select[name="visibility"]').selectOption('public');
+  await form.locator('button[type="submit"]').click();
+  await page.waitForFunction(count => window.__coopSessions.length > count, previous, { timeout: 15000 });
+  const session = await page.evaluate(() => window.__coopSessions.at(-1));
+  await page.waitForFunction(code => document.querySelector('.lv-roster') && document.querySelector('.lv-room-banner')?.textContent?.includes(code), session.code, { timeout: 15000 });
+  return session.code;
 }
 async function joinRoom(page, code, avatar) {
-  if (await page.locator('#escape-coop-name').count() === 0) await page.locator('#escape-menu-coop').click();
-  await page.locator(`button[data-avatar="${avatar}"]`).click(); await page.locator('#escape-coop-code').fill(code); await page.locator('#escape-coop-join').click(); await page.locator('#escape-coop-room-code').waitFor({ timeout: 15000 });
+  await showServers(page); await selectAvatar(page, avatar);
+  if (!await page.locator('.lv-main .lv-list-tools').count()) await page.locator('#escape-menu-coop').click();
+  const previous = await page.evaluate(() => window.__coopSessions.length);
+  await page.locator('#lv-code').fill(code);
+  await page.locator('[data-action="join-code"]').click();
+  const form = page.locator('form.lv-modal');
+  await form.locator('input[name="password"]').fill('');
+  await form.locator('button[type="submit"]').click();
+  await page.waitForFunction(count => window.__coopSessions.length > count, previous, { timeout: 15000 });
+  await page.waitForFunction(roomCode => document.querySelector('.lv-roster') && document.querySelector('.lv-room-banner')?.textContent?.includes(roomCode), code, { timeout: 15000 });
 }
 async function waitReady(page) {
   await page.waitForFunction(() => { const players = window.__coopSnapshots.at(-1)?.room?.players; return players?.length >= 2 && players.every(player => player.status === 'connected' && player.ready); }, undefined, { timeout: 90000 });
 }
 async function startRoom(page) {
   await page.bringToFront();
-  await page.waitForFunction(() => { const b = document.querySelector('#escape-coop-start'); return b && !b.disabled; }, undefined, { timeout: 15000 });
-  await page.locator('#escape-coop-start').click(); await page.locator('#escape-coop-team').waitFor({ state: 'visible', timeout: 90000 });
+  await page.waitForFunction(() => { const b = document.querySelector('[data-action="start"]'); return b && !b.disabled; }, undefined, { timeout: 15000 });
+  await page.locator('[data-action="start"]').click(); await page.locator('#escape-coop-team').waitFor({ state: 'visible', timeout: 90000 });
 }
 async function latestSnapshot(page) { return page.evaluate(() => window.__coopSnapshots.at(-1)); }
 async function exitRoom(page) {
   await page.bringToFront();
   const controls = '#escape-coop-result-exit:visible, #escape-coop-caught-leave:visible, #escape-coop-sync-leave:visible, #escape-coop-closed-leave:visible, #escape-exit:visible, #escape-pause:visible, #cinematic-skip:visible';
   for (let attempt = 0; attempt < 5; attempt++) {
-    if (await page.locator('#escape-menu-coop').isVisible().catch(() => false)) return;
+    const finished = await page.evaluate(() => !document.querySelector('.escape-shell')?.classList.contains('coop-active') && !document.querySelector('.lv-roster'));
+    if (finished) return;
     if (await page.evaluate(() => !!document.pointerLockElement)) { await page.keyboard.press('Escape'); continue; }
     const action = page.locator(controls).first();
     try {
       if (await page.evaluate(() => matchMedia('(pointer:coarse)').matches)) await action.tap({timeout:5000}); else await action.click({timeout:5000});
     } catch (error) {
-      if (await page.locator('#escape-menu-coop').isVisible().catch(() => false)) return;
+      const finished = await page.evaluate(() => !document.querySelector('.escape-shell')?.classList.contains('coop-active') && !document.querySelector('.lv-roster'));
+      if (finished) return;
       await page.screenshot({path:'.local/coop-exit-failure.png'});
       console.error('Exit state', await page.evaluate(() => ({ panel:document.querySelector('#escape-panel')?.textContent, classes:document.querySelector('.escape-shell')?.className, hidden:document.querySelector('#escape-panel')?.hasAttribute('hidden'), room:window.__coopSnapshots.at(-1)?.room.phase })));
       throw error;
     }
   }
-  await page.locator('#escape-menu-coop').waitFor({ timeout: 10000 });
+  await page.waitForFunction(() => !document.querySelector('.escape-shell')?.classList.contains('coop-active') && !document.querySelector('.lv-roster'), undefined, { timeout: 10000 });
 }
 
 function position(snapshot, id) { return snapshot?.room?.players?.find(player => player.id === id)?.position; }
@@ -227,7 +263,11 @@ try {
   await exitRoom(b.page); await exitRoom(c.page);
 
   const offline = await openPlayer('离线玩家'); await offline.context.setOffline(true);
-  await offline.page.locator('#escape-coop-create').click(); await offline.page.waitForFunction(() => { const text = document.querySelector('#escape-coop-error')?.textContent ?? ''; return !!text && text !== '正在进入房间…'; }, undefined, { timeout: 10000 });
+  await offline.page.locator('[data-open-create]').click();
+  const offlineForm = offline.page.locator('form.lv-modal');
+  await offlineForm.locator('input[name="name"]').fill('离线验收');
+  await offlineForm.locator('button[type="submit"]').click();
+  await offline.page.waitForFunction(() => !!document.querySelector('.lv-message')?.textContent?.trim(), undefined, { timeout: 10000 });
   assert.deepEqual(await offline.page.evaluate(() => [localStorage.getItem('nwaxz-escape-session-v1'), localStorage.getItem('nwaxz-escape-record-v1')]), [sessionValue, recordValue], 'offline join attempt keeps single-player saves unchanged');
   console.log('co-op browser acceptance passed: WebSocket, E crystal pickup, wardrobe entry/exit, 2-player movement/actions/lives, 3-player movement/lives, leader departure, phone layout, ping, save isolation, offline refusal');
 } finally {

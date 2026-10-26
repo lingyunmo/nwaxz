@@ -139,3 +139,32 @@
   .escape-ability-banner { top: 43%; }
 }
 @media (prefers-reduced-motion: reduce) { .escape-ability-banner::before { animation: none; } }
+
+/* Keep the permanent enemy skill readout legible without taking over the HUD. */
+.escape-ability-hud { width:clamp(156px,16vw,220px); font-size:11px; }
+.escape-ability-status { grid-template-columns:32px minmax(0,1fr); gap:9px; height:112px; padding:9px; }
+.escape-ability-avatar { flex-basis:32px; width:32px; height:32px; }
+.escape-ability-readout { gap:8px; }
+.escape-ability-item { grid-template-rows:auto 6px; gap:5px; }
+.escape-ability-status .escape-ability-charge { height:6px; }
+@media (pointer:coarse) {
+  .escape-ability-hud { top:204px; left:12px; width:min(40vw,150px); font-size:10px; }
+  .escape-ability-status { grid-template-columns:minmax(0,1fr); height:88px; padding:8px; gap:0; }
+  .escape-ability-status>.escape-ability-avatar { display:none; }
+  .escape-ability-readout { gap:6px; }
+  .escape-ability-item { grid-template-rows:auto 5px; gap:3px; }
+  .escape-ability-status .escape-ability-charge { height:5px; }
+}
+@media (pointer:coarse) and (max-height:650px) and (orientation:portrait) {
+  .escape-ability-hud { top:184px; width:132px; }
+  .escape-ability-status { height:78px; }
+}
+@media (pointer:coarse) and (orientation:landscape) and (max-height:540px) {
+  .escape-ability-hud { top:90px; width:145px; }
+  .escape-ability-status { grid-template-columns:26px minmax(0,1fr); height:88px; }
+  .escape-ability-status>.escape-ability-avatar { display:block; width:26px; height:26px; }
+}
+@media (pointer:coarse) and (orientation:portrait) {
+  .escape-shell:not(.coop-active):has(.escape-hunt.details-open) .escape-ability-hud { top:clamp(304px,36vh,320px); left:8px; width:144px; }
+  .escape-shell:not(.coop-active):has(.escape-hunt.details-open) .escape-ability-status { height:64px; padding:6px; }
+}

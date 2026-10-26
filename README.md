@@ -4,7 +4,9 @@
 
 ## 当前功能
 
-0.25.0 候选：接入用户1–9号原始PNG地图材质，保留1254×1254和原始字节；移除材质512与画布1100/1600限制，按实际设备像素绘制，门柜/管道/设备同步换材质。原图加入离线缓存。[素材与SHA](docs/art/escape-original-materials-v1.md) · [发布状态](https://github.com/lingyunmo/nwaxz/issues/74)。
+0.26.0 候选：单人游戏、设置、存档、操作说明、重开确认和房间关闭页面统一使用角色大厅的外观与导航；从等待房间进入设置后可返回同一房间。只调整局外窗口，局内玩法不变。局域网联机按用户要求暂停，不包含在本次发布中。[发布状态](https://github.com/lingyunmo/nwaxz/issues/76)。
+
+0.25.0 已发布：接入用户1–9号原始PNG地图材质，保留1254×1254和原始字节；移除材质512与画布1100/1600限制，按实际设备像素绘制，门柜/管道/设备同步换材质。原图加入离线缓存。[素材与SHA](docs/art/escape-original-materials-v1.md) · [精确发布证据](https://github.com/lingyunmo/nwaxz/pull/75#issuecomment-6423403706)。
 
 0.24.0 候选：极限恐怖改为角色主菜单、服务器列表和三人全身队伍；最多8房、实际延迟、公开/密码房、游客UID与服务器好友/邀请。HUD精简、探索区汉字、衣柜安全、跨层显形与CG切页恢复一并修正。资料/好友使用 nwaxz 独立卷，游戏存档仍只在本地。发布状态见 [Issue72](https://github.com/lingyunmo/nwaxz/issues/72)，候选验收见[验证记录](docs/VERIFICATION.md)。
 

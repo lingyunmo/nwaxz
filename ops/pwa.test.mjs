@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { createHash } from "node:crypto";
+import { surfacePaths } from "../src/escape/material-assets.ts";
 
 test("built preload covers revisioned game resources, including all whole videos", () => {
   const manifest = JSON.parse(fs.readFileSync(new URL("../dist/preload-manifest.json", import.meta.url), "utf8"));
@@ -71,4 +72,9 @@ test("built preload covers revisioned game resources, including all whole videos
   }
   assert.ok(manifest.some((entry) => /\.js$/.test(entry.url)));
   assert.ok(manifest.some((entry) => /\.css$/.test(entry.url)));
+  for (const url of Object.values(surfacePaths)) {
+    const entry = manifest.find(e => e.url === url.slice(1));
+    assert.ok(entry?.revision, `${url} must be available offline`);
+    assert.ok(fs.readFileSync(new URL(`../dist${url}`, import.meta.url)).equals(fs.readFileSync(new URL(`../public${url}`, import.meta.url))), `${url} must be copied byte-for-byte`);
+  }
 });

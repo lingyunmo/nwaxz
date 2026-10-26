@@ -18,8 +18,10 @@ import { withTimeout } from "../loading.ts";
 import { floorAt } from "./basement-map.ts";
 import type { CoopPlayer } from "./coop-protocol.ts";
 import { PeerActorsRenderer } from "./peers.ts";
+import { nativeRenderSize, type SurfaceImages, type SurfaceKind } from "./material-assets.ts";
+import type { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial.js";
 
-export type EscapeArt = { materials: HTMLImageElement; map: HTMLImageElement; basement: HTMLImageElement };
+export type EscapeArt = { surfaces: SurfaceImages; map: HTMLImageElement; basement: HTMLImageElement };
 export class EscapeRenderer {
   private engine: Engine;
   private view;
@@ -33,9 +35,18 @@ export class EscapeRenderer {
   private disposed = false;
   private map: EscapeMap;
   private peerActors?: PeerActorsRenderer;
+  private surfaceTextures: Record<SurfaceKind, Texture>;
   constructor(private canvas: HTMLCanvasElement, art: EscapeArt, private reduced: boolean) {
-    this.engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false, powerPreference: "low-power" }, false);
+    this.engine = new Engine(canvas, true, { preserveDrawingBuffer: false, stencil: false, powerPreference: "high-performance" }, false);
     this.view = createEscapeScene(this.engine);
+    this.surfaceTextures = Object.fromEntries(Object.entries(art.surfaces).map(([kind, image]) => {
+      // Upload the original decoded image directly, with no intermediate resize canvas.
+      const texture = new Texture(image.src, this.view.scene, false, true, Texture.TRILINEAR_SAMPLINGMODE, undefined, undefined, image);
+      texture.name = `original-surface:${kind}`;
+      texture.wrapU = texture.wrapV = Texture.WRAP_ADDRESSMODE;
+      texture.anisotropicFilteringLevel = this.engine.getCaps().maxAnisotropy;
+      return [kind, texture];
+    })) as Record<SurfaceKind, Texture>;
     this.map = new EscapeMap(art.map);
     const beam = new DynamicTexture("soft-flashlight-optics", 128, this.view.scene, false);
     const bc = beam.getContext(), gradient = bc.createRadialGradient(64, 64, 0, 64, 64, 64);
@@ -43,23 +54,20 @@ export class EscapeRenderer {
     gradient.addColorStop(.72, "#777777"); gradient.addColorStop(1, "#000000");
     bc.fillStyle = gradient; bc.fillRect(0, 0, 128, 128); beam.update(false);
     this.view.torch.projectionTexture = beam;
-    for (const [name, quadrant] of [["wall", 0], ["wood", 1], ["floor", 2], ["ceiling", 3]] as const) {
-      const tex = new DynamicTexture(`painted-${name}-tile`, 512, this.view.scene, true, Texture.TRILINEAR_SAMPLINGMODE);
-      const s = art.materials.width / 2;
-      tex.getContext().drawImage(art.materials, quadrant % 2 * s, Math.floor(quadrant / 2) * s, s, s, 0, 0, 512, 512);
-      tex.wrapU = tex.wrapV = Texture.WRAP_ADDRESSMODE; tex.anisotropicFilteringLevel = 4; tex.update(false);
-      const material = this.view.scene.getMaterialByName(name === "wall" ? "painted-tile" : name === "wood" ? "painted-door" : `painted-${name}`);
-      if (material && "diffuseTexture" in material) material.diffuseTexture = tex;
-    }
-    for (const [name, quadrant] of [["basement-tile", 0], ["basement-floor", 1], ["basement-ceiling", 2], ["basement-secret", 3]] as const) {
-      const tex = new DynamicTexture(`painted-${name}`, 512, this.view.scene, true, Texture.TRILINEAR_SAMPLINGMODE);
-      const s = art.basement.width / 2;
-      tex.getContext().drawImage(art.basement, quadrant % 2 * s, Math.floor(quadrant / 2) * s, s, s, 0, 0, 512, 512);
-      if (name === "basement-secret") { tex.vScale = -1; tex.vOffset = 1; }
-      tex.wrapU = tex.wrapV = Texture.WRAP_ADDRESSMODE; tex.anisotropicFilteringLevel = 4; tex.update(false);
+    for (const [name, kind] of [["painted-tile", "wall"], ["painted-door", "wood"], ["painted-floor", "floor"], ["painted-ceiling", "ceiling"], ["basement-tile", "basementWall"], ["basement-floor", "basementFloor"], ["basement-ceiling", "basementCeiling"], ["rusty-trim", "rustedIron"]] as const) {
       const material = this.view.scene.getMaterialByName(name);
-      if (material && "diffuseTexture" in material) material.diffuseTexture = tex;
+      if (material && "diffuseTexture" in material) {
+        material.diffuseTexture = this.surfaceTextures[kind];
+        if ("diffuseColor" in material) (material.diffuseColor as Color3).set(1, 1, 1);
+      }
     }
+    // The user supplied surfaces 1–9; keep the existing separate story mural.
+    const muralSize = art.basement.naturalWidth / 2;
+    const mural = new DynamicTexture("existing-basement-secret", muralSize, this.view.scene, true, Texture.TRILINEAR_SAMPLINGMODE);
+    mural.getContext().drawImage(art.basement, muralSize, muralSize, muralSize, muralSize, 0, 0, muralSize, muralSize);
+    mural.vScale = -1; mural.vOffset = 1; mural.update(false);
+    const secret = this.view.scene.getMaterialByName("basement-secret");
+    if (secret && "diffuseTexture" in secret) secret.diffuseTexture = mural;
     this.shadow = new ShadowGenerator(512, this.view.torch);
     this.shadow.usePoissonSampling = true; this.shadow.bias = .001; this.shadow.normalBias = .02; this.shadow.setDarkness(.42);
     this.captureLight = new PointLight("capture-laugh-key", Vector3.Zero(), this.view.scene);
@@ -77,6 +85,7 @@ export class EscapeRenderer {
           return container;
         });
         const container = await withTimeout(task, "浴室模型准备超时，请重试。");
+        this.applyPropSurfaces(container);
         this.containers.push(container);
       }
       onStage("奶蛙正在就位…");
@@ -97,10 +106,26 @@ export class EscapeRenderer {
   }
   resize(high = false) {
     if (this.disposed) return;
-    const rect = this.canvas.getBoundingClientRect(), ratio = Math.min(high ? 1.5 : 1, window.devicePixelRatio || 1);
-    const cap = high ? 1600 : 1100, scale = Math.min(ratio, cap / Math.max(1, rect.width, rect.height));
-    this.engine.setSize(Math.max(1, Math.round(rect.width * scale)), Math.max(1, Math.round(rect.height * scale)));
+    const rect = this.canvas.getBoundingClientRect(), size = nativeRenderSize(rect.width, rect.height, window.devicePixelRatio);
+    this.engine.setSize(size.width, size.height);
     this.shadow.getShadowMap()?.resize(high ? 1024 : 512);
+  }
+  private applyPropSurfaces(container: AssetContainer) {
+    for (const material of container.materials) {
+      const kind = material.name.startsWith("wood_") ? "wood" : material.name.startsWith("iron_") ? "rustedIron" : material.name === "pipe_ceramic_old" ? "paintedMetal" : undefined;
+      if (!kind || !("albedoTexture" in material)) continue;
+      const pbr = material as PBRMaterial;
+      pbr.albedoTexture = this.surfaceTextures[kind];
+      pbr.albedoColor.setAll(material.name === "wood_interior" ? .2 : 1);
+    }
+    const fusebox = [...container.transformNodes, ...container.meshes].find(node => node.name === "fusebox");
+    for (const mesh of fusebox?.getChildMeshes() ?? []) {
+      if (!mesh.material || !["iron_blackened", "iron_worn"].includes(mesh.material.name) || !("albedoTexture" in mesh.material)) continue;
+      const painted = mesh.material.clone(`painted-equipment:${mesh.name}`) as PBRMaterial;
+      painted.albedoTexture = this.surfaceTextures.paintedMetal;
+      painted.albedoColor.setAll(1); painted.metallic = .1; painted.roughness = .85;
+      mesh.material = painted;
+    }
   }
   draw(world: EscapeWorld, dt = 1 / 60) {
     if (this.disposed || !this.models) return;

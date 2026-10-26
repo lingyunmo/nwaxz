@@ -8,9 +8,10 @@ import {Texture} from '@babylonjs/core/Materials/Textures/texture.js';
 import {DitheredTileFadeMaterialPlugin} from '@babylonjs/core/Materials/ditheredTileFadeMaterialPlugin.js';
 import {PaintedFrog,directionalFrogPose} from '../src/escape/frog.ts';
 import {DIRECTIONAL_ART} from '../src/escape/directional-art.ts';
+import {FROG_EXTRA_ART} from '../src/escape/extra-art.ts';
 import {createEscapeScene} from '../src/escape/scene.ts';
 import {EscapeWorld} from '../src/escape/world.ts';
-const textures=scene=>Object.fromEntries(['original','actions','directionIdle','directionWalk'].map(k=>[k,new Texture(null,scene)]));
+const textures=scene=>Object.fromEntries(['original','actions','directionIdle','directionWalk',...Object.keys(FROG_EXTRA_ART)].map(k=>[k,new Texture(null,scene)]));
 function place(w,angle){Object.assign(w.data.player,{x:11.5+Math.cos(angle)*2,z:4.5+Math.sin(angle)*2,angle:Math.atan2(-Math.sin(angle),-Math.cos(angle)),light:true,pitch:-.12})}
 function setup(){const engine=new NullEngine(),view=createEscapeScene(engine),actor=new PaintedFrog(view.scene,textures(view.scene));const w=new EscapeWorld(42);w.data.elapsed=10;Object.assign(w.data.hunter,{x:11.5,z:4.5,angle:0,state:'patrol'});place(w,0);return {engine,view,actor,w}}
 function clean(s){s.actor.dispose();s.view.scene.dispose();s.engine.dispose()}
@@ -47,7 +48,7 @@ test('every walking direction alternates authored strides; running keeps the sam
    assert.equal(a.sheet,'directionWalk');assert.equal(a.frame,i);assert.equal(b.frame,i+8);assert.equal(a.motion,'walk');assert.equal(b.direction,i);
   }
   s.w.data.hunter.state='chase';assert.equal(directionalFrogPose(s.w,.2,true,4).frame,12);assert.equal(directionalFrogPose(s.w,.2,true,4).motion,'run');
-  s.w.data.hunter.state='search';assert.equal(directionalFrogPose(s.w,1.5,false,0).sheet,'original','front searching cannot fake a different head-facing direction');
+  s.w.data.hunter.state='search';assert.equal(directionalFrogPose(s.w,1.5,false,0).sheet,'directionSearch','search uses the authored listening pose for the correct direction');
  }finally{clean(s)}
 });
 

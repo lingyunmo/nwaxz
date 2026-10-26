@@ -154,7 +154,8 @@ test("hunter routes around drawers and wardrobes and can investigate furniture s
     "wardrobe sound is investigated from in front of its opening");
   assert.ok(w.route(w.data.hunter, target, true).length, "furniture sound has a traversable route");
   const startDistance = Math.hypot(w.data.hunter.x - target.x, w.data.hunter.z - target.z);
-  for (let i = 0; i < 180; i++) {
+  // Include the new brief listening stop before the investigation walk.
+  for (let i = 0; i < 240; i++) {
     w.advance(1 / 60);
     assert.ok(!blocked(w.data.hunter), "hunter collision stays clear of furniture along the route");
   }

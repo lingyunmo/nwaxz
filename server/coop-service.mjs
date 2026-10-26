@@ -170,6 +170,7 @@ export class CoopService {
   }
   collectActorEvents(room, player) {
     for (const event of player.actorWorld.drainEvents()) {
+      if (event.type === "hunter-cast") { if (event.id === "interference") room.world.performHunterLaugh("interference"); continue; }
       if (SHARED_EVENT_TYPES.has(event.type)) room.sharedEvents.push(event);
       else (player.pendingEvents ??= []).push(event);
     }

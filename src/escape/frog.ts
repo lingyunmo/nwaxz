@@ -12,14 +12,19 @@ import type { Scene } from "@babylonjs/core/scene.js";
 import type { EscapeWorld } from "./world.ts";
 import { frogViewDirection } from "./facing.ts";
 import { DIRECTIONAL_ART } from "./directional-art.ts";
+import { FROG_EXTRA_ART } from "./extra-art.ts";
 
-export type FrogPose = { sheet: "original" | "actions" | "directionIdle" | "directionWalk"; frame: number; mirror?: boolean; direction?: number; motion: "idle" | "walk" | "run" | "search" | "peek" | "lunge" | "laugh" };
+export type FrogPose = { sheet: "original" | "actions" | "directionIdle" | "directionWalk" | keyof typeof FROG_EXTRA_ART; frame: number; mirror?: boolean; direction?: number; motion: "idle" | "walk" | "run" | "stalk" | "search" | "peek" | "lunge" | "laugh" };
 export type FrogTextures = Record<FrogPose["sheet"], Texture>;
 /** Original standing and belly-laugh frames are never replaced by inferred art. */
 export function frogPose(world: EscapeWorld, clock: number, moving: boolean): FrogPose {
   const d = world.data, h = d.hunter, distance = Math.hypot(h.x - d.player.x, h.z - d.player.z);
   if (d.phase === "caught" || d.phase === "lost") return { sheet: "original", frame: 1, motion: "laugh" };
-  if (h.state === "chase" && distance < 1.25) return { sheet: "actions", frame: 5, motion: "lunge" };
+  const performance = h.performance && h.performance.until > d.elapsed ? h.performance : undefined;
+  if (performance?.kind === "laugh") return { sheet: "directionLaugh", frame: 0, motion: "laugh" };
+  if (h.state === "chase" && distance < 1.25) return { sheet: "directionAttack", frame: 0, motion: "lunge" };
+  if (performance?.kind === "listen") return { sheet: "directionSearch", frame: 0, motion: "search" };
+  if (performance?.kind === "stalk" || (h.state === "investigate" || h.state === "search") && moving) return { sheet: "directionStalk", frame: 0, motion: "stalk" };
   if (d.hidden && h.state === "search" && distance < 3) return { sheet: "actions", frame: 4, motion: "peek" };
   if (h.state === "chase") {
     const step = Math.floor(clock * 5) % 2;
@@ -32,20 +37,22 @@ export function frogPose(world: EscapeWorld, clock: number, moving: boolean): Fr
 
 export function directionalFrogPose(world: EscapeWorld, clock: number, moving: boolean, direction: number, held?: FrogPose["motion"]): FrogPose {
   const old = frogPose(world, clock, moving);
-  if (old.motion === "laugh") return old;
+  if (old.motion === "laugh" && old.sheet === "original") return old;
   const motion = held ?? old.motion;
+  if (motion === "laugh") return { sheet: "directionLaugh", frame: direction, motion, direction };
+  if (motion === "lunge") return { sheet: "directionAttack", frame: direction, motion, direction };
+  if (motion === "search" || motion === "peek") return { sheet: "directionSearch", frame: direction, motion, direction };
+  if (motion === "stalk") return { sheet: Math.floor(clock * 2.6) % 2 ? "directionStalkB" : "directionStalk", frame: direction, motion, direction };
   const locomotion = held ? motion === "walk" || motion === "run" : moving || motion === "run";
   if (direction === 0) {
-    if (motion === "lunge") return { sheet: "actions", frame: 5, motion, direction };
-    if (motion === "peek") return { sheet: "actions", frame: 4, motion, direction };
     // The canonical standing face and blink stay pixel-for-pixel in the front view.
     if (!locomotion) return clock % 4.7 > 4.54 ? { sheet: "actions", frame: 0, motion, direction } : { sheet: "original", frame: 0, motion, direction };
   }
   if (locomotion) {
-    const running = motion === "run" || motion === "lunge";
+    const running = motion === "run";
     return { sheet: "directionWalk", frame: direction + Math.floor(clock * (running ? 6 : 4)) % 2 * 8, motion: running ? "run" : "walk", direction };
   }
-  return { sheet: "directionIdle", frame: direction, motion: motion === "search" || motion === "peek" ? motion : "idle", direction };
+  return { sheet: "directionIdle", frame: direction, motion: "idle", direction };
 }
 
 export class PaintedFrog {
@@ -107,8 +114,8 @@ export class PaintedFrog {
   }
   private frame(layer: number, pose: FrogPose) {
     const l = this.layers[layer], texture = l.textures[pose.sheet];
-    if (pose.sheet === "directionIdle" || pose.sheet === "directionWalk") {
-      const atlas = DIRECTIONAL_ART[pose.sheet], rect = atlas.frames[pose.frame];
+    if (pose.sheet === "directionIdle" || pose.sheet === "directionWalk" || pose.sheet in FROG_EXTRA_ART) {
+      const atlas = pose.sheet in FROG_EXTRA_ART ? FROG_EXTRA_ART[pose.sheet as keyof typeof FROG_EXTRA_ART] : DIRECTIONAL_ART[pose.sheet as keyof typeof DIRECTIONAL_ART], rect = atlas.frames[pose.frame];
       texture.uScale = rect.width / atlas.width; texture.vScale = rect.height / atlas.height;
       texture.uOffset = rect.x / atlas.width; texture.vOffset = 1 - (rect.y + rect.height) / atlas.height;
       // Tight, padded alpha bounds keep feet and eye level stable across paintings.
@@ -152,7 +159,7 @@ export class PaintedFrog {
     const updateVisibility = !frozen || this.viewingFade || changedView || frozen && this.fade === 1;
     if (this.fade === 1) this.viewingFade = false;
     if (!frozen) {
-      const gait = this.pose.motion === "run" ? 10 : this.pose.motion === "walk" ? 6.8 : 0;
+      const gait = this.pose.motion === "run" ? 10 : this.pose.motion === "walk" ? 6.8 : this.pose.motion === "stalk" ? 4 : 0;
       this.bob = gait && !this.reduced ? .018 * (1 - Math.cos(this.clock * gait * 2)) : 0;
     }
     const distance = Math.hypot(d.hunter.x - d.player.x, d.hunter.z - d.player.z);

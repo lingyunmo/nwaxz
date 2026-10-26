@@ -19,6 +19,8 @@ import { floorAt } from "./basement-map.ts";
 import type { CoopPlayer } from "./coop-protocol.ts";
 import { PeerActorsRenderer } from "./peers.ts";
 import { nativeRenderSize, type SurfaceImages, type SurfaceKind } from "./material-assets.ts";
+import { FROG_EXTRA_ART } from "./extra-art.ts";
+import type { FrogTextures } from "./frog.ts";
 import type { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial.js";
 
 export type EscapeArt = { surfaces: SurfaceImages; map: HTMLImageElement; basement: HTMLImageElement };
@@ -96,8 +98,9 @@ export class EscapeRenderer {
         }), "奶蛙贴图准备超时，请重试。");
       };
       const [original, actions, directionIdle, directionWalk] = await Promise.all([texture("/assets/character/haunted-frog-v1.webp"), texture("/assets/character/haunted-frog-actions-v2.webp"), texture("/assets/character/haunted-frog-directions-idle-v1.webp", true), texture("/assets/character/haunted-frog-directions-walk-v1.webp", true)]);
+      const extra = Object.fromEntries(await Promise.all(Object.entries(FROG_EXTRA_ART).map(async ([key, art]) => [key, await texture(art.url, true)]))) as Pick<FrogTextures, keyof typeof FROG_EXTRA_ART>;
       if (this.disposed) throw new Error("场景已关闭");
-      this.models = installEscapeModels(this.view.scene, this.containers[0], { original, actions, directionIdle, directionWalk }, this.reduced);
+      this.models = installEscapeModels(this.view.scene, this.containers[0], { original, actions, directionIdle, directionWalk, ...extra }, this.reduced);
       for (const mesh of [...this.models.propRoots.values()].flatMap(n => n.getChildMeshes())) this.shadow.addShadowCaster(mesh, false);
       for (const door of this.view.doors.values()) for (const mesh of door.getChildMeshes()) this.shadow.addShadowCaster(mesh, false);
       onStage("正在点亮浴室…");

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { createHash } from "node:crypto";
 import { surfacePaths } from "../src/escape/material-assets.ts";
+import { FROG_EXTRA_ART } from "../src/escape/extra-art.ts";
 
 test("built preload covers revisioned game resources, including all whole videos", () => {
   const manifest = JSON.parse(fs.readFileSync(new URL("../dist/preload-manifest.json", import.meta.url), "utf8"));
@@ -28,6 +29,11 @@ test("built preload covers revisioned game resources, including all whole videos
   ]);
   assert.ok(videos.every(entry => entry.revision && entry.bytes > 2000000));
   assert.ok(manifest.every(entry => entry.url !== "preload-manifest.json"));
+  for (const art of Object.values(FROG_EXTRA_ART)) {
+    assert.ok(manifest.some(entry => entry.url === art.url.slice(1)), "new directional actions must be preloaded");
+    const built = fs.readFileSync(new URL(`../dist${art.url}`, import.meta.url));
+    assert.equal(createHash("sha256").update(built).digest("hex"), art.sha256, "native action PNG bytes must remain unchanged");
+  }
   for (const url of [
     "index.html",
     "icon.svg",

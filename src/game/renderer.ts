@@ -4,6 +4,7 @@ import type { Artwork } from "../artwork";
 import type { Settings } from "../settings";
 import { FrogAnimator } from "./character";
 import { HorrorScene, hauntState } from "./horror";
+import { BathDeadline } from "./deadline.ts";
 
 export type RunResult = { collected: number; elapsedMs: number };
 type Preferences = {
@@ -15,7 +16,9 @@ type Preferences = {
 type Callbacks = {
   progress: (water: number, coins: number) => void;
   complete: (result: RunResult) => void;
-  failed: () => void;
+  failed: (reason: "pollution" | "timeout") => void;
+  deadline?: (remainingMs: number, limitMs: number) => void;
+  caught?: () => void;
   tap: () => void;
   dig: () => void;
   devices: (interacted?: boolean) => void;
@@ -55,6 +58,9 @@ export class BathGame {
   private stageArt: HTMLImageElement;
   private animator = new FrogAnimator();
   private horror?: HorrorScene;
+  private deadline?: BathDeadline;
+  private failureReported = false;
+  get catching() { return this.deadline?.phase === "catching"; }
   private laughCycle = -1;
   private startedAt?: number;
   private destroyed = false;
@@ -75,7 +81,8 @@ export class BathGame {
     this.callbacks = callbacks;
     this.artwork = preferences.art;
     this.stageArt = level.scene && level.scene !== "bath" ? preferences.art[level.scene] : preferences.art.stage;
-    if (level.mode === "horror") this.horror = new HorrorScene();
+    if (level.mode) this.horror = new HorrorScene();
+    if (level.timeLimitMs !== undefined) this.deadline = new BathDeadline(level.timeLimitMs);
     this.reducedMotion = preferences.reducedMotion;
     this.world = new FluidWorld(level);
     const ratio = Math.min(
@@ -239,6 +246,17 @@ export class BathGame {
       // Score/animation use active wall time; only physics has a capped step.
       // A slow render must not award an unfair time bonus.
       this.clock += elapsed;
+      if (this.deadline) {
+        const before = this.deadline.phase;
+        this.deadline.advance(elapsed * 1000);
+        this.callbacks.deadline?.(this.deadline.remainingMs, this.deadline.limitMs);
+        if (before === "running" && this.deadline.phase === "catching") {
+          this.lost = true; this.pointer = undefined; this.callbacks.caught?.();
+        }
+        if (this.deadline.phase === "caught" && !this.failureReported) {
+          this.failureReported = true; this.callbacks.failed("timeout");
+        }
+      }
       if (this.horror && !this.won && !this.lost && hauntState(this.clock).laughing && Math.floor(this.clock / 12) !== this.laughCycle) {
         this.laughCycle = Math.floor(this.clock / 12);
         this.callbacks.haunt();
@@ -251,10 +269,12 @@ export class BathGame {
       this.callbacks.progress(this.world.delivered, this.world.collected);
       this.callbacks.devices();
       if (!this.won && !this.lost && this.world.dirtyDelivered > 0) {
+        this.deadline?.finish();
         this.lost = true;
-        this.callbacks.failed();
+        this.callbacks.failed("pollution");
       }
       if (!this.won && !this.lost && this.world.delivered >= 100) {
+        this.deadline?.finish();
         this.won = true;
         this.callbacks.complete({
           collected: this.world.collected,
@@ -293,7 +313,9 @@ export class BathGame {
       }
     rocks.globalCompositeOperation = "source-in";
     rocks.filter = "saturate(.3) brightness(.58)";
-    rocks.drawImage(this.stageArt, 0, 0, WIDTH, 178, 0, 0, WIDTH, 624);
+    const rx = this.stageArt.naturalWidth / WIDTH, ry = this.stageArt.naturalHeight / HEIGHT;
+    const seasonal = Boolean(this.world.level.timeLimitMs);
+    rocks.drawImage(this.stageArt, 0, (seasonal ? 240 : 0)*ry, WIDTH*rx, (seasonal ? 200 : 178)*ry, 0, 0, WIDTH, 624);
     rocks.filter = "none";
     rocks.globalCompositeOperation = "source-over";
     ctx.drawImage(this.rockMask, 0, 0);
@@ -316,8 +338,9 @@ export class BathGame {
     const ctx = this.ctx;
     ctx.drawImage(this.stageArt, 0, 0, WIDTH, HEIGHT);
     // An excavated tunnel reveals the painted tiled wall under the soil layer.
-    ctx.drawImage(this.stageArt, 0, 0, WIDTH, 100, 0, 200, WIDTH, 422);
-    ctx.fillStyle = this.world.level.scene === "workshop" ? "#44301cb3" : "#073c42b3";
+    const rx = this.stageArt.naturalWidth / WIDTH, ry = this.stageArt.naturalHeight / HEIGHT;
+    ctx.drawImage(this.stageArt, 0, (this.world.level.timeLimitMs ? 624 : 0)*ry, WIDTH*rx, 100*ry, 0, 200, WIDTH, 422);
+    ctx.fillStyle = this.world.level.mode === "infernal" ? "#240a08b3" : this.world.level.mode === "halloween" ? "#200d30b3" : this.world.level.scene === "workshop" ? "#44301cb3" : "#073c42b3";
     ctx.fillRect(0, 200, WIDTH, 422);
     if (this.terrainDirty) this.paintTerrain();
     ctx.drawImage(this.terrain, 0, 0);
@@ -361,6 +384,7 @@ export class BathGame {
     this.drawDevices();
     this.drawBathroom();
     this.horror?.drawLighting(ctx, this.artwork, this.clock, this.world.level.pumpkins ?? [], this.reducedMotion, this.won, this.cursor);
+    if (this.deadline && ["catching", "caught"].includes(this.deadline.phase)) this.drawCapture();
     if (
       this.cursor &&
       this.cursor.y >= 195 &&
@@ -474,7 +498,15 @@ export class BathGame {
     ctx.fill();
     ctx.fillStyle = "#cee0e3";
     ctx.fillRect(448, 643, 8, 3);
-    if (this.horror) this.horror.drawFrog(ctx, this.artwork, this.clock, this.reducedMotion, this.won);
+    const capturing = this.deadline && ["catching", "caught"].includes(this.deadline.phase);
+    if (capturing) { /* The approaching pose is drawn once, above the whole bath. */ }
+    else if (this.world.level.mode === "infernal" && !this.won) {
+      const image = this.artwork.infernalFrog, frame = this.deadline && this.deadline.remainingMs < 7000 ? 1 : hauntState(this.clock).laughing ? 2 : 0;
+      const bob = this.reducedMotion ? 0 : Math.sin(this.clock * 4) * 2;
+      const height = 240, width = height*(image.width/3)/image.height;
+      this.drawInfernalPose(frame,371-width/2,786-height+bob,width,height);
+    }
+    else if (this.horror) this.horror.drawFrog(ctx, this.artwork, this.clock, this.reducedMotion, this.won);
     else this.animator.draw(ctx, this.artwork, this.clock, {
       won: this.won,
       lost: this.lost,
@@ -521,5 +553,25 @@ export class BathGame {
       ctx.restore();
     }
     ctx.lineCap = "butt";
+  }
+  private drawCapture() {
+    const ctx = this.ctx, progress = this.deadline!.captureProgress;
+    ctx.save();
+    ctx.fillStyle = `rgba(6,0,4,${.35 + progress*.5})`; ctx.fillRect(0,0,WIDTH,HEIGHT);
+    const image = this.artwork.infernalFrog, cell = image.width/3;
+    const height = this.reducedMotion ? 650 : 330 + 350*Math.sin(progress*Math.PI/2), width = height*cell/image.height;
+    this.drawInfernalPose(1,(WIDTH-width)/2,HEIGHT-height-10,width,height);
+    ctx.restore();
+  }
+  private drawInfernalPose(frame: number, x: number, y: number, width: number, height: number) {
+    const ctx = this.ctx, image = this.artwork.infernalFrog, cell = image.width/3;
+    ctx.save();
+    if(frame>0) {
+      // Adjacent poses have a few toe pixels across the atlas cell boundary.
+      // Clip only that empty lower-left gutter; native character pixels stay at source resolution.
+      ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+width,y);ctx.lineTo(x+width,y+height);ctx.lineTo(x+width*.06,y+height);ctx.lineTo(x+width*.06,y+height*.65);ctx.lineTo(x,y+height*.65);ctx.closePath();ctx.clip();
+    }
+    ctx.drawImage(image,frame*cell,0,cell,image.height,x,y,width,height);
+    ctx.restore();
   }
 }

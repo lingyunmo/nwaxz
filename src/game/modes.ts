@@ -1,7 +1,10 @@
-import { levels } from "./levels.ts";
+import { levels, type BathMode } from "./levels.ts";
 import type { Progress } from "../progress.ts";
 
-export type GameMode = "normal" | "horror";
+export type GameMode = BathMode;
+export const bathModes: GameMode[] = ["normal", "horror", "halloween", "infernal"];
+export const isDarkBath = (mode: GameMode) => mode !== "normal";
+export const bathNames: Record<GameMode,string> = {normal:"泡泡浴场",horror:"午夜浴场",halloween:"万圣浴场",infernal:"地狱浴场"};
 export const modeOf = (index: number): GameMode => levels[index].mode ?? "normal";
 export const modeIndices = (mode: GameMode) => levels.flatMap((_, i) => modeOf(i) === mode ? [i] : []);
 export function canEnter(index: number, progress: Progress): boolean {

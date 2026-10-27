@@ -126,7 +126,8 @@ export class AudioManager {
     this.syncMusic();
     if (!playing) this.playback.release();
   }
-  setMode(mode: "normal" | "horror" | "escape"): void {
+  setMode(requested: "normal" | "horror" | "escape" | "halloween" | "infernal"): void {
+    const mode = requested === "infernal" ? "escape" : requested === "halloween" ? "horror" : requested;
     if (this.mode === mode) return;
     this.stopPreview();
     this.stopMusic();

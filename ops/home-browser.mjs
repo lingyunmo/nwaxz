@@ -36,8 +36,8 @@ try {
     for(const r of layout.cards) {assert.ok(r.x>=0&&r.y>=0&&r.x+r.w<=width+1&&r.y+r.h<=height+1);assert.ok(r.h>=120&&r.w>=150);}
     assert.ok(Math.max(...layout.cards.map(r=>r.h))-Math.min(...layout.cards.map(r=>r.h))<1);
     assert.equal(layout.hub.x,0);assert.equal(layout.hub.y,0);assert.equal(layout.hub.width,width);assert.equal(layout.hub.height,height,'uses the entire viewport without a fixed-width cap');
-    for(const text of ['浴场模式','逃生模式','对抗模式','3v3','筹备中'])assert.ok(layout.text.includes(text));
-    assert.equal(await page.locator('#pvp').isDisabled(),true);
+    for(const text of ['浴场模式','逃生模式','奶娃峡谷','3v3','阵容预演'])assert.ok(layout.text.includes(text));
+    assert.equal(await page.locator('#pvp').isDisabled(),false);
     assert.equal(await page.locator('#bath .mode-art').getAttribute('src'),'/assets/scenes/bath-cover-v2.webp');
     await settleUI(); await page.screenshot({path:path.join(output,`${name}.png`)}); layouts.push({name,...layout});
     await page.locator('#bath').click();await page.locator('[data-hub-page=baths]').waitFor();

@@ -36,9 +36,9 @@ try{
   page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
   await page.goto(base);
   await page.waitForFunction(()=>{const p=document.querySelector('#boot-progress');return p?.value>10&&p?.value<100;});
-  assert.equal(slowVideoFinished,false);assert.equal(await page.locator('#normal').count(),0,'menu must wait for whole video');
+  assert.equal(slowVideoFinished,false);assert.equal(await page.locator('#bath').count(),0,'menu must wait for whole video');
   await page.screenshot({path:path.join(output,'downloading-phone.png')});
-  await page.locator('#normal').waitFor({timeout:60000});console.log('menu ready');
+  await page.locator('#bath').waitFor({timeout:60000});console.log('menu ready');
   assert.equal(slowVideoFinished,true);slow=false;
   console.log('full cold startup complete');const progress=await page.evaluate(()=>window.__progress);
   assert.ok(new Set(progress).size>3,'real download must move the meter');
@@ -59,11 +59,11 @@ try{
   // Repair an evicted video on next boot, retaining all unaffected cached files.
   console.log('repair start');const before=requests.length;
   await page.evaluate(async()=>{for(const name of await caches.keys()){const c=await caches.open(name);for(const r of await c.keys())if(new URL(r.url).pathname==='/assets/video/escape-caught-3-v1.mp4')await c.delete(r);}});
-  await page.reload();await page.locator('#normal').waitFor({timeout:60000});
+  await page.reload();await page.locator('#bath').waitFor({timeout:60000});
   console.log('repair done');const repaired=requests.slice(before).filter(u=>/\.(?:webp|mp3|mp4|glb)(?:\?|$)/.test(u));
   assert.deepEqual(repaired,['/assets/video/escape-caught-3-v1.mp4'],'only missing resource redownloaded');
   // Entire startup, CG and real 3D work with the network disconnected.
-  console.log('offline start');const failures=[];page.on('requestfailed',r=>failures.push(r.url()));await context.setOffline(true);await page.reload();await page.locator('#normal').waitFor({timeout:60000});
+  console.log('offline start');const failures=[];page.on('requestfailed',r=>failures.push(r.url()));await context.setOffline(true);await page.reload();await page.locator('#bath').waitFor({timeout:60000});
   await page.locator('#extreme').tap();await page.locator('#escape-menu-solo').tap();await page.locator('#escape-new').tap();await page.locator('#escape-confirm-restart').tap();
   await page.waitForFunction(()=>document.querySelector('video')?.currentTime>.25);await page.locator('#cinematic-skip').tap();await page.locator('#escape-panel[hidden]').waitFor({state:'attached'});
   await page.screenshot({path:path.join(output,'offline-3d-phone.png')});
@@ -76,14 +76,14 @@ try{
   await failed.locator('#retry-load').waitFor({timeout:45000});
   assert.ok((await failed.locator('#boot-error').innerText()).length>0);
   await failed.screenshot({path:path.join(output,'retry.png')});
-  missingModel=false;await failed.locator('#retry-load').click();await failed.locator('#normal').waitFor({timeout:60000});
+  missingModel=false;await failed.locator('#retry-load').click();await failed.locator('#bath').waitFor({timeout:60000});
   assert.equal(await failed.evaluate(()=>localStorage.getItem('nwaxz-qa-keep')),'saved');
   await failedContext.close();
   // No WebGL must not strand the two Canvas modes on the loading screen.
   const noGL=await browser.newContext();
   await noGL.addInitScript(()=>{const get=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return /webgl|experimental-webgl/.test(type)?null:get.call(this,type,...args);};});
   const flat=await noGL.newPage();await flat.goto(base);await flat.locator('#enter-now').waitFor({timeout:60000});
-  await flat.locator('#enter-now').click();await flat.locator('#normal').click();await flat.locator('[data-level="0"]').click();await flat.locator('#pause').waitFor();
+  await flat.locator('#enter-now').click();await flat.locator('#bath').click();await flat.locator('#normal').click();await flat.locator('[data-level="0"]').click();await flat.locator('#pause').waitFor();
   await noGL.close();
   console.log(JSON.stringify({resources:manifest.length,totalBytes:manifest.reduce((n,e)=>n+e.bytes,0),progressValues:[...new Set(progress)],same3DCanvas:true,reentryMs,missingOnlyRepair:true,offlineVideoAnd3D:true,failedDownloadRetry:true,localDataPreserved:true,noWebGLFallback:true,errors,output}));
 }catch(error){console.error(error);throw error;}finally{console.log('closing');await browser?.close();server.closeAllConnections();await new Promise(r=>server.close(r));}

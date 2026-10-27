@@ -29,6 +29,8 @@ test("built preload covers revisioned game resources, including all whole videos
   ]);
   assert.ok(videos.every(entry => entry.revision && entry.bytes > 2000000));
   assert.ok(manifest.every(entry => entry.url !== "preload-manifest.json"));
+  assert.ok(fs.readFileSync(new URL('../dist/assets/scenes/versus-cover-v1.png',import.meta.url))
+    .equals(fs.readFileSync(new URL('../public/assets/scenes/versus-cover-v1.png',import.meta.url))), 'teaser cover retains native PNG bytes');
   for (const art of Object.values(FROG_EXTRA_ART)) {
     assert.ok(manifest.some(entry => entry.url === art.url.slice(1)), "new directional actions must be preloaded");
     const built = fs.readFileSync(new URL(`../dist${art.url}`, import.meta.url));
@@ -42,6 +44,7 @@ test("built preload covers revisioned game resources, including all whole videos
     "assets/character/milk-frog-extra-v2.webp",
     "assets/character/wait.webp",
     "assets/scenes/bath-cover-v2.webp",
+    "assets/scenes/versus-cover-v1.png",
     "assets/scenes/haunted-cover-v1.webp",
     "assets/scenes/bath-stage-v2.webp",
     "assets/scenes/workshop-stage-v1.webp",

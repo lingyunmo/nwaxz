@@ -1,21 +1,26 @@
-/* Three equal game covers; individual adventures keep their own menus. */
+/* Viewport-filling mode groups; no browser Fullscreen API is used by menus. */
 .hub-theme::before { background-image:url('/assets/scenes/escape-cover-v1.webp'); filter:blur(28px) brightness(.22) saturate(.45); }
-.game-hub { width:min(1280px,100%); height:100svh; margin:auto; display:grid; grid-template-rows:auto minmax(0,1fr) auto; gap:20px; padding:max(22px,env(safe-area-inset-top)) max(28px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(28px,env(safe-area-inset-left)); color:#eee3c7; }
+.game-hub { width:100%; height:100svh; height:100dvh; min-height:0; margin:0; display:grid; grid-template-rows:auto minmax(0,1fr) auto; gap:20px; padding:max(22px,env(safe-area-inset-top)) max(28px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(28px,env(safe-area-inset-left)); color:#eee3c7; }
 .hub-header { display:flex; justify-content:space-between; align-items:center; }
+.hub-heading { display:flex; align-items:center; gap:14px; }
 .hub-header h1 { font-size:22px; margin:0; font-weight:900; letter-spacing:3px; color:#eddb9c; text-shadow:0 3px 8px #0008; }
 .hub-header h1 span { margin-left:9px; color:#f3ecda; font-size:.8em; letter-spacing:4px; }
 .hub-header .icon-button { width:40px; height:40px; padding:9px; border:1px solid #ddc99a57; border-radius:50%; color:#d4c9ab; background:#18221b87; box-shadow:none; }
-.mode-posters { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; min-height:0; }
+.mode-posters { --poster-count:3; display:grid; grid-template-columns:repeat(var(--poster-count),minmax(0,1fr)); gap:18px; min-height:0; }
+.mode-posters[data-count="2"] { --poster-count:2; }
 .mode-poster { position:relative; isolation:isolate; min-width:0; overflow:hidden; border:1px solid #bd9e6766; border-radius:8px; padding:0; color:#f5e7c0; background:#101c1a; box-shadow:0 8px 26px #0005; text-align:left; cursor:pointer; transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease; }
 .mode-poster::after { position:absolute; inset:0; z-index:-1; content:''; background:linear-gradient(180deg,transparent 28%,#06100c44 52%,#06100cf5 88%); pointer-events:none; }
 .mode-art { position:absolute; z-index:-2; inset:0; width:100%; height:100%; object-fit:cover; object-position:center 42%; transition:transform .45s ease; }
 .mode-content { position:absolute; left:clamp(18px,2.6vw,34px); right:18px; bottom:clamp(26px,4vh,46px); display:flex; flex-direction:column; align-items:flex-start; text-shadow:0 2px 6px #0009; }
 .mode-caption { font-size:10px; letter-spacing:4px; color:#c8c3ad; margin-bottom:13px; }
-.mode-content strong { font-size:clamp(24px,3.4vw,42px); font-weight:900; letter-spacing:4px; line-height:1.25; }
+.mode-content strong { font-size:clamp(24px,3.4vw,64px); font-weight:900; letter-spacing:4px; line-height:1.25; }
 .mode-name { margin-top:9px; font-size:13px; color:#b9bfaa; letter-spacing:3px; }
 .mode-enter { display:flex; align-items:center; gap:30px; margin-top:30px; padding:10px 0 7px; border-bottom:1px solid #c8ae6f8f; font-size:12px; letter-spacing:3px; color:#ead39a; }
 .mode-enter svg,.hub-footer svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linejoin:round; }
 .mode-normal { background:#608980; border-color:#b5cc9b8a; }.mode-normal::after { background:linear-gradient(180deg,transparent 28%,#173f3044 52%,#123a2bf5 88%); }.mode-normal .mode-content strong { color:#fff0a9; }.mode-normal .mode-name { color:#d2ddbe; }
+.mode-bath { background:#608980; border-color:#b5cc9b8a; }.mode-bath::after { background:linear-gradient(180deg,transparent 28%,#173f3044 52%,#123a2bf5 88%); }.mode-bath .mode-content strong { color:#fff0a9; }.mode-bath .mode-name { color:#d2ddbe; }
+.mode-pvp { border-color:#718eae88; cursor:default; }.mode-pvp .mode-art { object-position:50% 40%; }.mode-pvp::after { background:linear-gradient(180deg,transparent 28%,#0a192d66 52%,#0b182bf5 88%); }.mode-pvp .mode-content strong { color:#d9e3ec; }.mode-pvp .mode-caption,.mode-pvp .mode-name { color:#c6d4dd; }.mode-pvp .mode-enter { color:#c4d0da; border-color:#a3b8cc88; }
+.mode-badge { position:absolute; top:16px; right:16px; padding:6px 12px; border:1px solid #c8e0ff88; border-radius:4px; background:#142c42d9; color:#e0edff; font:800 15px/1.2 system-ui,sans-serif; letter-spacing:1px; }
 .mode-horror { border-color:#7090877a; }.mode-horror .mode-content strong { color:#e2d6ac; font-family:Georgia,'SimSun',serif; }.mode-horror .mode-art { object-position:62% 40%; }.mode-horror::after { background:linear-gradient(180deg,transparent 28%,#05141644 52%,#071716f5 88%); }
 .mode-extreme { border-color:#a16b586e; }.mode-extreme .mode-content strong { color:#e5b6a1; font-family:Georgia,'SimSun',serif; }.mode-extreme::after { background:linear-gradient(180deg,transparent 28%,#160e0b44 52%,#160e0bf5 88%); }.mode-extreme .mode-caption { color:#bf9f8d; }
 .hub-footer { display:flex; align-items:center; justify-content:space-between; min-height:21px; font:10px ui-monospace,monospace; color:#b2b69f70; }
@@ -28,16 +33,17 @@
 .save-settings>summary { cursor:pointer; color:var(--teal-deep); font-size:13px; font-weight:700; padding:5px 0; }
 .save-settings[open]>summary { margin-bottom:14px; }.save-settings h3 { font-size:12px; margin:10px 0; }.audio-preview p:empty { display:none; }
 .settings-bottom { font-size:10px; }.score-breakdown>summary { cursor:pointer; }.score-breakdown>p { font-size:10px; line-height:1.7; }
-@media (hover:hover) and (pointer:fine) { .mode-poster:hover { transform:translateY(-4px); border-color:#e0c48d; box-shadow:0 12px 32px #0008; }.mode-poster:hover .mode-art { transform:scale(1.035); } }
-@media (max-width:680px) and (max-aspect-ratio:1/1) {
+@media (hover:hover) and (pointer:fine) { .mode-poster:not(:disabled):hover { transform:translateY(-4px); border-color:#e0c48d; box-shadow:0 12px 32px #0008; }.mode-poster:not(:disabled):hover .mode-art { transform:scale(1.035); } }
+@media (max-aspect-ratio:1/1) {
   .game-hub { padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); gap:14px; }
   .hub-header h1 { font-size:20px; }.hub-header h1 span { font-size:.75em; letter-spacing:3px; }.hub-header .icon-button { width:36px; height:36px; }
-  .mode-posters { grid-template-columns:1fr; grid-template-rows:repeat(3,minmax(0,1fr)); gap:12px; }
+  .mode-posters { grid-template-columns:1fr; grid-template-rows:repeat(var(--poster-count),minmax(0,1fr)); gap:12px; }
   .mode-poster { border-radius:6px; }.mode-art { left:auto; right:-8%; width:90%; object-position:52% 45%; }
   .mode-poster::after { background:linear-gradient(90deg,#153f31 0%,#153f31eb 25%,#153f3155 50%,transparent 76%); }
-  .mode-normal { background:#153f31; }.mode-horror { background:#071b1d; }.mode-extreme { background:#170e0a; }
+  .mode-normal,.mode-bath { background:#153f31; }.mode-horror { background:#071b1d; }.mode-extreme { background:#170e0a; }.mode-pvp { background:#0b182b; }
   .mode-horror::after { background:linear-gradient(90deg,#071b1d 0%,#071b1deb 25%,#071b1d55 50%,transparent 76%); }
   .mode-extreme::after { background:linear-gradient(90deg,#170e0a 0%,#170e0aeb 25%,#170e0a55 50%,transparent 76%); }
+  .mode-pvp::after { background:linear-gradient(90deg,#0b182b 0%,#0b182beb 25%,#0b182b55 50%,transparent 76%); }
   .mode-horror .mode-art { object-position:68% 10%; }.mode-extreme .mode-art { object-position:53% 47%; }
   .mode-content { left:20px; top:50%; bottom:auto; transform:translateY(-50%); right:auto; }.mode-caption { font-size:8px; letter-spacing:3px; margin-bottom:9px; }.mode-content strong { font-size:28px; letter-spacing:3px; }.mode-name { font-size:11px; letter-spacing:2px; margin-top:6px; }.mode-enter { margin-top:16px; font-size:10px; gap:18px; padding:4px 0; }.mode-enter svg { width:12px; height:12px; }
 }

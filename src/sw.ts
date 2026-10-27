@@ -5,7 +5,7 @@ import { cleanupOutdatedCaches, PrecacheController, PrecacheRoute } from "workbo
 import { RangeRequestsPlugin } from "workbox-range-requests";
 import { NavigationRoute, registerRoute } from "workbox-routing";
 import { version } from "../package.json";
-import { fetchNativeImage } from "./native-preload.ts";
+import { fetchNativeImage, isNativePainting } from "./native-preload.ts";
 
 declare const self: ServiceWorkerGlobalScope;
 type Entry = { url: string; revision?: string | null; bytes: number };
@@ -50,7 +50,7 @@ function prepare(event: ExtendableEvent) {
       await Promise.all(Array.from({ length: 3 }, async () => {
         while (next < entries.length) {
           const [url, cacheKey] = entries[next++];
-          if (/\/assets\/versus\/.+\.png$/.test(new URL(url).pathname)) {
+          if (isNativePainting(new URL(url).pathname)) {
             const cache = await caches.open(precache.strategy.cacheName);
             if (!await cache.match(cacheKey)) {
               const entry = manifest.find(entry => new URL(entry.url, self.location.href).href === url)!;

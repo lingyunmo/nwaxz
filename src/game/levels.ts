@@ -1,4 +1,6 @@
+import { seasonalLevels } from "./seasonal.ts";
 export type Rect = { x: number; y: number; w: number; h: number };
+export type BathMode = "normal" | "horror" | "halloween" | "infernal";
 export type Point = { x: number; y: number };
 export type Fan = { position: Point; zone: Rect; force: Point; on: boolean };
 export type Valve = { position: Point; nozzle: Point; drops: number; rate: number; kind?: WaterKind; spread?: number };
@@ -14,8 +16,9 @@ export type Level = {
   coins: Point[];
   solution: Point[];
   chapter?: number;
-  mode?: "horror";
-  scene?: "bath" | "workshop" | "hauntedBath" | "hauntedCorridor" | "hauntedMachine" | "hauntedLaundry";
+  mode?: Exclude<BathMode, "normal">;
+  timeLimitMs?: number;
+  scene?: "bath" | "workshop" | "hauntedBath" | "hauntedCorridor" | "hauntedMachine" | "hauntedLaundry" | "halloweenBath" | "infernalBath";
   pumpkins?: Point[];
   initialWater?: number;
   fans?: Fan[];
@@ -285,4 +288,4 @@ const horrorLevels: Level[] = [
     solution: [{ x: 104, y: 198 }, { x: 108, y: 374 }, { x: 170, y: 374 }, { x: 174, y: 300 }, { x: 395, y: 300 }, { x: 397, y: 460 }, { x: 235, y: 480 }, { x: 235, y: 540 }, { x: 392, y: 592 }],
   },
 ];
-export const levels: Level[] = [...normalLevels, ...horrorLevels];
+export const levels: Level[] = [...normalLevels, ...horrorLevels, ...seasonalLevels];

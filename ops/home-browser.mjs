@@ -41,7 +41,7 @@ try {
     assert.equal(await page.locator('#bath .mode-art').getAttribute('src'),'/assets/scenes/bath-cover-v2.webp');
     await settleUI(); await page.screenshot({path:path.join(output,`${name}.png`)}); layouts.push({name,...layout});
     await page.locator('#bath').click();await page.locator('[data-hub-page=baths]').waitFor();
-    assert.equal(await page.locator('.mode-poster').count(),2);
+    assert.equal(await page.locator('.mode-poster').count(),4);
     assert.equal(await page.locator('#normal strong').innerText(),'泡泡浴场');assert.equal(await page.locator('#horror strong').innerText(),'午夜浴场');
     const child=await page.evaluate(()=>{const main=document.querySelector('.game-hub').getBoundingClientRect();return{width:main.width,height:main.height,overflow:document.documentElement.scrollWidth>innerWidth||document.documentElement.scrollHeight>innerHeight+1};});
     assert.deepEqual(child,{width,height,overflow:false});

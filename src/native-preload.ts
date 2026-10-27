@@ -1,3 +1,4 @@
+export const isNativePainting = (pathname: string) => /\/assets\/versus\/.+\.png$/.test(pathname) || /^\/assets\/(?:scenes\/(?:halloween|infernal)-(?:bath|cover)|character\/infernal-frog)-v1\.png$/.test(pathname);
 /** Assemble native images before caching: no resizing or image encoding occurs here. */
 export async function fetchNativeImage(url: string, bytes: number, integrity: string, onProgress: (bytes: number) => void, fetcher: typeof fetch = fetch): Promise<Response> {
   if (!Number.isSafeInteger(bytes) || bytes <= 0 || bytes > 8 * 1024 * 1024 || !/^sha256-[A-Za-z0-9+/]{43}=$/.test(integrity)) throw new Error("原画清单无效");

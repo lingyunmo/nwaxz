@@ -30,6 +30,8 @@ test("built preload covers revisioned game resources, including all whole videos
   assert.ok(videos.every(entry => entry.revision && entry.bytes > 2000000));
   assert.ok(manifest.every(entry => entry.url !== "preload-manifest.json"));
   const versusArt = JSON.parse(fs.readFileSync(new URL('../public/assets/versus/manifest.json',import.meta.url),'utf8'));
+  const seasonalArt = JSON.parse(fs.readFileSync(new URL('../public/assets/seasonal-baths-v1.json',import.meta.url),'utf8'));
+  for(const a of seasonalArt.assets){assert.ok(manifest.some(entry=>entry.url===a.url.slice(1)));assert.equal(createHash('sha256').update(fs.readFileSync(new URL('../dist'+a.url,import.meta.url))).digest('hex'),a.sha256,'seasonal native PNG must remain byte-identical');}
   for (const asset of versusArt.assets) {
     assert.ok(manifest.some(entry=>entry.url===asset.url.slice(1)), 'every client painting is available offline');
     assert.equal(createHash('sha256').update(fs.readFileSync(new URL('../dist'+asset.url,import.meta.url))).digest('hex'),asset.sha256,'client art keeps its native bytes');

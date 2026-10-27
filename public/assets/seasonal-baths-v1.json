@@ -1,0 +1,56 @@
+{
+  "mode": "built-in image_gen",
+  "nativeBytes": true,
+  "assets": [
+    {
+      "name": "halloweenBath",
+      "url": "/assets/scenes/halloween-bath-v1.png",
+      "width": 971,
+      "height": 1619,
+      "bytes": 3215028,
+      "colorType": 2,
+      "sha256": "4dcafe869b406633ed54f7929940a021c89a6c9ee9121909fd727e5e6dcf2d24",
+      "sourceFile": "exec-886c5bd2-a524-4f07-b8ec-240221c8e9c5.png"
+    },
+    {
+      "name": "infernalBath",
+      "url": "/assets/scenes/infernal-bath-v1.png",
+      "width": 971,
+      "height": 1619,
+      "bytes": 3118893,
+      "colorType": 2,
+      "sha256": "b090890a5e6a3bbf1a813db16e656dca2ae2d6454a70b74db9eff1951236b0da",
+      "sourceFile": "exec-60828f0c-981d-4233-99a3-e5593dbb4729.png"
+    },
+    {
+      "name": "infernalFrog",
+      "url": "/assets/character/infernal-frog-v1.png",
+      "width": 1774,
+      "height": 887,
+      "bytes": 2006476,
+      "colorType": 6,
+      "sha256": "4be1078c223d82a47f097075a77fffe38016cfe608cde5ff69e885d75adfd59b",
+      "sourceFile": "exec-88788615-9c56-40a0-bdcd-546c27ae4557.png"
+    },
+    {
+      "name": "halloweenCover",
+      "url": "/assets/scenes/halloween-cover-v1.png",
+      "width": 1024,
+      "height": 1536,
+      "bytes": 2488708,
+      "colorType": 2,
+      "sha256": "81cd8b1fee17f955b82c3490241e1dc8bbec1f55e4d51eb9d35cc65a2ed7786a",
+      "sourceFile": "exec-a4660474-03ef-4c58-92f6-0bc9ebd416c8.png"
+    },
+    {
+      "name": "infernalCover",
+      "url": "/assets/scenes/infernal-cover-v1.png",
+      "width": 1024,
+      "height": 1536,
+      "bytes": 2548396,
+      "colorType": 2,
+      "sha256": "da37bb7da88e5be7d67216bd1f218744b598309f2d8403cd29f3599d222fb069",
+      "sourceFile": "exec-23a75a45-c2c4-4d37-a70b-845bf854212e.png"
+    }
+  ]
+}

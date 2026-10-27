@@ -34,13 +34,13 @@ let escapeGame: EscapeGame | undefined;
 let game: BathGame | undefined,
   selected = 0,
   chapter = 1,
-  screen: "loading" | "home" | "levels" | "play" | "escape" = "loading";
+  screen: "loading" | "home" | "baths" | "levels" | "play" | "escape" = "loading";
 let offlineReady = false,
   updateAvailable = false,
   toastTimer = 0;
 const audio = new AudioManager(settings);
 const chapterCount = () => Math.max(...modeIndices(mode).map(index => levels[index].chapter ?? 1));
-const modeName = () => mode === "horror" ? "恐怖模式" : "普通模式";
+const modeName = () => mode === "horror" ? "午夜浴场" : "泡泡浴场";
 const horrorChapters: { [chapter: number]: { title: string; caption: string; art: string } } = {
   1: { title: "夜幕初临", caption: "灯灭之后，奶蛙还在笑。", art: artworkPaths.hauntedBath },
   2: { title: "地下回声", caption: "洗衣机停了，地下却还有水声。", art: artworkPaths.hauntedLaundry },
@@ -121,20 +121,34 @@ function openMode(target: GameMode) {
   renderLevels();
 }
 function renderHome() {
+  renderHub("home");
+}
+function renderBaths() {
+  renderHub("baths");
+}
+function renderHub(page: "home" | "baths") {
   leaveGame(); mode = "normal"; audio.setMode(mode);
   document.body.classList.remove("horror-theme"); document.body.classList.add("hub-theme");
-  screen = "home";
-  const modes = [
-    { id: "normal", title: "普通模式", name: "泡泡浴场", caption: "挖土 · 引水", art: "/assets/scenes/bath-cover-v2.webp" },
-    { id: "horror", title: "恐怖模式", name: "午夜浴场", caption: "暗夜 · 机关", art: "/assets/scenes/haunted-cover-v1.webp" },
-    { id: "extreme", title: "极限恐怖", name: "下水道逃生", caption: "搜寻 · 躲藏", art: "/assets/scenes/escape-cover-v1.webp" },
+  screen = page;
+  const modes: { id: string; title: string; name: string; caption: string; art: string; hot?: boolean; planned?: boolean }[] = page === "baths" ? [
+    { id: "normal", title: "泡泡浴场", name: "引水解谜", caption: "挖土 · 引水", art: "/assets/scenes/bath-cover-v2.webp" },
+    { id: "horror", title: "午夜浴场", name: "暗夜机关", caption: "暗夜 · 机关", art: "/assets/scenes/haunted-cover-v1.webp" },
+  ] : [
+    { id: "bath", title: "浴场模式", name: "泡泡浴场 · 午夜浴场", caption: "挖土 · 引水", art: "/assets/scenes/bath-cover-v2.webp" },
+    { id: "extreme", title: "逃生模式", name: "下水道逃生", caption: "搜寻 · 躲藏", art: "/assets/scenes/escape-cover-v1.webp", hot: true },
+    { id: "pvp", title: "对抗模式", name: "3v3 · MOBA", caption: "尚未开放", art: "/assets/scenes/versus-cover-v1.png", planned: true },
   ];
-  chrome(`<main class="game-hub screen-enter" aria-label="游戏主界面"><header class="hub-header"><h1>奶蛙<span>爱洗澡</span></h1>${buttonIcon("settings", "设置", "settings")}</header>
-    <nav class="mode-posters" aria-label="选择模式">${modes.map(m => `<button id="${m.id}" class="mode-poster mode-${m.id}" aria-label="${m.title} · ${m.name}"><img class="mode-art" src="${m.art}" alt=""/>${m.id==='extreme'?'<span class="mode-hot">HOT</span>':''}<span class="mode-content"><span class="mode-caption">${m.caption}</span><strong>${m.title}</strong><span class="mode-name">${m.name}</span><span class="mode-enter">进入模式 ${icon("play")}</span></span></button>`).join("")}</nav>
+  chrome(`<main class="game-hub screen-enter" data-hub-page="${page}" aria-label="${page === "home" ? "游戏主界面" : "选择浴场"}"><header class="hub-header"><div class="hub-heading">${page === "baths" ? buttonIcon("back", "返回模式选择", "hub-back") : ""}<h1>${page === "home" ? "奶蛙<span>爱洗澡</span>" : "浴场<span>模式</span>"}</h1></div>${buttonIcon("settings", "设置", "settings")}</header>
+    <nav class="mode-posters" data-count="${modes.length}" aria-label="${page === "baths" ? "选择浴场" : "选择模式"}">${modes.map(m => `<button id="${m.id}" class="mode-poster mode-${m.id}" aria-label="${m.title} · ${m.name}${m.planned ? "，尚未开放" : ""}" ${m.planned ? "disabled" : ""}><img class="mode-art" src="${m.art}" alt=""/>${m.hot ? '<span class="mode-hot">HOT</span>' : m.planned ? '<span class="mode-badge">3v3</span>' : ''}<span class="mode-content"><span class="mode-caption">${m.caption}</span><strong>${m.title}</strong><span class="mode-name">${m.name}</span><span class="mode-enter">${m.planned ? "筹备中" : page === "baths" ? "进入浴场" : "进入模式"} ${icon(m.planned ? "lock" : "play")}</span></span></button>`).join("")}</nav>
     <footer class="hub-footer"><span>v${version}</span><button id="update" ${updateAvailable ? "" : "hidden"}>有新版本 ${icon("restart")}</button></footer></main>`);
-  $("#normal").onclick = () => openMode("normal");
-  $("#horror").onclick = () => openMode("horror");
-  $("#extreme").onclick = () => void enterEscape();
+  if (page === "baths") {
+    $("#normal").onclick = () => openMode("normal");
+    $("#horror").onclick = () => openMode("horror");
+    $("#hub-back").onclick = renderHome;
+  } else {
+    $("#bath").onclick = renderBaths;
+    $("#extreme").onclick = () => void enterEscape();
+  }
   $("#settings").onclick = () => openSettings(); $("#update").onclick = applyUpdate;
   queueMicrotask(() => gameUpdater.apply());
 }
@@ -157,7 +171,7 @@ function renderLevels() {
   screen = "levels";
   const checkpoint = modeCheckpoint(mode), complete = modeIndices(mode).every(i => progress.levels[levels[i].id]?.completed);
   chrome(
-    `<main class="menu-stage chapter-screen screen-enter" aria-label="${modeName()}选关"><img class="cover-art chapter-art" src="${mode === "horror" ? horrorChapters[chapter].art : "/assets/scenes/bath-cover-v2.webp"}" alt=""/><header class="menu-header">${buttonIcon("back", "返回主界面", "home")}<h1>${modeName()}</h1><span class="coin-badge">${icon("star")}${totalCoins()} / ${modeIndices(mode).length * 3}</span></header><div class="chapter-heading"><div class="chapter-pager"><button id="previous-chapter" aria-label="上一章" ${chapter === 1 ? "disabled" : ""}>‹</button><span>第${["", "一", "二", "三", "四"][chapter] ?? chapter}章</span><button id="next-chapter" aria-label="下一章" ${chapter === chapterCount() ? "disabled" : ""}>›</button></div><h2>${mode === "horror" ? horrorChapters[chapter].title : chapterNames[chapter] ?? "新的水路"}</h2>${mode === "horror" ? `<p class="night-caption">${horrorChapters[chapter].caption}</p>` : ""}</div><button id="mode-continue" class="mode-continue"><span>${complete ? "再玩一次" : progress.levels[levels[modeIndices(mode)[0]].id]?.completed ? "继续闯关" : "开始闯关"}<small>第${modeIndices(mode).indexOf(checkpoint) + 1}关 · ${levels[checkpoint].title}</small></span>${icon("play")}</button><nav class="level-map" aria-label="选择关卡">${levels
+    `<main class="menu-stage chapter-screen screen-enter" aria-label="${modeName()}选关"><img class="cover-art chapter-art" src="${mode === "horror" ? horrorChapters[chapter].art : "/assets/scenes/bath-cover-v2.webp"}" alt=""/><header class="menu-header">${buttonIcon("back", "返回浴场模式", "home")}<h1>${modeName()}</h1><span class="coin-badge">${icon("star")}${totalCoins()} / ${modeIndices(mode).length * 3}</span></header><div class="chapter-heading"><div class="chapter-pager"><button id="previous-chapter" aria-label="上一章" ${chapter === 1 ? "disabled" : ""}>‹</button><span>第${["", "一", "二", "三", "四"][chapter] ?? chapter}章</span><button id="next-chapter" aria-label="下一章" ${chapter === chapterCount() ? "disabled" : ""}>›</button></div><h2>${mode === "horror" ? horrorChapters[chapter].title : chapterNames[chapter] ?? "新的水路"}</h2>${mode === "horror" ? `<p class="night-caption">${horrorChapters[chapter].caption}</p>` : ""}</div><button id="mode-continue" class="mode-continue"><span>${complete ? "再玩一次" : progress.levels[levels[modeIndices(mode)[0]].id]?.completed ? "继续闯关" : "开始闯关"}<small>第${modeIndices(mode).indexOf(checkpoint) + 1}关 · ${levels[checkpoint].title}</small></span>${icon("play")}</button><nav class="level-map" aria-label="选择关卡">${levels
       .map((level, index) => {
         if (modeOf(index) !== mode || (level.chapter ?? 1) !== chapter) return "";
         const number = modeIndices(mode).indexOf(index) + 1;
@@ -175,7 +189,7 @@ function renderLevels() {
         "",
       )}</nav><button id="settings" class="chapter-settings icon-button" aria-label="设置">${icon("settings")}</button></main>`,
   );
-  $("#home").onclick = renderHome;
+  $("#home").onclick = renderBaths;
   $("#mode-continue").onclick = () => enterLevel(checkpoint);
   $("#settings").onclick = () => openSettings();
   $("#previous-chapter").onclick = () => { chapter = Math.max(1, chapter - 1); renderLevels(); };
@@ -435,11 +449,12 @@ function openSettings(fromPause = false) {
       },
     ];
   const dialog = showDialog(
-    `${dialogTop("设置")}<div class="settings-options">${toggles.map(({ key, title, description }) => `<label class="setting-row"><span>${title}${description ? `<small>${description}</small>` : ""}</span><input type="checkbox" role="switch" data-setting="${key}" ${settings[key] ? "checked" : ""}/><span class="switch-knob" aria-hidden="true"></span></label>`).join("")}<label class="setting-row"><span>画质</span><select id="quality" aria-label="画质"><option value="balanced" ${settings.quality === "balanced" ? "selected" : ""}>平衡</option><option value="high" ${settings.quality === "high" ? "selected" : ""}>高清</option></select></label></div><details class="save-settings"><summary>存档管理</summary><h3>关卡存档</h3><span>${levels.filter((l) => progress.levels[l.id]?.completed).length} / ${levels.length} 关 · ${totalCoins("normal") + totalCoins("horror")} 枚泡泡币</span><div><button id="export">导出存档</button><button id="import">导入存档</button></div><small>普通／恐怖模式的关卡成绩。逃生存档在极限恐怖菜单内管理。</small></details><div class="settings-bottom"><span>${offlineReady ? "可离线游玩" : navigator.onLine ? "资源准备中" : "离线游玩"} · v${version}</span>${updateAvailable ? '<button id="settings-update">更新游戏</button>' : ""}<button id="help">怎么玩</button></div>`,
+    `${dialogTop("设置")}<div class="settings-options">${toggles.map(({ key, title, description }) => `<label class="setting-row"><span>${title}${description ? `<small>${description}</small>` : ""}</span><input type="checkbox" role="switch" data-setting="${key}" ${settings[key] ? "checked" : ""}/><span class="switch-knob" aria-hidden="true"></span></label>`).join("")}<label class="setting-row"><span>画质</span><select id="quality" aria-label="画质"><option value="balanced" ${settings.quality === "balanced" ? "selected" : ""}>平衡</option><option value="high" ${settings.quality === "high" ? "selected" : ""}>高清</option></select></label></div><details class="save-settings"><summary>存档管理</summary><h3>关卡存档</h3><span>${levels.filter((l) => progress.levels[l.id]?.completed).length} / ${levels.length} 关 · ${totalCoins("normal") + totalCoins("horror")} 枚泡泡币</span><div><button id="export">导出存档</button><button id="import">导入存档</button></div><small>泡泡浴场／午夜浴场的关卡成绩。逃生存档在逃生模式内管理。</small></details><div class="settings-bottom"><span>${offlineReady ? "可离线游玩" : navigator.onLine ? "资源准备中" : "离线游玩"} · v${version}</span>${updateAvailable ? '<button id="settings-update">更新游戏</button>' : ""}<button id="help">怎么玩</button></div>`,
     () => {
       audio.stopPreview();
       if (fromPause) openPause();
       else if (screen === "levels") renderLevels();
+      else if (screen === "baths") renderBaths();
       else renderHome();
     },
   );
@@ -509,8 +524,8 @@ function applySettings() {
   }
 }
 function openHelp(fromPause = false) {
-  const overview = screen === "home";
-  const modesHelp = '<div class="help-modes"><section><h3>普通模式</h3><p>挖开泥土，把清水引进管道。接够100滴水，顺路收集泡泡币。</p></section><section><h3>恐怖模式</h3><p>借南瓜灯和扫光辨认水路，在黑暗中破解机关。</p></section><section><h3>极限恐怖</h3><p>搜寻钥匙和工具，躲开奶蛙，打开下水道铁网。每局有三夜机会。</p></section></div>';
+  const overview = screen === "home" || screen === "baths";
+  const modesHelp = "<div class=\"help-modes\"><section><h3>浴场模式</h3><p>泡泡浴场：挖土引水，收集泡泡币。午夜浴场：借灯光辨认水路，破解暗夜机关。</p></section><section><h3>逃生模式</h3><p>搜寻钥匙和工具，躲开奶蛙，逃进下水道。可单人游玩或与朋友组队。</p></section><section><h3>对抗模式</h3><p>3v3 MOBA，筹备中。</p></section></div>";
   const dialog = showDialog(
     `${dialogTop(overview ? "玩法" : modeName())}${overview ? modesHelp : `<ol class="how-to"><li>按住鼠标或划动手指，挖开泥土。</li><li>把清水引进右下方的管道，接够 100 滴水。</li><li>顺路收集 3 枚泡泡币，用时越短得分越高。</li><li>石板挖不动，要绕个弯。</li><li>轻点风扇可以推水；喷水阀可开关，水量有限。</li><li>紫色污水会污染清水，流进浴缸就要重试。</li><li>水草挡水，吸收紫水后会枯萎；海绵吸水，轻点可以挤水。</li></ol><p class="keyboard-help">键盘：方向键移动，空格挖土，Shift + 方向键连续挖土，F 切换风扇，V 切换清水阀，B 切换污水阀，E 挤水，Esc 暂停。</p>`}<button id="help-ok" class="game-button gold">知道了</button>`,
     () => openSettings(fromPause),
@@ -575,7 +590,7 @@ document.addEventListener("fullscreenchange", () => {
 window.addEventListener("pagehide", () => audio.suspend());
 window.addEventListener("pageshow", () => audio.resume());
 const gameUpdater = createGameUpdater({
-  canReload: () => ["home", "levels"].includes(screen) && !app.querySelector("dialog[open]"),
+  canReload: () => ["home", "baths", "levels"].includes(screen) && !app.querySelector("dialog[open]"),
   onReady() {
     updateAvailable = true;
     const update = app.querySelector<HTMLButtonElement>("#update");
@@ -598,7 +613,7 @@ if ("serviceWorker" in navigator && "caches" in window) {
     .catch(() => {});
 }
 function applyUpdate() {
-  if (!["home", "levels"].includes(screen)) {
+  if (!["home", "baths", "levels"].includes(screen)) {
     toast("返回首页后更新。");
     return;
   }

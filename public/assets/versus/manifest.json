@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "mode": "built-in image_gen",
+  "nativeBytes": true,
+  "assets": [
+    {
+      "url": "/assets/versus/heroes/alan.png",
+      "sourceFile": "exec-053ff316-527e-46f1-bae3-8b886ae15b6a.png",
+      "width": 1024,
+      "height": 1536,
+      "pngColorType": 6,
+      "bytes": 2313574,
+      "sha256": "f4b3dd5e77c5aa77434fb2131ddf28452370c24f0579a265aaf86286583cd8cf"
+    },
+    {
+      "url": "/assets/versus/heroes/zhenzhen.png",
+      "sourceFile": "exec-6007b6f3-a366-442f-beb6-2d11e3610c16.png",
+      "width": 1024,
+      "height": 1536,
+      "pngColorType": 6,
+      "bytes": 2257443,
+      "sha256": "4bf04dd77cc148b8fdf88d8f5c1d21f1f6f949b0eb461e60132fdcbb403c4346"
+    },
+    {
+      "url": "/assets/versus/heroes/paoying.png",
+      "sourceFile": "exec-dd121242-19ac-4172-a1c8-f1379c3e9e9c.png",
+      "width": 1024,
+      "height": 1536,
+      "pngColorType": 6,
+      "bytes": 1878789,
+      "sha256": "3f52ee810648e29bfde7adce48b113bf5e976a3e8fbbbbbec0cc7da38c21b703"
+    },
+    {
+      "url": "/assets/versus/heroes/dingdang.png",
+      "sourceFile": "exec-baade945-c110-40c3-94d0-537755905ad4.png",
+      "width": 1024,
+      "height": 1536,
+      "pngColorType": 6,
+      "bytes": 2585491,
+      "sha256": "f222783ed56c8d1b7ad7c0f3425f2ac3d72f1b2b19b843c9a67971133eba7306"
+    },
+    {
+      "url": "/assets/versus/bosses/dakou.png",
+      "sourceFile": "exec-3168178b-a4e7-4587-9e76-0bb211fc274d.png",
+      "width": 1536,
+      "height": 1024,
+      "pngColorType": 2,
+      "bytes": 2865253,
+      "sha256": "f539c1e3b5b9808de01832cd2921b6f179a5875b6fd625b3d17714bca7e5de10"
+    },
+    {
+      "url": "/assets/versus/bosses/shigong.png",
+      "sourceFile": "exec-a839760a-5ab0-4907-aa32-6eabb571091c.png",
+      "width": 1536,
+      "height": 1024,
+      "pngColorType": 2,
+      "bytes": 3055198,
+      "sha256": "9c8000da8238512cd250713dd11edef1bee8731d6bb0d525d35ca4091f2f941c"
+    },
+    {
+      "url": "/assets/versus/bosses/daoying.png",
+      "sourceFile": "exec-99dff7ed-7ea0-4bb2-9579-ec03f67e284c.png",
+      "width": 1536,
+      "height": 1024,
+      "pngColorType": 2,
+      "bytes": 2402887,
+      "sha256": "ec26a5ab66200214e476c40af04357bbdef20936662ea2066a1a9f2307125504"
+    },
+    {
+      "url": "/assets/versus/canyon-map-v1.png",
+      "sourceFile": "exec-1ff0f661-0e16-4953-a808-b373a14df7ba.png",
+      "width": 1774,
+      "height": 887,
+      "pngColorType": 2,
+      "bytes": 3910362,
+      "sha256": "feaec43dd9799ad19b4757672f088473557fe9f6fa60689dd1953fad864ce9b7"
+    }
+  ]
+}

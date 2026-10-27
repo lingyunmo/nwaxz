@@ -9,7 +9,7 @@ import {EscapeWorld} from '../src/escape/world.ts';
 import {SAVE_GENERATION} from '../src/save-generation.ts';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'playwright');
 const output=await fs.mkdtemp(path.join(os.tmpdir(),'nwaxz-update-qa-'));
-for(const version of ['a','b','c']) {
+for(const version of ['a','b','c','d']) {
   const target=path.join(output,version); await fs.cp('dist',target,{recursive:true});
   const html=(await fs.readFile(path.join(target,'index.html'),'utf8')).replace('<body>',`<body data-test-release="${version}">`);
   await fs.writeFile(path.join(target,'index.html'),html);
@@ -29,7 +29,7 @@ for(const version of ['a','b','c']) {
   assert.notEqual(worker,changed);await fs.writeFile(workerPath,changed);
   await fs.writeFile(path.join(target,'preload-manifest.json'),JSON.stringify(manifest));
 }
-const apps=Object.fromEntries(['a','b','c'].map(v=>[v,createApp({distDir:path.join(output,v),revision:v})]));
+const apps=Object.fromEntries(['a','b','c','d'].map(v=>[v,createApp({distDir:path.join(output,v),revision:v})]));
 let release='a', rejectWorker=0;
 const server=http.createServer((req,res)=>{
   if(req.url==='/game-worker' && rejectWorker>0){rejectWorker--;res.writeHead(503);res.end();return;}
@@ -100,8 +100,18 @@ try {
   release='c';await page.evaluate(()=>window.dispatchEvent(new Event('online')));
   await page.waitForFunction(()=>document.body.dataset.testRelease==='c',undefined,{timeout:60000});
   await page.locator('#bath').waitFor();assert.equal(navigations,beforeNavigation+3,'bath selector is also a safe update menu');
+  await page.locator('#pvp').click();await page.locator('.versus-client').waitFor();
+  await page.locator('.vc-nav [data-tab="draft"]').click();await page.locator('[data-action="example"]').click();await page.locator('[data-action="lock"]').click();
+  await page.locator('[data-action="profile"]').click();await page.locator('#vc-nickname').fill('更新后仍在');
+  release='d';await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await page.waitForFunction(async()=>!!(await navigator.serviceWorker.getRegistration('/'))?.waiting,undefined,{timeout:60000});
+  assert.equal(await page.locator('body').getAttribute('data-test-release'),'c','nickname modal defers safe-menu updates');
+  await page.locator('.vc-dialog [type="submit"]').click();
+  await page.waitForFunction(()=>document.body.dataset.testRelease==='d',undefined,{timeout:60000});await page.locator('#pvp').click();
+  const draft=await page.evaluate(()=>JSON.parse(localStorage.getItem('nwaxz-versus-preview-v1')));assert.equal(draft.nickname,'更新后仍在');assert.equal(draft.locked.clear,true);assert.deepEqual(draft.teams.clear,['alan','zhenzhen','dingdang']);
+  assert.equal(navigations,beforeNavigation+4,'versus client applies once after saving the profile');
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({worker:'/game-worker',safeDeferredUpdate:true,oneReload:true,bathSelectorUpdate:true,saveAndSettingsPreserved:true,offline:true,initialRegistrationRetry:true,errors,output}));
+  console.log(JSON.stringify({worker:'/game-worker',safeDeferredUpdate:true,oneReload:true,bathSelectorUpdate:true,versusModalDefersUpdate:true,versusDraftSurvivesUpdate:true,saveAndSettingsPreserved:true,offline:true,initialRegistrationRetry:true,errors,output}));
   await context.close();
 } catch(error) {
   console.error(await debugPage?.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration('/');return {controller:navigator.serviceWorker.controller?.scriptURL,active:r?.active?.state,waiting:r?.waiting?.state,installing:r?.installing?.state,online:navigator.onLine};}));

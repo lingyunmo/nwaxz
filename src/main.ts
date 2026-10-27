@@ -1,6 +1,7 @@
 import "./style.css";
 import "./menu.css";
 import type { EscapeGame } from "./escape/game.ts";
+import type { VersusClient } from "./versus/client.ts";
 import { version } from "../package.json";
 import { createGameUpdater } from "./updates.ts";
 import { preloadGame } from "./preload.ts";
@@ -31,10 +32,11 @@ let progress: Progress = emptyProgress(),
 let saveReady = false;
 let mode: GameMode = "normal";
 let escapeGame: EscapeGame | undefined;
+let versusClient: VersusClient | undefined;
 let game: BathGame | undefined,
   selected = 0,
   chapter = 1,
-  screen: "loading" | "home" | "baths" | "levels" | "play" | "escape" = "loading";
+  screen: "loading" | "home" | "baths" | "levels" | "play" | "escape" | "versus" = "loading";
 let offlineReady = false,
   updateAvailable = false,
   toastTimer = 0;
@@ -101,8 +103,9 @@ function toast(message: string) {
   }, 4000);
 }
 function leaveGame() {
+  versusClient?.destroy(); versusClient = undefined;
   escapeGame?.destroy(); escapeGame = undefined;
-  document.body.classList.remove("escape-theme", "hub-theme");
+  document.body.classList.remove("escape-theme", "hub-theme", "versus-theme");
   audio.setSettings(settings);
   game?.destroy();
   game = undefined;
@@ -136,10 +139,10 @@ function renderHub(page: "home" | "baths") {
   ] : [
     { id: "bath", title: "浴场模式", name: "泡泡浴场 · 午夜浴场", caption: "挖土 · 引水", art: "/assets/scenes/bath-cover-v2.webp" },
     { id: "extreme", title: "逃生模式", name: "下水道逃生", caption: "搜寻 · 躲藏", art: "/assets/scenes/escape-cover-v1.webp", hot: true },
-    { id: "pvp", title: "对抗模式", name: "3v3 · MOBA", caption: "尚未开放", art: "/assets/scenes/versus-cover-v1.png", planned: true },
+    { id: "pvp", title: "奶娃峡谷", name: "3v3 · 阵容预演", caption: "两岸 · 争流", art: "/assets/scenes/versus-cover-v1.png" },
   ];
   chrome(`<main class="game-hub screen-enter" data-hub-page="${page}" aria-label="${page === "home" ? "游戏主界面" : "选择浴场"}"><header class="hub-header"><div class="hub-heading">${page === "baths" ? buttonIcon("back", "返回模式选择", "hub-back") : ""}<h1>${page === "home" ? "奶蛙<span>爱洗澡</span>" : "浴场<span>模式</span>"}</h1></div>${buttonIcon("settings", "设置", "settings")}</header>
-    <nav class="mode-posters" data-count="${modes.length}" aria-label="${page === "baths" ? "选择浴场" : "选择模式"}">${modes.map(m => `<button id="${m.id}" class="mode-poster mode-${m.id}" aria-label="${m.title} · ${m.name}${m.planned ? "，尚未开放" : ""}" ${m.planned ? "disabled" : ""}><img class="mode-art" src="${m.art}" alt=""/>${m.hot ? '<span class="mode-hot">HOT</span>' : m.planned ? '<span class="mode-badge">3v3</span>' : ''}<span class="mode-content"><span class="mode-caption">${m.caption}</span><strong>${m.title}</strong><span class="mode-name">${m.name}</span><span class="mode-enter">${m.planned ? "筹备中" : page === "baths" ? "进入浴场" : "进入模式"} ${icon(m.planned ? "lock" : "play")}</span></span></button>`).join("")}</nav>
+    <nav class="mode-posters" data-count="${modes.length}" aria-label="${page === "baths" ? "选择浴场" : "选择模式"}">${modes.map(m => `<button id="${m.id}" class="mode-poster mode-${m.id}" aria-label="${m.title} · ${m.name}${m.planned ? "，尚未开放" : ""}" ${m.planned ? "disabled" : ""}><img class="mode-art" src="${m.art}" alt=""/>${m.hot ? '<span class="mode-hot">HOT</span>' : m.id === "pvp" ? '<span class="mode-badge">3v3</span>' : ''}<span class="mode-content"><span class="mode-caption">${m.caption}</span><strong>${m.title}</strong><span class="mode-name">${m.name}</span><span class="mode-enter">${m.planned ? "筹备中" : m.id === "pvp" ? "进入大厅" : page === "baths" ? "进入浴场" : "进入模式"} ${icon(m.planned ? "lock" : "play")}</span></span></button>`).join("")}</nav>
     <footer class="hub-footer"><span>v${version}</span><button id="update" ${updateAvailable ? "" : "hidden"}>有新版本 ${icon("restart")}</button></footer></main>`);
   if (page === "baths") {
     $("#normal").onclick = () => openMode("normal");
@@ -148,9 +151,26 @@ function renderHub(page: "home" | "baths") {
   } else {
     $("#bath").onclick = renderBaths;
     $("#extreme").onclick = () => void enterEscape();
+    $("#pvp").onclick = () => void enterVersus();
   }
   $("#settings").onclick = () => openSettings(); $("#update").onclick = applyUpdate;
   queueMicrotask(() => gameUpdater.apply());
+}
+async function enterVersus() {
+  leaveGame(); screen = "versus";
+  document.body.classList.remove("horror-theme");
+  document.body.classList.add("versus-theme");
+  chrome('<main class="menu-stage"><p class="escape-loading">正在前往峡谷…</p></main>');
+  try {
+    const { VersusClient } = await import("./versus/client.ts");
+    if (screen !== "versus") return;
+    versusClient = new VersusClient(app, { version, updateAvailable, onExit: renderHome, onUpdate: applyUpdate, onSafe: () => queueMicrotask(() => gameUpdater.apply()) });
+    queueMicrotask(() => gameUpdater.apply());
+  } catch {
+    chrome('<main class="menu-stage"><p class="escape-loading">峡谷载入失败，请重试。</p><button id="versus-retry" class="game-button">重试</button><button id="versus-return" class="game-button">返回主界面</button></main>');
+    $("#versus-retry").onclick = () => void enterVersus();
+    $("#versus-return").onclick = renderHome;
+  }
 }
 async function enterEscape() {
   leaveGame(); screen = "escape";
@@ -525,7 +545,7 @@ function applySettings() {
 }
 function openHelp(fromPause = false) {
   const overview = screen === "home" || screen === "baths";
-  const modesHelp = "<div class=\"help-modes\"><section><h3>浴场模式</h3><p>泡泡浴场：挖土引水，收集泡泡币。午夜浴场：借灯光辨认水路，破解暗夜机关。</p></section><section><h3>逃生模式</h3><p>搜寻钥匙和工具，躲开奶蛙，逃进下水道。可单人游玩或与朋友组队。</p></section><section><h3>对抗模式</h3><p>3v3 MOBA，筹备中。</p></section></div>";
+  const modesHelp = "<div class=\"help-modes\"><section><h3>浴场模式</h3><p>泡泡浴场：挖土引水，收集泡泡币。午夜浴场：借灯光辨认水路，破解暗夜机关。</p></section><section><h3>逃生模式</h3><p>搜寻钥匙和工具，躲开奶蛙，逃进下水道。可单人游玩或与朋友组队。</p></section><section><h3>奶娃峡谷</h3><p>3v3 阵容预演与峡谷图鉴；对局尚未开放。</p></section></div>";
   const dialog = showDialog(
     `${dialogTop(overview ? "玩法" : modeName())}${overview ? modesHelp : `<ol class="how-to"><li>按住鼠标或划动手指，挖开泥土。</li><li>把清水引进右下方的管道，接够 100 滴水。</li><li>顺路收集 3 枚泡泡币，用时越短得分越高。</li><li>石板挖不动，要绕个弯。</li><li>轻点风扇可以推水；喷水阀可开关，水量有限。</li><li>紫色污水会污染清水，流进浴缸就要重试。</li><li>水草挡水，吸收紫水后会枯萎；海绵吸水，轻点可以挤水。</li></ol><p class="keyboard-help">键盘：方向键移动，空格挖土，Shift + 方向键连续挖土，F 切换风扇，V 切换清水阀，B 切换污水阀，E 挤水，Esc 暂停。</p>`}<button id="help-ok" class="game-button gold">知道了</button>`,
     () => openSettings(fromPause),
@@ -590,11 +610,12 @@ document.addEventListener("fullscreenchange", () => {
 window.addEventListener("pagehide", () => audio.suspend());
 window.addEventListener("pageshow", () => audio.resume());
 const gameUpdater = createGameUpdater({
-  canReload: () => ["home", "baths", "levels"].includes(screen) && !app.querySelector("dialog[open]"),
+  canReload: () => ["home", "baths", "levels", "versus"].includes(screen) && !app.querySelector("dialog[open]"),
   onReady() {
     updateAvailable = true;
     const update = app.querySelector<HTMLButtonElement>("#update");
     if (update) update.hidden = false;
+    versusClient?.setUpdateAvailable();
   },
 });
 if ("serviceWorker" in navigator && "caches" in window) {
@@ -613,7 +634,7 @@ if ("serviceWorker" in navigator && "caches" in window) {
     .catch(() => {});
 }
 function applyUpdate() {
-  if (!["home", "baths", "levels"].includes(screen)) {
+  if (!["home", "baths", "levels", "versus"].includes(screen)) {
     toast("返回首页后更新。");
     return;
   }

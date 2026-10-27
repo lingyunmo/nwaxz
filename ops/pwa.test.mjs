@@ -29,6 +29,11 @@ test("built preload covers revisioned game resources, including all whole videos
   ]);
   assert.ok(videos.every(entry => entry.revision && entry.bytes > 2000000));
   assert.ok(manifest.every(entry => entry.url !== "preload-manifest.json"));
+  const versusArt = JSON.parse(fs.readFileSync(new URL('../public/assets/versus/manifest.json',import.meta.url),'utf8'));
+  for (const asset of versusArt.assets) {
+    assert.ok(manifest.some(entry=>entry.url===asset.url.slice(1)), 'every client painting is available offline');
+    assert.equal(createHash('sha256').update(fs.readFileSync(new URL('../dist'+asset.url,import.meta.url))).digest('hex'),asset.sha256,'client art keeps its native bytes');
+  }
   assert.ok(fs.readFileSync(new URL('../dist/assets/scenes/versus-cover-v1.png',import.meta.url))
     .equals(fs.readFileSync(new URL('../public/assets/scenes/versus-cover-v1.png',import.meta.url))), 'teaser cover retains native PNG bytes');
   for (const art of Object.values(FROG_EXTRA_ART)) {

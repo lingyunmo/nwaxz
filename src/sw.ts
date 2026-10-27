@@ -5,6 +5,7 @@ import { cleanupOutdatedCaches, PrecacheController, PrecacheRoute } from "workbo
 import { RangeRequestsPlugin } from "workbox-range-requests";
 import { NavigationRoute, registerRoute } from "workbox-routing";
 import { version } from "../package.json";
+import { fetchNativeImage } from "./native-preload.ts";
 
 declare const self: ServiceWorkerGlobalScope;
 type Entry = { url: string; revision?: string | null; bytes: number };
@@ -49,6 +50,18 @@ function prepare(event: ExtendableEvent) {
       await Promise.all(Array.from({ length: 3 }, async () => {
         while (next < entries.length) {
           const [url, cacheKey] = entries[next++];
+          if (/\/assets\/versus\/.+\.png$/.test(new URL(url).pathname)) {
+            const cache = await caches.open(precache.strategy.cacheName);
+            if (!await cache.match(cacheKey)) {
+              const entry = manifest.find(entry => new URL(entry.url, self.location.href).href === url)!;
+              const integrity = precache.getIntegrityForCacheKey(cacheKey);
+              if (!integrity) throw new Error("原画缺少完整性记录");
+              const response = await fetchNativeImage(url, entry.bytes, integrity, loaded => receiving.set(url, loaded));
+              await cache.put(cacheKey, response);
+              receiving.delete(url);
+            }
+            continue;
+          }
           await Promise.all(precache.strategy.handleAll({
             event, params: { cacheKey, integrity: precache.getIntegrityForCacheKey(cacheKey) },
             request: new Request(url, { credentials: "same-origin", cache: cacheKey === url ? "default" : "reload" }),

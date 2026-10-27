@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import http from 'node:http';
 import {fileURLToPath} from 'node:url';
 import {createApp} from '../server/app.mjs';
 import {DRAFT_KEY} from '../src/versus/state.ts';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'playwright');
 const output=path.resolve(process.env.VERSUS_QA_DIR??'.local/versus-client-qa');await fs.mkdir(output,{recursive:true});
-const server=createApp({distDir:fileURLToPath(new URL('../dist/',import.meta.url))}).listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+const app=createApp({distDir:fileURLToPath(new URL('../dist/',import.meta.url))}),nativeTransfers=[];
+// Reproduce an unreliable whole-image path while leaving byte ranges available.
+const server=http.createServer((req,res)=>{if(/^\/assets\/versus\/.+\.png(?:\?|$)/.test(req.url)){if(!req.headers.range){res.writeHead(503);res.end('whole-image transfer unavailable in test fixture');return;}nativeTransfers.push({url:req.url,range:req.headers.range});}app(req,res)}).listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
 const base=`http://127.0.0.1:${server.address().port}`,errors=[],consoleErrors=[],posts=[];let browser;
 try{
   browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH,headless:true,args:['--disable-gpu','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--renderer-process-limit=1','--disable-background-networking']});
@@ -46,5 +49,5 @@ try{
   await page.locator('[data-action="exit"]').click();await page.locator('.game-hub').waitFor();await page.locator('#bath').click();await page.locator('#normal').click();await page.locator('#mode-continue').waitFor();await page.locator('#home').click();await page.locator('#hub-back').click();
   assert.equal(await page.evaluate(()=>window.__fullscreenCalls),0);assert.deepEqual(posts,[]);assert.deepEqual(errors,[]);assert.deepEqual(consoleErrors,[]);await context.close();
   const phone=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const touch=await phone.newPage();touch.on('pageerror',e=>errors.push(e.message));await touch.goto(base);await touch.locator('#pvp').tap();await touch.locator('.vc-nav [data-tab="draft"]').tap();await touch.locator('[data-action="example"]').tap();await touch.locator('[data-action="lock"]').tap();assert.ok(await touch.locator('[data-action="edit"]').isVisible());await touch.screenshot({path:path.join(output,'touch-draft.png')});await phone.close();
-  assert.deepEqual(errors,[]);const proof={layouts,heroes:4,skills:16,dualTeamDraft:true,swap:true,lock:true,nickname:true,persistence:true,offline:true,touch:true,fullscreenRequests:0,posts,errors,consoleErrors};await fs.writeFile(path.join(output,'proof.json'),JSON.stringify(proof,null,2));console.log(JSON.stringify(proof));
+  assert.deepEqual(errors,[]);assert.equal(new Set(nativeTransfers.map(x=>x.url)).size,8);const proof={layouts,heroes:4,skills:16,dualTeamDraft:true,swap:true,lock:true,nickname:true,persistence:true,offline:true,touch:true,nativeImagesRangeOnly:true,nativeRangeRequests:nativeTransfers.length,fullscreenRequests:0,posts,errors,consoleErrors};await fs.writeFile(path.join(output,'proof.json'),JSON.stringify(proof,null,2));console.log(JSON.stringify(proof));
 }catch(e){console.error(e);console.error(errors);process.exitCode=1}finally{await browser?.close();await new Promise(r=>server.close(r))}

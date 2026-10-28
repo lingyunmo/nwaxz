@@ -47,6 +47,8 @@ test("built preload covers revisioned game resources, including all whole videos
     "index.html",
     "icon.svg",
     "boot.css",
+    "boot-gallery.js",
+    "assets/loading/playlist.json",
     "assets/character/milk-frog-atlas.webp",
     "assets/character/milk-frog-extra-v2.webp",
     "assets/character/wait.webp",

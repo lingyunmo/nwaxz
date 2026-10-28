@@ -4,6 +4,8 @@
 
 ## 当前功能
 
+0.31.1 候选：逃生入口改用大厅同背景的全屏等待页，移除浴场固定容器及大厅初始化空卡片；大厅不加载3D引擎模块，真正开局再导入，减少入口卡顿。慢载可返回，迟到任务不会覆盖首页或重复创建大厅。发布见[Issue93](https://github.com/lingyunmo/nwaxz/issues/93)。
+
 0.31.0 候选：首页只准备约324KB启动资源，浴场按关卡加载，逃生3D在开局时准备，取消106MiB全量资源阻塞。已使用资源校验缓存，设置可主动下载完整离线包；原始PNG分段传输且不改清晰度。未下载过的模式断网时需要联网准备。[启动与离线说明](docs/FAST_STARTUP.md) · [Issue91](https://github.com/lingyunmo/nwaxz/issues/91)。
 
 0.30.0 候选：浴场新增万圣/地狱两座独立浴场，各3关，带倒计时、临界心跳和完整超时抓捕。暂停/后台停表，失败保留成绩，成功仍显示原画经典捧腹大笑；五张绘制PNG保留原尺寸原字节。原浴场、逃生、峡谷与本地记录保留。[玩法与时限](docs/SEASONAL_BATHS.md) · [原画与提示词](docs/art/seasonal-baths-v1.md) · [Issue87](https://github.com/lingyunmo/nwaxz/issues/87)。

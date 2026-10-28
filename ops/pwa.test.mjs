@@ -5,6 +5,18 @@ import { createHash } from "node:crypto";
 import { surfacePaths } from "../src/escape/material-assets.ts";
 import { FROG_EXTRA_ART } from "../src/escape/extra-art.ts";
 
+test("escape lobby does not statically import the 3D renderer or engine", () => {
+  const graph = JSON.parse(fs.readFileSync(new URL("../dist/.vite/manifest.json", import.meta.url), "utf8"));
+  const visited = new Set();
+  const visit = key => { if (visited.has(key)) return; visited.add(key); graph[key]?.imports?.forEach(visit); };
+  visit("src/escape/game.ts");
+  assert.ok(graph["src/escape/game.ts"].dynamicImports.includes("src/escape/renderer.ts"));
+  assert.ok(!visited.has("src/escape/renderer.ts"));
+  for (const key of visited) assert.ok(!/thinEngine|scene\.pure|pbrMaterial/.test(graph[key].file), "engine initialization stays behind the Start action");
+  const bytes = [...visited].reduce((sum, key) => sum + fs.statSync(new URL("../dist/" + graph[key].file, import.meta.url)).size, 0);
+  assert.ok(bytes < 512 * 1024, "lobby static JS dependency closure remains under 512KiB");
+});
+
 test("complete-offline inventory covers revisioned resources while the startup shell stays small", () => {
   const manifest = JSON.parse(fs.readFileSync(new URL("../dist/preload-manifest.json", import.meta.url), "utf8"));
   const worker = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");

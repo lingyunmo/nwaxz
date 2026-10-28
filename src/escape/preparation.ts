@@ -1,6 +1,6 @@
 import type { Settings } from "../settings.ts";
 import { loadImage } from "../loading.ts";
-import { EscapeRenderer, type EscapeArt } from "./renderer.ts";
+import type { EscapeRenderer, EscapeArt } from "./renderer.ts";
 import { EscapeWorld } from "./world.ts";
 import { surfacePaths, type SurfaceImages } from "./material-assets.ts";
 
@@ -33,6 +33,8 @@ export async function prepareEscape(settings: Settings, onStage: (stage: string)
   if (pending) return pending;
   prepared?.renderer.dispose(); prepared = undefined;
   pending = (async () => {
+    onStage("正在准备浴场…");
+    const { EscapeRenderer } = await import("./renderer.ts");
     onStage("正在铺好浴室地图…");
     let readySurfaces = 0;
     const surfaceEntries = Object.entries(surfacePaths);

@@ -4,12 +4,21 @@ import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 const extraPrecacheEntries: { url: string; revision: string | null; bytes?: number; integrity?: string }[] = [];
+function startupFiles() {
+  const files = new Set(["index.html", "boot.css", "boot-gallery.js", "assets/loading/playlist.json", "icon.svg", "assets/scenes/bath-cover-v2.webp", "assets/scenes/escape-cover-v1.webp"]);
+  const graph = JSON.parse(readFileSync(resolve("dist/.vite/manifest.json"), "utf8")) as Record<string, { isEntry?: boolean; file: string; imports?: string[]; css?: string[] }>;
+  const visited = new Set<string>();
+  function visit(key: string) { if (visited.has(key)) return; visited.add(key); const item = graph[key]; if (!item) throw new Error(`Missing build entry ${key}`); files.add(item.file); item.css?.forEach(file => files.add(file)); item.imports?.forEach(visit); }
+  for (const [key, item] of Object.entries(graph)) if (item.isEntry) visit(key);
+  return files;
+}
 function resourceInfo(url: string) {
   const file = resolve("dist", url);
   return { bytes: statSync(file).size, integrity: `sha256-${createHash("sha256").update(readFileSync(file)).digest("base64")}` };
 }
 
 export default defineConfig({
+  build: { manifest: true },
   server: {
     port: 5173,
     strictPort: true,
@@ -59,7 +68,8 @@ export default defineConfig({
         dontCacheBustURLsMatching: /^assets\/[^/]+-[A-Za-z0-9_-]{8}\.(?:js|css)$/,
         manifestTransforms: [async entries => {
           // Workbox removes its own `size` field after transforms; retain bytes for runtime progress.
-          const manifest = entries.map(entry => ({ ...entry, ...resourceInfo(entry.url) }));
+          const startup = startupFiles();
+          const manifest = entries.map(entry => ({ ...entry, ...resourceInfo(entry.url), ...(startup.has(entry.url) ? { startup: true } : {}) }));
           for (const entry of extraPrecacheEntries) Object.assign(entry, resourceInfo(entry.url));
           // Release audit data. The client gets its manifest from the worker itself.
           writeFileSync(resolve("dist/preload-manifest.json"), JSON.stringify([...manifest, ...extraPrecacheEntries]));

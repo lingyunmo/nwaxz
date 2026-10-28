@@ -1,4 +1,11 @@
 /* Viewport-filling mode groups; no browser Fullscreen API is used by menus. */
+.resource-preparing { display:flex; flex-direction:column; justify-content:center; align-items:center; gap:20px; background:linear-gradient(#091710aa,#091710ee),url('/assets/scenes/bath-cover-v2.webp') center/cover; }
+.resource-preparing progress { width:min(80%,420px); height:12px; accent-color:#d9bd7e; }
+.resource-preparing .game-button { width:min(80%,420px); }
+.offline-download { display:grid; gap:10px; padding:14px 0; }
+.offline-download button { padding:12px; border:1px solid #aa9560; border-radius:5px; background:#26352b; color:#f7e8c9; cursor:pointer; font:inherit; }
+.offline-download button:disabled { opacity:.7; cursor:default; }
+.offline-download small { color:#68756d; font-variant-numeric:tabular-nums; }
 .hub-theme::before { background-image:url('/assets/scenes/escape-cover-v1.webp'); filter:blur(28px) brightness(.22) saturate(.45); }
 .game-hub { width:100%; height:100svh; height:100dvh; min-height:0; margin:0; display:grid; grid-template-rows:auto minmax(0,1fr) auto; gap:20px; padding:max(22px,env(safe-area-inset-top)) max(28px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(28px,env(safe-area-inset-left)); color:#eee3c7; }
 .hub-header { display:flex; justify-content:space-between; align-items:center; }

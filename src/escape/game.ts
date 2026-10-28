@@ -47,6 +47,7 @@ export class EscapeGame {
   private paused = true;
   private started = false;
   private disposed = false;
+  private preparationSequence = 0;
   private cinematic?: CinematicPlayer;
   private saved?: EscapeSnapshot;
   private record?: Best;
@@ -358,16 +359,18 @@ export class EscapeGame {
     this.renderer.setReducedMotion(this.settings.reducedMotion);
   }
   private async start(resume: boolean) {
+    const preparation = ++this.preparationSequence;
     this.save(); this.started = false; this.paused = true;
     this.audio.setMode("escape"); this.applySound(); void this.audio.unlock();
     if (!document.fullscreenElement && document.documentElement.requestFullscreen) void document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
-    this.panel('<p class="escape-eyebrow">下水道逃生</p><h2>正在进入浴场…</h2><p id="escape-preparing" role="status"></p>');
+    this.panel('<p class="escape-eyebrow">下水道逃生</p><h2>正在进入浴场…</h2><p id="escape-preparing" role="status"></p><button id="escape-prepare-back" class="escape-primary">返回菜单</button>');
+    this.button("escape-prepare-back", () => { this.preparationSequence++; this.cinematic?.close(); this.intro(); });
     const opening = resume ? undefined : this.playCinematic(randomOpeningClip());
     try {
       if (!this.renderer?.usable) {
         this.renderer?.dispose(); this.renderer = undefined;
-        await prepareEscape(this.settings, stage => { const label = this.root.querySelector("#escape-preparing"); if (label) label.textContent = stage; });
-        if (this.disposed) return;
+        await prepareEscape(this.settings, stage => { const label = this.root.querySelector("#escape-preparing"); if (label && preparation === this.preparationSequence) label.textContent = stage; });
+        if (this.disposed || preparation !== this.preparationSequence) return;
         // Only the canvas changes here; global game listeners remain bound once.
         const bundle = takePreparedEscape();
         if (!bundle) throw new Error("场景尚未准备完成");
@@ -378,17 +381,18 @@ export class EscapeGame {
         this.renderer = bundle.renderer; this.art = bundle.art;
         this.bindView(bundle.canvas);
       }
-      if (this.disposed) return;
+      if (this.disposed || preparation !== this.preparationSequence) return;
       this.world = resume && this.saved ? EscapeWorld.restore(this.saved) : new EscapeWorld();
       this.beginRoomCue();
       this.renderer.setReducedMotion(this.settings.reducedMotion);
-      if (this.disposed) return;
+      if (this.disposed || preparation !== this.preparationSequence) return;
       this.renderer.resize(this.settings.quality === "high"); this.started = true; this.phase = this.world.data.phase;
       this.saveAt = this.world.data.elapsed; this.save();
       await opening;
-      if (this.disposed) return;
+      if (this.disposed || preparation !== this.preparationSequence) return;
       if (this.world.data.phase === "caught") this.result(); else this.resume();
     } catch {
+      if (this.disposed || preparation !== this.preparationSequence) return;
       this.cinematic?.close();
       this.renderer?.dispose(); this.renderer = undefined;
       this.panel('<h2>场景载入失败</h2><p>请检查网络，或换用支持 WebGL 的浏览器。进度已保留。</p><button id="escape-load-back" class="escape-primary">返回菜单</button>');

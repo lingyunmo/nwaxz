@@ -5,9 +5,9 @@ export async function withTimeout<T>(task: Promise<T>, message: string, millisec
     return await Promise.race([task, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(message)), milliseconds); })]);
   } finally { clearTimeout(timer!); }
 }
-export async function loadImage(url: string) {
+export async function loadImage(url: string, milliseconds = 30000) {
   const image = new Image();
   image.src = url;
-  await withTimeout(image.decode(), "图片准备失败，请重试。");
+  await withTimeout(image.decode(), "图片准备失败，请重试。", milliseconds);
   return image;
 }

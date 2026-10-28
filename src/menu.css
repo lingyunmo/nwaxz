@@ -1,4 +1,13 @@
 /* Viewport-filling mode groups; no browser Fullscreen API is used by menus. */
+.escape-entry-screen { position:fixed; inset:0; z-index:6; display:flex; flex-direction:column; justify-content:flex-end; align-items:flex-start; gap:24px; padding:max(36px,env(safe-area-inset-top)) max(36px,env(safe-area-inset-right)) max(40px,env(safe-area-inset-bottom)) max(36px,env(safe-area-inset-left)); color:#f0eadb; background:linear-gradient(90deg,#050a0ded 0%,#070d0fc7 34%,#070d0fc4 100%),linear-gradient(0deg,#05090ba6,transparent 50%),#080e11 url('/assets/scenes/escape-cover-v1.webp') center/cover; }
+.escape-entry-status { width:min(100%,360px); }
+.escape-entry-screen { font:500 15px/1.5 system-ui,'Microsoft YaHei',sans-serif; }
+.escape-entry-status small { color:#d8bf7b; letter-spacing:4px; font-size:14px; }
+.escape-entry-status p { margin:14px 0; font-size:22px; }
+.escape-entry-line { display:block; height:2px; width:100%; background:#d8bf7b88; }
+.escape-entry-back { min-height:44px; padding:10px 18px; border:1px solid #d8bf7b66; border-radius:6px; background:#101a1bcc; color:#eee1c8; font:inherit; cursor:pointer; }
+.escape-entry-back:focus-visible { outline:2px solid #f5d29b; outline-offset:3px; }
+@media(max-width:620px) { .escape-entry-screen { padding-left:max(22px,env(safe-area-inset-left)); padding-right:max(22px,env(safe-area-inset-right)); } }
 .resource-preparing { display:flex; flex-direction:column; justify-content:center; align-items:center; gap:20px; background:linear-gradient(#091710aa,#091710ee),url('/assets/scenes/bath-cover-v2.webp') center/cover; }
 .resource-preparing progress { width:min(80%,420px); height:12px; accent-color:#d9bd7e; }
 .resource-preparing .game-button { width:min(80%,420px); }

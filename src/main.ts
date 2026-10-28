@@ -184,14 +184,18 @@ async function enterVersus() {
 }
 async function enterEscape() {
   leaveGame(); screen = "escape";
+  const request = preparationId;
   document.body.classList.add("horror-theme", "escape-theme");
-  chrome('<main class="menu-stage"><p class="escape-loading">正在载入…</p></main>');
+  chrome('<main class="escape-entry-screen" aria-label="正在进入逃生大厅"><div class="escape-entry-status" role="status"><small>逃生模式</small><p>正在进入大厅…</p><span class="escape-entry-line" aria-hidden="true"></span></div><button id="escape-load-return" class="escape-entry-back">返回首页</button></main>');
+  $("#escape-load-return").onclick = renderHome;
   try {
     const { EscapeGame } = await import("./escape/game.ts");
-    if (screen !== "escape") return;
+    if (screen !== "escape" || request !== preparationId) return;
     escapeGame = new EscapeGame(app, audio, settings, renderHome);
   } catch {
-    chrome('<main class="menu-stage"><p class="escape-loading">场景载入失败，请检查网络后重试。</p><button id="escape-load-return" class="game-button">返回主界面</button></main>');
+    if (screen !== "escape" || request !== preparationId) return;
+    chrome('<main class="escape-entry-screen" aria-label="逃生大厅载入失败"><div class="escape-entry-status" role="status"><small>逃生模式</small><p>大厅暂时未能载入</p><button id="escape-load-retry" class="escape-entry-back">刷新重试</button></div><button id="escape-load-return" class="escape-entry-back">返回首页</button></main>');
+    $("#escape-load-retry").onclick = () => location.reload();
     $("#escape-load-return").onclick = renderHome;
   }
 }

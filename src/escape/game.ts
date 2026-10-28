@@ -13,7 +13,7 @@ import { CinematicPlayer, randomOpeningClip, randomCaughtClip } from "./cinemati
 import { AudioManager } from "../audio.ts";
 import type { Settings } from "../settings.ts";
 import { EscapeWorld, ITEM_NAMES, PROPS, type EscapeSnapshot } from "./world.ts";
-import { EscapeRenderer, type EscapeArt } from "./renderer.ts";
+import type { EscapeRenderer, EscapeArt } from "./renderer.ts";
 import { prepareEscape, returnPreparedEscape, takePreparedEscape } from "./preparation.ts";
 import { EscapeLook, type MouseLookMode } from "./look.ts";
 import { CoopClient, type CoopConnectionState } from "./coop-client.ts";
@@ -156,15 +156,18 @@ export class EscapeGame {
     try { localStorage.setItem(HUD, this.hudDetails ? "expanded" : "compact"); } catch { /* The toggle still works. */ }
   }
   private button(id: string, fn: () => void) { this.$(`#${id}`).addEventListener("click", fn, { signal: this.signal }); }
-  private panel(html: string) {
+  private preparePanel() {
     this.lobbyVisible=false;this.lobbyDisposer?.();this.lobbyDisposer=undefined;
     this.abilityHud.update({ ...this.world.data.abilities, floor: floorAt(this.world.data.player) }, false, this.settings.reducedMotion);
     this.look?.suspend();
     this.$(".escape-shell").classList.remove("intro-active");
     this.$(".escape-shell").classList.remove("capture-active");
-    this.$("#escape-panel").classList.remove("escape-intro", "escape-pause-panel", "escape-map-panel");
+    this.$("#escape-panel").classList.remove("escape-intro", "escape-pause-panel", "escape-map-panel", "escape-lobby-panel");
     this.$(".escape-shell").classList.add("menu-active");
     this.$("#escape-panel").hidden = false;
+  }
+  private panel(html: string) {
+    this.preparePanel();
     this.$("#escape-panel").innerHTML = `<section class="escape-card">${html}</section>`;
     this.$("#escape-panel").querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
   }
@@ -173,7 +176,7 @@ export class EscapeGame {
     this.showSocialLobby('home');
   }
   private showSocialLobby(screen:LobbyScreen){
-    this.panel('');this.lobbyVisible=true;this.lobbyScreen=screen;this.lobbyScreenStack=[];this.lobbyMessage=undefined;this.renderSocialLobby();
+    this.preparePanel();this.$("#escape-panel").classList.add("escape-lobby-panel");this.lobbyVisible=true;this.lobbyScreen=screen;this.lobbyScreenStack=[];this.lobbyMessage=undefined;this.renderSocialLobby();
     if(!this.lobbyTimer)this.lobbyTimer=window.setInterval(()=>{if(this.lobbyVisible)void this.refreshSocialLobby();else if(this.started&&!this.coopMode&&this.social.identity)void this.social.ensure().catch(()=>{});},15000);
     void this.refreshSocialLobby();
   }

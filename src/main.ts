@@ -4,11 +4,11 @@ import type { EscapeGame } from "./escape/game.ts";
 import type { VersusClient } from "./versus/client.ts";
 import { version } from "../package.json";
 import { createGameUpdater } from "./updates.ts";
-import { preloadGame } from "./preload.ts";
+import { preloadGame, readPreloadStatus } from "./preload.ts";
 import { levels } from "./game/levels";
 import { canEnter, modeIndices, modeOf, nextLevel, bathNames, bathModes, isDarkBath, type GameMode } from "./game/modes";
 import { BathGame, type RunResult } from "./game/renderer";
-import { artworkPaths, loadArtwork, type Artwork } from "./artwork";
+import { artworkPaths, loadArtwork, levelArtworkKeys, type Artwork } from "./artwork";
 import { AudioManager } from "./audio";
 import { defaultSettings, loadSettings, saveSettings, type Settings } from "./settings";
 import { prepareSaveGeneration } from "./save-generation.ts";
@@ -36,7 +36,8 @@ let versusClient: VersusClient | undefined;
 let game: BathGame | undefined,
   selected = 0,
   chapter = 1,
-  screen: "loading" | "home" | "baths" | "levels" | "play" | "escape" | "versus" = "loading";
+  screen: "loading" | "preparing" | "home" | "baths" | "levels" | "play" | "escape" | "versus" = "loading";
+let preparationId = 0;
 let offlineReady = false,
   updateAvailable = false,
   toastTimer = 0;
@@ -107,6 +108,7 @@ function toast(message: string) {
   }, 4000);
 }
 function leaveGame() {
+  preparationId++;
   versusClient?.destroy(); versusClient = undefined;
   escapeGame?.destroy(); escapeGame = undefined;
   document.body.classList.remove("escape-theme", "hub-theme", "versus-theme", "halloween-theme", "infernal-theme");
@@ -226,7 +228,7 @@ function renderLevels() {
     element.onclick = () => enterLevel(Number(element.dataset.level));
   queueMicrotask(() => gameUpdater.apply());
 }
-function enterLevel(index: number) {
+async function enterLevel(index: number) {
   if (!unlocked(index)) return;
   audio.unlock();
   audio.effect("tap");
@@ -235,6 +237,26 @@ function enterLevel(index: number) {
       .requestFullscreen({ navigationUI: "hide" })
       .catch(() => {});
   game?.destroy();
+  game = undefined;
+  audio.setPlaying(false);
+  const request = ++preparationId;
+  screen = "preparing";
+  chrome('<main class="menu-stage resource-preparing"><p class="escape-loading" id="prepare-label">正在布置浴场…</p><progress id="prepare-progress" max="100" value="0" aria-label="浴场准备进度"></progress><button id="prepare-back" class="game-button">返回选关</button></main>');
+  $("#prepare-back").onclick = renderLevels;
+  try {
+    const loaded = await loadArtwork((done, total) => {
+      if (request !== preparationId) return;
+      $<HTMLProgressElement>("#prepare-progress").value = done / total * 100;
+      $("#prepare-label").textContent = `正在布置浴场… ${done} / ${total}`;
+    }, levelArtworkKeys(levels[index]));
+    if (request !== preparationId) return;
+    art = loaded;
+  } catch {
+    if (request !== preparationId) return;
+    $("#prepare-label").textContent = "浴场还没准备好，请检查网络后重试。";
+    const retry = document.createElement("button"); retry.className = "game-button"; retry.textContent = "重试"; retry.onclick = () => void enterLevel(index); $("#prepare-back").before(retry);
+    return;
+  }
   selected = index;
   mode = modeOf(index);
   audio.setMode(mode);
@@ -473,6 +495,7 @@ function openRestart() {
   };
 }
 function openSettings(fromPause = false) {
+  let offlineDownload: AbortController | undefined;
   const toggles: { key: keyof Settings; title: string; description: string }[] =
     [
       { key: "music", title: "音乐", description: "" },
@@ -493,8 +516,9 @@ function openSettings(fromPause = false) {
       },
     ];
   const dialog = showDialog(
-    `${dialogTop("设置")}<div class="settings-options">${toggles.map(({ key, title, description }) => `<label class="setting-row"><span>${title}${description ? `<small>${description}</small>` : ""}</span><input type="checkbox" role="switch" data-setting="${key}" ${settings[key] ? "checked" : ""}/><span class="switch-knob" aria-hidden="true"></span></label>`).join("")}<label class="setting-row"><span>画质</span><select id="quality" aria-label="画质"><option value="balanced" ${settings.quality === "balanced" ? "selected" : ""}>平衡</option><option value="high" ${settings.quality === "high" ? "selected" : ""}>高清</option></select></label></div><details class="save-settings"><summary>存档管理</summary><h3>关卡存档</h3><span>${levels.filter((l) => progress.levels[l.id]?.completed).length} / ${levels.length} 关 · ${bathModes.reduce((sum,target)=>sum+totalCoins(target),0)} 枚泡泡币</span><div><button id="export">导出存档</button><button id="import">导入存档</button></div><small>四座浴场的关卡成绩。逃生存档在逃生模式内管理。</small></details><div class="settings-bottom"><span>${offlineReady ? "可离线游玩" : navigator.onLine ? "资源准备中" : "离线游玩"} · v${version}</span>${updateAvailable ? '<button id="settings-update">更新游戏</button>' : ""}<button id="help">怎么玩</button></div>`,
+    `${dialogTop("设置")}<div class="settings-options">${toggles.map(({ key, title, description }) => `<label class="setting-row"><span>${title}${description ? `<small>${description}</small>` : ""}</span><input type="checkbox" role="switch" data-setting="${key}" ${settings[key] ? "checked" : ""}/><span class="switch-knob" aria-hidden="true"></span></label>`).join("")}<label class="setting-row"><span>画质</span><select id="quality" aria-label="画质"><option value="balanced" ${settings.quality === "balanced" ? "selected" : ""}>平衡</option><option value="high" ${settings.quality === "high" ? "selected" : ""}>高清</option></select></label></div><details class="save-settings"><summary>存档管理</summary><h3>关卡存档</h3><span>${levels.filter((l) => progress.levels[l.id]?.completed).length} / ${levels.length} 关 · ${bathModes.reduce((sum,target)=>sum+totalCoins(target),0)} 枚泡泡币</span><div><button id="export">导出存档</button><button id="import">导入存档</button></div><small>四座浴场的关卡成绩。逃生存档在逃生模式内管理。</small></details><div class="settings-bottom"><span>${offlineReady ? "完整离线包已就绪" : "资源按需下载"} · v${version}</span>${updateAvailable ? '<button id="settings-update">更新游戏</button>' : ""}<button id="help">怎么玩</button></div>`,
     () => {
+      offlineDownload?.abort();
       audio.stopPreview();
       if (fromPause) openPause();
       else if (screen === "levels") renderLevels();
@@ -503,6 +527,27 @@ function openSettings(fromPause = false) {
     },
   );
   $("#dialog-close").onclick = () => dialog.close();
+  const offline = document.createElement("section");
+  offline.className = "offline-download";
+  offline.innerHTML = `<button id="prepare-offline" ${offlineReady ? "disabled" : ""}>${offlineReady ? "完整离线包已就绪" : "准备完整离线包"}</button><small id="offline-detail" role="status"></small>`;
+  $(".settings-bottom").before(offline);
+  $("#prepare-offline").onclick = async () => {
+    offlineDownload = new AbortController();
+    const button = $<HTMLButtonElement>("#prepare-offline"), detail = $("#offline-detail");
+    button.disabled = true; button.textContent = "正在准备离线包…";
+    try {
+      await preloadGame(value => {
+        if (!dialog.open) return;
+        detail.textContent = `${Math.floor(value.loadedBytes / Math.max(1, value.totalBytes) * 100)}% · ${(value.loadedBytes / 1048576).toFixed(1)} / ${(value.totalBytes / 1048576).toFixed(1)} MB`;
+      }, () => gameUpdater.check(), "all", offlineDownload.signal);
+      offlineReady = true;
+      if (dialog.open) { button.textContent = "完整离线包已就绪"; detail.textContent = "可断网游玩所有模式"; }
+    } catch (error) {
+      if (!dialog.open || offlineDownload.signal.aborted) return;
+      button.disabled = false; button.textContent = "继续准备离线包";
+      detail.textContent = error instanceof Error ? error.message : "下载未完成，请重试。";
+    }
+  };
   const previews = document.createElement("div");
   previews.className = "audio-preview";
   previews.innerHTML = '<button id="preview-music">试听音乐</button><button id="preview-sound">试听音效</button><button id="recover-audio">恢复声音</button><p id="audio-feedback" role="status" aria-live="polite"></p>';
@@ -645,15 +690,8 @@ const gameUpdater = createGameUpdater({
 if ("serviceWorker" in navigator && "caches" in window) {
   void navigator.serviceWorker.ready
     .then(async () => {
-      const resources = [
-        "/index.html",
-        ...Object.values(artworkPaths),
-      ];
-      offlineReady = (
-        await Promise.all(
-          resources.map((url) => caches.match(url, { ignoreSearch: true })),
-        )
-      ).every(Boolean);
+      const value = await readPreloadStatus();
+      offlineReady = !!value && value.total > 0 && value.done === value.total;
     })
     .catch(() => {});
 }
@@ -675,23 +713,14 @@ async function boot(enterNow = false) {
     saveReady = true;
     startupStage = "assets";
     const loading = $(".boot-loading");
-    loading.innerHTML = '<small id="boot-label">正在准备浴室…</small><progress id="boot-progress" max="100" aria-label="游戏加载进度"></progress><small id="boot-detail">初次进入会准备视频、地图和音乐</small>';
+    loading.innerHTML = '<small id="boot-label">正在准备浴室…</small><progress id="boot-progress" max="100" aria-label="游戏加载进度"></progress><small id="boot-detail">正在准备游戏入口</small>';
     if (!enterNow && !import.meta.env.DEV) {
       await preloadGame(value => {
         const percent = value.totalBytes > 0 ? Math.floor(value.loadedBytes / value.totalBytes * 100) : 0;
         $<HTMLProgressElement>("#boot-progress").value = percent;
         $("#boot-detail").textContent = `${percent}% · ${(value.loadedBytes / 1048576).toFixed(1)} / ${(value.totalBytes / 1048576).toFixed(1)} MB`;
-      }, () => gameUpdater.check());
-      offlineReady = true;
+      }, () => gameUpdater.check(), "startup");
     }
-    $("#boot-label").textContent = "正在布置浴室…";
-    $("#boot-progress").removeAttribute("value");
-    const artwork = loadArtwork((done, total) => { $("#boot-detail").textContent = `浴场贴图 ${done} / ${total}`; });
-    const scene = (async () => { if (!enterNow) {
-      const escape = await import("./escape/game.ts");
-      await escape.prepareEscape(settings, stage => { $("#boot-detail").textContent = stage; });
-    } })();
-    [art] = await Promise.all([artwork, scene]);
     applySettings();
     renderHome();
   } catch (error) {

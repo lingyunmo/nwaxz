@@ -5,10 +5,14 @@ import { createHash } from "node:crypto";
 import { surfacePaths } from "../src/escape/material-assets.ts";
 import { FROG_EXTRA_ART } from "../src/escape/extra-art.ts";
 
-test("built preload covers revisioned game resources, including all whole videos", () => {
+test("complete-offline inventory covers revisioned resources while the startup shell stays small", () => {
   const manifest = JSON.parse(fs.readFileSync(new URL("../dist/preload-manifest.json", import.meta.url), "utf8"));
   const worker = fs.readFileSync(new URL("../dist/sw.js", import.meta.url), "utf8");
   assert.ok(!worker.includes("self.__WB_MANIFEST"), "manifest must be injected");
+  const startup = manifest.filter(entry => entry.startup === true);
+  assert.ok(startup.length > 0 && startup.some(entry => entry.url === "index.html"));
+  assert.ok(startup.reduce((sum, entry) => sum + entry.bytes, 0) < 512 * 1024, "first launch shell stays under 512KiB before transfer compression");
+  assert.ok(startup.every(entry => !/\.(?:mp4|png|glb)$/.test(entry.url)), "unrelated original paintings, models and movies never gate first launch");
   assert.ok(worker.includes("PREPARE_GAME"));
   assert.equal(new Set(manifest.map(entry => entry.url)).size, manifest.length);
   for (const entry of manifest) {

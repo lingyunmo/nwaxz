@@ -34,8 +34,15 @@ export async function prepareEscape(settings: Settings, onStage: (stage: string)
   prepared?.renderer.dispose(); prepared = undefined;
   pending = (async () => {
     onStage("正在铺好浴室地图…");
+    let readySurfaces = 0;
+    const surfaceEntries = Object.entries(surfacePaths);
     const [surfaces, map, basement] = await Promise.all([
-      Promise.all(Object.entries(surfacePaths).map(async ([kind, path]) => [kind, await loadImage(path)] as const)).then(entries => Object.fromEntries(entries) as SurfaceImages),
+      Promise.all(surfaceEntries.map(async ([kind, path]) => {
+        // Native PNGs may wait for another image's bounded range slot first.
+        const image = await loadImage(path, 120000);
+        onStage(`正在铺好浴室地图… ${++readySurfaces} / ${surfaceEntries.length}`);
+        return [kind, image] as const;
+      })).then(entries => Object.fromEntries(entries) as SurfaceImages),
       loadImage("/assets/ui/escape-map-atlas-v1.webp"), loadImage("/assets/scenes/escape-basement-atlas-v1.webp"),
     ]);
     const canvas = document.createElement("canvas"), art = { surfaces, map, basement };

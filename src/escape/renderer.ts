@@ -17,7 +17,7 @@ import { installEscapeModels } from "./models.ts";
 import { DOORS, type EscapeWorld } from "./world.ts";
 import { EscapeMap } from "./minimap.ts";
 import { withTimeout } from "../loading.ts";
-import { floorAt } from "./basement-map.ts";
+import { floorAt, type Floor } from "./basement-map.ts";
 import type { CoopPlayer } from "./coop-protocol.ts";
 import { PeerActorsRenderer } from "./peers.ts";
 import { nativeRenderSize, type SurfaceImages, type SurfaceKind } from "./material-assets.ts";
@@ -102,13 +102,15 @@ export class EscapeRenderer {
   /** Danger is felt through the lens: the vignette closes in and reddens, grain thickens. */
   private updateFilm(world: EscapeWorld, dt: number) {
     const d = world.data, chased = world.isPlayerChased, near = Math.hypot(d.hunter.x - d.player.x, d.hunter.z - d.player.z);
-    const target = chased ? 1 : near < 4 && d.phase === "playing" ? .45 : 0;
+    const safe = world.inSafeRoom;
+    const target = safe ? 0 : chased ? 1 : near < 4 && d.phase === "playing" ? .45 : 0;
+    if (safe) this.dread = 0;
     this.dread += (target - this.dread) * Math.min(1, dt * (target > this.dread ? 3 : 1.2));
     const look = this.film.imageProcessing;
-    look.vignetteWeight = 1.6 + this.dread * 2.4;
+    look.vignetteWeight = safe ? .4 : 1.6 + this.dread * 2.4;
     look.vignetteColor.set(.28 * this.dread, 0, 0, 0);
-    this.film.grain.intensity = 6 + this.dread * 10;
-    this.film.chromaticAberration.aberrationAmount = 8 + this.dread * 22;
+    this.film.grain.intensity = safe ? 1 : 6 + this.dread * 10;
+    this.film.chromaticAberration.aberrationAmount = safe ? 0 : 8 + this.dread * 22;
   }
   get usable() { return !this.disposed && !this.engine._gl?.isContextLost(); }
   setReducedMotion(reduced: boolean) { this.reduced = reduced; this.models?.actor.setReducedMotion(reduced); }
@@ -171,6 +173,7 @@ export class EscapeRenderer {
     const expanded = !!d.expansion?.enabled;
     if (expanded !== this.wasExpanded) { for (const shard of this.view.glassMeshes) shard.setEnabled(expanded); this.wasExpanded = expanded; }
     this.models.animate(world, dt);
+    this.view.upstairs.animate(d.elapsed, this.reduced);
     const desired = d.hidden ? 1.65 : d.player.crouched ? 1.02 : 1.65;
     if (!!d.hidden !== this.wasHidden) this.height = desired;
     this.wasHidden = !!d.hidden;
@@ -183,6 +186,7 @@ export class EscapeRenderer {
     this.view.corridorLamp.setEnabled(!caught && d.player.z < 18);
     this.view.sewerGlow.setEnabled(!caught && d.player.z >= 18);
     const inBasement = floorAt(d.player) === -1;
+    this.view.scene.fogDensity = world.inSafeRoom ? .002 : .021;
     this.view.basementMaintenance.setEnabled(!caught && inBasement);
     this.view.sumpGlow.setEnabled(!caught && inBasement);
     this.view.corridorLamp.intensity = (d.power ? .30 : .15) * (this.reduced ? 1 : .8 + .2 * Math.sin(d.elapsed * 8) ** 14);
@@ -206,7 +210,7 @@ export class EscapeRenderer {
   }
   /** Remove all peer meshes when leaving a room or returning to the menu. */
   clearPeers() { this.peerActors?.clear(); }
-  drawMap(canvas: HTMLCanvasElement, world: EscapeWorld, compact = false, floor?: 0 | -1) {
+  drawMap(canvas: HTMLCanvasElement, world: EscapeWorld, compact = false, floor?: Floor) {
     this.map.draw(canvas, world, compact, floor);
   }
   dispose() {

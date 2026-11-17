@@ -1,4 +1,5 @@
 import { combinePerception, type Sense } from './perception.ts';
+import type { Floor } from './basement-map.ts';
 
 export type InterferenceStage = 'clear' | 'attempt' | 'corrupt';
 export type InterferenceState = {
@@ -16,7 +17,7 @@ export type InterferenceState = {
 export type InterferenceEnvironment = {
   active: boolean;
   suspended: boolean;
-  floor?: 0 | -1;
+  floor?: Floor;
   immune?: boolean;
   random: () => number;
 };
@@ -33,11 +34,11 @@ const MAX_SEED = 0xffffffff;
 const STAGES = new Set<InterferenceStage>(['clear', 'attempt', 'corrupt']);
 const STATE_KEYS = new Set(['profile', 'stage', 'clear', 'attempt', 'tick', 'remaining', 'clock', 'seed']);
 
-export function createInterference(floor: 0 | -1 = -1): InterferenceState {
+export function createInterference(floor: Floor = -1): InterferenceState {
   return {
-    ...(floor === 0 ? { profile: 0 as const } : {}),
+    ...(floor !== -1 ? { profile: 0 as const } : {}),
     stage: 'clear',
-    clear: clearDuration(floor),
+    clear: clearDuration(floor === -1 ? -1 : 0),
     attempt: 0,
     tick: 0,
     remaining: 0,
@@ -56,6 +57,7 @@ export function advanceInterference(
   if (!Number.isFinite(dt) || dt < 0) throw new RangeError('Interference dt must be a finite non-negative number');
 
   const next: InterferenceState = { ...state };
+  if (env.floor === 1) return createInterference(0);
   const floor = env.floor ?? -1;
   if (!env.active) return createInterference(floor);
 

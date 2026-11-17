@@ -2,7 +2,7 @@ import "./style.css";
 import "./hud.css";
 import "./ability-hud.css";
 import { AbilityHud } from "./ability-hud.ts";
-import { floorAt } from "./basement-map.ts";
+import { floorAt, type Floor } from "./basement-map.ts";
 import { SAVE_GENERATION } from "../save-generation.ts";
 import { displayPerception } from "./interference.ts";
 import { NoteDialog } from "./note-dialog.ts";
@@ -468,11 +468,12 @@ export class EscapeGame {
   private showMap() {
     if (!this.started || this.world.data.phase !== "playing") return;
     this.paused = true; this.clearInput(); this.audio.setPlaying(false); this.save();
-    this.panel(`<section class="escape-map-page"><h2>浴场地图</h2>${this.coopMode ? '<p class="escape-coop-note">房间仍在进行</p>' : ""}<div class="escape-floor-tabs" aria-label="地图楼层"><button id="escape-map-ground" aria-pressed="false">地面</button><button id="escape-map-basement" aria-pressed="false">负一楼</button></div><canvas id="escape-floorplan" width="560" height="560" aria-label="探索地图，箭头是你，暗处尚未探索"></canvas><p class="escape-map-legend"><i class="map-you"></i>你 <i class="map-door"></i>门 <i class="map-hide"></i>衣柜 <i class="map-fog"></i>未探索</p><p id="escape-map-current">当前位置：${safe(this.world.room)}</p><button id="escape-map-close" class="escape-secondary">返回游戏 <kbd>M</kbd></button></section>`);
+    this.panel(`<section class="escape-map-page"><h2>浴场地图</h2>${this.coopMode ? '<p class="escape-coop-note">房间仍在进行</p>' : ""}<div class="escape-floor-tabs" aria-label="地图楼层"><button id="escape-map-upstairs" aria-pressed="false">二楼</button><button id="escape-map-ground" aria-pressed="false">地面</button><button id="escape-map-basement" aria-pressed="false">负一楼</button></div><canvas id="escape-floorplan" width="560" height="560" aria-label="探索地图，箭头是你，暗处尚未探索"></canvas><p class="escape-map-legend"><i class="map-you"></i>你 <i class="map-door"></i>门 <i class="map-hide"></i>衣柜 <i class="map-fog"></i>未探索</p><p id="escape-map-current">当前位置：${safe(this.world.room)}</p><button id="escape-map-close" class="escape-secondary">返回游戏 <kbd>M</kbd></button></section>`);
     this.$("#escape-panel").classList.add("escape-map-panel");
-    const draw = (floor: 0 | -1) => {
+    const draw = (floor: Floor) => {
       this.$("#escape-map-ground").setAttribute("aria-pressed", String(floor === 0));
       this.$("#escape-map-basement").setAttribute("aria-pressed", String(floor === -1));
+      this.$("#escape-map-upstairs").setAttribute("aria-pressed", String(floor === 1));
       // Render at the size it is shown (and screen density) so the big map stays crisp.
       const canvas = this.$<HTMLCanvasElement>("#escape-floorplan");
       const size = Math.round(canvas.getBoundingClientRect().width * Math.min(devicePixelRatio || 1, 2));
@@ -480,6 +481,7 @@ export class EscapeGame {
       this.renderer?.drawMap(canvas, this.world, false, floor);
     };
     this.button("escape-map-ground", () => draw(0)); this.button("escape-map-basement", () => draw(-1));
+    this.button("escape-map-upstairs", () => draw(1));
     this.button("escape-map-close", () => this.resume()); draw(floorAt(this.world.data.player));
   }
   private showJournal() { this.showBag("notes"); }
@@ -705,7 +707,7 @@ export class EscapeGame {
           this.coopSeenRevision = snapshot.revision;
           for (const event of snapshot.events) {
             if (event.type === "message" && event.text) this.world.say(event.text);
-            if (event.type === "laugh") this.audio.haunt();
+            if (event.type === "laugh" && !this.world.inSafeRoom) this.audio.haunt();
             if (["step", "door", "noise"].includes(event.type)) this.audio.effect(event.type as "step" | "door" | "noise");
             if (event.type === "item") this.audio.effect("coin");
             if (event.type === "breath") this.audio.effect("breath");
@@ -718,14 +720,14 @@ export class EscapeGame {
       this.renderer?.draw(this.world, dt);
       const d = this.world.data;
       for (const event of this.world.drainEvents()) {
-        if (event.type === "laugh" && d.phase === "playing") this.audio.haunt();
+        if (event.type === "laugh" && d.phase === "playing" && !this.world.inSafeRoom) this.audio.haunt();
         if (["step", "door", "noise"].includes(event.type)) this.audio.effect(event.type as "step" | "door" | "noise");
         if (event.type === "item") this.audio.effect("coin");
         if (event.type === "breath") this.audio.effect("breath");
         if (event.type === "note" && event.id) this.openNote(event.id);
         if (["item", "door", "message"].includes(event.type)) this.save();
       }
-      if (d.hunter.state === "chase" && d.elapsed - this.heartbeatAt > .72) { this.heartbeatAt = d.elapsed; this.audio.effect("heartbeat"); }
+      if (this.world.isPlayerChased && d.elapsed - this.heartbeatAt > .72) { this.heartbeatAt = d.elapsed; this.audio.effect("heartbeat"); }
       if (d.elapsed - this.saveAt > 4) { this.saveAt = d.elapsed; this.save(); }
       if (d.phase !== this.phase) { this.phase = d.phase; if (d.phase === "won") this.recordWin(); this.result(d.phase === "caught" || d.phase === "lost"); }
       if (now - this.hudAt > 100) { this.hudAt = now; this.updateHud(); }
@@ -739,7 +741,8 @@ export class EscapeGame {
   private updateHud() {
     this.updateMouseHint();
     const d = this.world.data;
-    const interfered = d.interference.stage === "corrupt";
+    const safeRoom = this.world.inSafeRoom;
+    const interfered = !safeRoom && d.interference.stage === "corrupt";
     this.abilityHud.update({ ...d.abilities, floor: floorAt(d.player), subjectSlot: this.coopMode && this.coopSnapshot?.abilityTargetPlayerId !== this.coopSnapshot?.viewPlayerId ? this.coopSnapshot?.room.players.find(player => player.id === this.coopSnapshot?.abilityTargetPlayerId)?.slot : undefined }, this.started && !this.cinematic && d.phase === "playing" && floorAt(d.player) === -1, this.settings.reducedMotion);
     const room = this.world.room;
     if (room !== this.lastRoom) { this.lastRoom = room; this.roomCueUntil = d.elapsed + 1.6; }
@@ -772,7 +775,7 @@ export class EscapeGame {
     }
     if (this.world.message !== this.lastNotice) { this.lastNotice = this.world.message; this.noticeUntil = performance.now() + 5000; this.$("#escape-notice").textContent = this.world.message; }
     this.$("#escape-notice").hidden = performance.now() > this.noticeUntil;
-    const danger = d.hidden ? "已藏匿" : this.world.isPlayerChased ? "被发现了" : Math.hypot(d.hunter.x - d.player.x, d.hunter.z - d.player.z) < 4 ? "脚步正在靠近" : "";
+    const danger = safeRoom ? "" : d.hidden ? "已藏匿" : this.world.isPlayerChased ? "被发现了" : Math.hypot(d.hunter.x - d.player.x, d.hunter.z - d.player.z) < 4 ? "脚步正在靠近" : "";
     this.$("#escape-danger").textContent = danger;
     this.$("#escape-danger").hidden = !danger;
     this.$(".escape-shell").classList.toggle("being-chased", this.world.isPlayerChased);
@@ -788,12 +791,12 @@ export class EscapeGame {
     this.$("#escape-battery-value").textContent = String(Math.round(d.player.battery));
     const hunt = d.hunt;
     const effort = hunt?.effort ?? 0;
-    const perception = displayPerception(this.world.perception, d.interference);
+    const perception = safeRoom ? this.world.perception : displayPerception(this.world.perception, d.interference);
     const exposure = perception.total;
     this.$<HTMLMeterElement>("#escape-exposure").value = exposure;
     this.$("#escape-exposure-value").textContent = Number(exposure.toFixed(1)).toString();
-    this.$("#escape-exposure-hint").textContent = this.world.hunterDecision;
-    const huntState = d.hidden ? "藏匿" : hunt?.freeze ? "冻结" : d.hunter.state === "chase" ? this.world.isPlayerChased ? "追击" : "追击队友" : hunt?.alert && hunt.alert > 0 ? `警觉 · 感知×${this.world.perceptionMultiplier}` : d.hunter.state !== "patrol" ? this.world.hunterDecision : "平静";
+    this.$("#escape-exposure-hint").textContent = safeRoom ? "安心休息" : this.world.hunterDecision;
+    const huntState = safeRoom ? "二楼安全区" : d.hidden ? "藏匿" : hunt?.freeze ? "冻结" : d.hunter.state === "chase" ? this.world.isPlayerChased ? "追击" : "追击队友" : hunt?.alert && hunt.alert > 0 ? `警觉 · 感知×${this.world.perceptionMultiplier}` : d.hunter.state !== "patrol" ? this.world.hunterDecision : "平静";
     this.$("#escape-hunt-state").textContent = interfered ? "被干扰" : huntState;
     this.$<HTMLMeterElement>("#escape-effort").value = effort; this.$("#escape-effort-value").textContent = String(Math.round(effort));
     for (const [id, source] of [["noise", perception.contributions.noise], ["glare", perception.contributions.glare], ["sight", perception.contributions.sight]] as const) {
@@ -813,7 +816,7 @@ export class EscapeGame {
     this.$("#escape-movement").textContent = `${modeNames[this.world.movementMode]}${matchMedia("(pointer:fine)").matches ? "　Shift 奔跑 · C 蹲行" : ""}`;
     this.$("#escape-stick").dataset.mode = modeNames[this.world.movementMode];
     this.$("#escape-effort-label").textContent = hunt?.panting ? "喘息" : "疲劳";
-    this.$(".escape-hunt").classList.toggle("critical", d.hunter.state === "chase" || exposure === 100);
+    this.$(".escape-hunt").classList.toggle("critical", !safeRoom && (this.world.isPlayerChased || exposure === 100));
     this.$(".escape-meters").classList.toggle("panting", !!hunt?.panting);
     this.$(".escape-hunt").classList.toggle("alert", (hunt?.alert ?? 0) > 0);
     const freeze = hunt?.freeze ?? 0, reveal = hunt?.reveal ?? 0;
@@ -824,8 +827,8 @@ export class EscapeGame {
     const otherFloor=floorAt(d.player)!==floorAt(d.hunter);
     direction.hidden = reveal <= 0 || !otherFloor&&Math.abs(wrappedBearing) < 1.35;
     direction.classList.toggle("left", wrappedBearing < 0);
-    direction.textContent = otherFloor?(floorAt(d.hunter)===-1?'↓ 奶蛙·下层':'↑ 奶蛙·上层'):wrappedBearing < 0 ? "‹ 奶蛙" : "奶蛙 ›";
-    direction.setAttribute("aria-label", otherFloor?(floorAt(d.hunter)===-1?'奶蛙在下层':'奶蛙在上层'):wrappedBearing < 0 ? "奶蛙在左侧" : "奶蛙在右侧");
+    direction.textContent = otherFloor?(floorAt(d.hunter)<floorAt(d.player)?'↓ 奶蛙·下层':'↑ 奶蛙·上层'):wrappedBearing < 0 ? "‹ 奶蛙" : "奶蛙 ›";
+    direction.setAttribute("aria-label", otherFloor?(floorAt(d.hunter)<floorAt(d.player)?'奶蛙在下层':'奶蛙在上层'):wrappedBearing < 0 ? "奶蛙在左侧" : "奶蛙在右侧");
     const freezeButton = this.$<HTMLButtonElement>("#escape-freeze"), revealButton = this.$<HTMLButtonElement>("#escape-reveal"), wardButton = this.$<HTMLButtonElement>("#escape-ward");
     freezeButton.disabled = this.world.crystalCharges("freeze") <= 0 || freeze > 0;
     revealButton.disabled = this.world.crystalCharges("reveal") <= 0 || reveal > 0;

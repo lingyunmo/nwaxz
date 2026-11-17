@@ -1,4 +1,7 @@
 import type { CrystalKind, Prop, Vec } from "./world.ts";
+import { upstairsAt, upstairsYAt } from "./upstairs-map.ts";
+
+export type Floor = 0 | -1 | 1;
 
 export const BASEMENT_START = 28;
 export const MAP_HEIGHT = 54;
@@ -53,11 +56,13 @@ export const BASEMENT_CRYSTALS: readonly (Vec & { id: string; kind: CrystalKind 
 
 export const BASEMENT_PATROL_SPAWN: Vec = { x: 12.5, z: 40.5 };
 
-export function floorAt(point: Vec): 0 | -1 {
+export function floorAt(point: Vec): Floor {
+  if (upstairsAt(point)) return 1;
   return point.z >= 24 ? -1 : 0;
 }
 
 export function floorYAt(point: Vec): number {
+  if (upstairsAt(point)) return upstairsYAt(point);
   if (point.z <= 24) return 0;
   if (point.z >= BASEMENT_START) return -4.8;
   return -(point.z - 24) * 1.2;

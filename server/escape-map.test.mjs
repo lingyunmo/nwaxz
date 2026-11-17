@@ -28,7 +28,7 @@ test("whole map samples the 25x25 grid and shows features only on explored tiles
   world.data.explored = [indexOf(11, 7), indexOf(2, 2)];
   const tiles = visibleTiles(world);
 
-  assert.equal(tiles.length, SIZE * SIZE);
+  assert.equal(tiles.length, 25 * 25);
   assert.equal(tileAt(tiles, 3, 5).reveal, "explored", "the player's current cell is visible");
   assert.equal(tileAt(tiles, 11, 7).door?.id, "study");
   assert.equal(tileAt(tiles, 11, 7).door?.locked, true);

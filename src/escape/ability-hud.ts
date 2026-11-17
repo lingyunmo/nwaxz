@@ -1,7 +1,7 @@
 export type AbilityHUDView = {
   subjectSlot?: number;
   enabled: boolean;
-  floor: 0 | -1;
+  floor: 0 | -1 | 1;
   stage: 'rest' | 'cooldown' | 'attempt' | 'warning';
   selected?: 'sense' | 'teleport';
   rest: number;

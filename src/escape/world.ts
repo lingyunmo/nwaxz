@@ -3,6 +3,7 @@ import { BASEMENT_RECTANGLES, BASEMENT_ROOMS, BASEMENT_PROPS, BASEMENT_CRYSTALS,
 import { advanceAbilities, createAbilities, isAbilityState, type AbilityKind, type AbilityState } from "./abilities.ts";
 import { advanceInterference, createInterference, isInterferenceState, type InterferenceState } from "./interference.ts";
 import { isHunterPerformance, type HunterPerformance } from "./hunter-performance.ts";
+import { MAP_WIDTH, UPSTAIRS_ENTRY, UPSTAIRS_RECTANGLES, UPSTAIRS_ROOMS, UPSTAIRS_FURNITURE, upstairsAt, upstairsStairsAt } from "./upstairs-map.ts";
 export type Vec = { x: number; z: number };
 export type Item = "brass" | "cellar" | "fuse" | "cutters" | "handwheel" | "relay";
 export type EscapeInput = { forward?: number; strafe?: number; turn?: number; look?: number; sprint?: boolean };
@@ -20,7 +21,7 @@ export const CRYSTALS: readonly (Vec & { id: string; kind: CrystalKind })[] = [
 ];
 export const TORCH_CONE = .94;
 export const TORCH_RANGE = 22;
-export const SIZE = 25;
+export const SIZE = MAP_WIDTH;
 export const HEIGHT = MAP_HEIGHT;
 const grid = Array.from({ length: HEIGHT }, () => Array<number>(SIZE).fill(1));
 const carve = (x: number, z: number, w: number, h: number) => {
@@ -32,6 +33,7 @@ carve(1, 12, 6, 6); carve(9, 12, 6, 6); carve(17, 12, 6, 11);
 carve(1, 19, 6, 5); carve(9, 19, 6, 5);
 for (const [x, z] of [[4, 7], [11, 7], [19, 7], [4, 11], [11, 11], [19, 11], [4, 18], [11, 18]]) grid[z][x] = 0;
 for (const r of BASEMENT_RECTANGLES) carve(r.x, r.z, r.w, r.h);
+for (const r of UPSTAIRS_RECTANGLES) carve(r.x, r.z, r.w, r.h);
 export const MAP = grid;
 export const DOORS = [
   { id: "bedroom", x: 4, z: 7, name: "寝室门" },
@@ -77,9 +79,12 @@ export const ROOMS = [
   { name: "地下检修室", x: 17, z: 12, w: 6, h: 11 },
   { name: "旧更衣室", x: 1, z: 19, w: 6, h: 5 }, { name: "锅炉房", x: 9, z: 19, w: 6, h: 5 },
   ...BASEMENT_ROOMS,
+  ...UPSTAIRS_ROOMS,
 ];
 const normalRoomAt = (point: Vec) => ROOMS.find(r => point.x >= r.x && point.x < r.x + r.w && point.z >= r.z && point.z < r.z + r.h)?.name;
 export function roomAt(point: Vec) {
+  if (upstairsStairsAt(point)) return "通往二楼的楼梯";
+  if (upstairsAt(point)) return `二楼 · ${normalRoomAt(point) ?? "休息平台"}`;
   if (stairsAt(point)) return "通往负一楼的楼梯";
   if (floorAt(point) === -1) return `负一楼 · ${normalRoomAt(point) ?? "地下联络廊"}`;
   const door = DOORS.find(d => point.x >= d.x && point.x < d.x + 1 && point.z >= d.z && point.z < d.z + 1);
@@ -103,6 +108,7 @@ const inExpansionRoom = (point: unknown): point is Vec => {
 type HunterState = "patrol" | "investigate" | "chase" | "search";
 export type Phase = "playing" | "caught" | "lost" | "won";
 export type EscapeSnapshot = {
+  mapWidth?: number;
   version: 2; player: Vec & { angle: number; pitch?: number; stamina: number; battery: number; light: boolean; crouched: boolean; sprinting?: boolean; winded?: boolean };
   hunter: Vec & { angle: number; state: HunterState; performance?: HunterPerformance }; elapsed: number; captures: number;
   phase: Phase; inventory: Item[]; searched: string[]; opened: string[]; unlocked: string[];
@@ -122,6 +128,7 @@ const initialOpen = ["bedroom", "infirmary", "laundry", "workshop"];
 const patrol: Vec[] = [{ x: 12.5, z: 9.5 }, { x: 20.5, z: 9.5 }, { x: 19.5, z: 3.5 }, { x: 12.5, z: 9.5 }, { x: 4.5, z: 9.5 }, { x: 4.5, z: 14.5 }, { x: 4.5, z: 21.5 }, { x: 11.5, z: 21.5 }];
 export class EscapeWorld {
   data: EscapeSnapshot = {
+    mapWidth: SIZE,
     version: 2, player: { x: 3.5, z: 5.5, angle: -Math.PI / 2, pitch: 0, stamina: 100, battery: 100, light: true, crouched: false, sprinting: false, winded: false },
     hunter: { x: 12.5, z: 9.5, angle: 0, state: "patrol" }, elapsed: 0, captures: 0, phase: "playing",
     inventory: [], searched: [], opened: [...initialOpen], unlocked: [...initialOpen], notes: [], power: false, drained: false, stones: 2, expansion: { enabled: true, valves: [] },
@@ -173,6 +180,7 @@ export class EscapeWorld {
   pending?: { id: string; remaining: number };
   message = "浴场里只剩脚步的回声。";
   get room() { return roomAt(this.data.player); }
+  get inSafeRoom() { return upstairsAt(this.data.player); }
   get movementMode(): "walk" | "crouch" | "sprint" | "recover" | "hidden" {
     const d = this.data;
     return d.hidden ? "hidden" : d.player.crouched ? "crouch" : d.player.sprinting ? d.player.winded ? "recover" : "sprint" : "walk";
@@ -189,10 +197,11 @@ export class EscapeWorld {
   }
   get perceptionMultiplier() { return (this.data.hunt?.alert ?? 0) > 0 ? ALERT_MULTIPLIER : 1; }
   private get chaseLockApplies() {
-    return this.data.phase === "playing" && this.data.hunter.state === "chase"
+    return !this.inSafeRoom && this.data.phase === "playing" && this.data.hunter.state === "chase"
       && (this.coopPlayerId === undefined || this.coopTargetId === this.coopPlayerId);
   }
   get perception() {
+    if (this.inSafeRoom) return combinePerception({ noise: 0, glare: 0, sight: 0 });
     const hunt = this.data.hunt!;
     return combinePerception({ noise: hunt.noise ?? 0, glare: hunt.glare, sight: hunt.sight ?? 0 }, this.chaseLockApplies);
   }
@@ -229,7 +238,7 @@ export class EscapeWorld {
     const breathing = !!d.hunt?.panting;
     const sources = [...(motion ? [motion] : []), ...(breathing ? [HEARING.breath] : [])];
     const range = Math.max(0, ...sources.map(s => s.range * attenuation));
-    const rate = d.hunt!.freeze > 0 ? 0 : Math.max(0, ...sources.map(s => s.rate * Math.max(0, 1 - distance / (s.range * attenuation)) ** 2)) * this.perceptionMultiplier;
+    const rate = this.inSafeRoom || d.hunt!.freeze > 0 ? 0 : Math.max(0, ...sources.map(s => s.rate * Math.max(0, 1 - distance / (s.range * attenuation)) ** 2)) * this.perceptionMultiplier;
     return { action: this.lastMovement, distance, range, rate, audible: rate > 0, breathing, occluded };
   }
   /** Current, unforced sensory evidence for the room coordinator. */
@@ -251,6 +260,7 @@ export class EscapeWorld {
   }
   get exposureHint() {
     const d = this.data, h = d.hunt!;
+    if (this.inSafeRoom) return "二楼很安全，奶蛙和杂讯都进不来。歇一会儿吧。";
     if (h.freeze > 0) return "奶蛙已定身，趁现在离开。";
     if (d.hunter.state === "chase") return "转弯甩开视线，再找柜子躲藏。";
     if (d.hidden) return h.panting ? "屏住呼吸，等喘息平复。" : "躲好了，等它走远。";
@@ -285,6 +295,7 @@ export class EscapeWorld {
   say(text: string) { this.message = text; this.events.push({ type: "message", text }); }
   drainEvents() { return this.events.splice(0); }
   wall(x: number, z: number, hunter = false): number {
+    if (hunter && x >= 23) return 1;
     const cx = Math.floor(x), cz = Math.floor(z);
     if (MAP[cz]?.[cx] !== 0) return 1;
     const door = DOORS.find(d => d.x === cx && d.z === cz);
@@ -304,7 +315,7 @@ export class EscapeWorld {
   }
   seesPlayer() {
     const d = this.data, p = d.player, h = d.hunter;
-    if (d.hidden || d.elapsed < 4) return false;
+    if (this.inSafeRoom || d.hidden || d.elapsed < 4) return false;
     const range = h.state === "chase" ? 13 : p.light ? 9 : p.crouched ? 3.8 : 6;
     return dist(p, h) < range && Math.abs(angleDelta(Math.atan2(p.z - h.z, p.x - h.x), h.angle)) < 1.05 && this.clearSight(h, p);
   }
@@ -326,6 +337,7 @@ export class EscapeWorld {
     });
   }
   private illuminatesHunter() {
+    if (this.inSafeRoom) return false;
     const { player: p, hunter: h, hidden } = this.data;
     if (!p.light || p.battery <= 0 || hidden) return false;
     const eye = p.crouched ? 1.02 : 1.65, torso = 1.1;
@@ -350,6 +362,7 @@ export class EscapeWorld {
       if (hunt.breathIn <= 0) { hunt.breathIn = 2.5; this.events.push({ type: "breath" }); }
     }
     if (!personalOnly) { hunt.freeze = Math.max(0, hunt.freeze - dt); hunt.reveal = Math.max(0, hunt.reveal - dt); }
+    if (this.inSafeRoom) { this.clearSafeRoomExposure(); return; }
     // Freeze suspends perception as well as pursuit; held scores retain their explanation.
     if (hunt.freeze > 0) return;
     hunt.alert = Math.max(0, (hunt.alert ?? 0) - dt);
@@ -368,6 +381,7 @@ export class EscapeWorld {
     this.syncExposure({ ...(hearing.audible ? { noise: d.player } : {}), ...(vision.rate > 0 ? { sight: d.player } : {}), ...(illuminated ? { glare: d.player } : {}) });
   }
   private syncExposure(sensed: Partial<Record<Sense, Vec>> = {}) {
+    if (this.inSafeRoom) { this.clearSafeRoomExposure(); return; }
     const d = this.data, hunt = d.hunt!;
     hunt.traces ??= {};
     for (const key of SENSES) if (sensed[key]) hunt.traces[key] = { x: sensed[key]!.x, z: sensed[key]!.z };
@@ -405,12 +419,14 @@ export class EscapeWorld {
   }
   /** Model footprints in map units, shared by player and pursuer collision. */
   private furniture(x: number, z: number, radius = 0) {
+    if (UPSTAIRS_FURNITURE.some(o => Math.abs(o.x - x) < o.w / 2 + radius && Math.abs(o.z - z) < o.d / 2 + radius)) return true;
     return PROPS.some(o => {
       const half = o.kind === "wardrobe" ? [.4, .29] : o.kind === "drawer" ? [.34, .25] : o.kind === "power" ? [.2, .13] : undefined;
       return half && Math.abs(o.x - x) < half[0] + radius && Math.abs(o.z - z) < half[1] + radius;
     });
   }
   private reachableTarget(point: Vec): Vec {
+    if (upstairsAt(point)) return { ...UPSTAIRS_ENTRY };
     if (!this.furniture(point.x, point.z, .23)) return { ...point };
     return [[0, 1], [1, 0], [0, -1], [-1, 0]].map(([x, z]) => ({ x: Math.floor(point.x) + .5 + x, z: Math.floor(point.z) + .5 + z }))
       .filter(p => !this.wall(p.x, p.z, true) && !this.furniture(p.x, p.z, .23))
@@ -508,7 +524,7 @@ export class EscapeWorld {
     const frozen = hunt.freeze > 0;
     hunt.freeze = Math.max(0, hunt.freeze - dt); hunt.reveal = Math.max(0, hunt.reveal - dt);
     hunt.ward = Math.max(0, (hunt.ward ?? 0) - dt); this.data.elapsed += dt;
-    const living = candidates.filter(candidate => candidate.living);
+    const living = candidates.filter(candidate => candidate.living && !upstairsAt(candidate.player));
     if (this.coopTargetId && !living.some(candidate => candidate.id === this.coopTargetId)) this.coopTargetId = undefined;
     const current = living.find(candidate => candidate.id === this.coopTargetId);
     const hasCue = (candidate: typeof living[number]) => Boolean(candidate.currentCues && Object.keys(candidate.currentCues).length);
@@ -625,7 +641,7 @@ export class EscapeWorld {
     const previousInterference = d.interference.stage;
     const ward = d.hunt!.ward ?? 0;
     const protectedTime = Math.min(dt, ward);
-    const interferenceEnv = { active: true, floor: floorAt(p), suspended: d.hunt!.freeze > 0, random: () => this.random() };
+    const interferenceEnv = { active: !this.inSafeRoom, floor: floorAt(p) === -1 ? -1 as const : 0 as const, suspended: d.hunt!.freeze > 0, random: () => this.random() };
     // Process the protected segment before expiring the ward. A cast on its last
     // simulation instant is blocked and spent, never deferred until expiration.
     if (protectedTime > 0) d.interference = advanceInterference(d.interference, protectedTime, { ...interferenceEnv, immune: true });
@@ -724,7 +740,7 @@ export class EscapeWorld {
     this.hunterStep += step;
     if (this.hunterStep > .8) {
       this.hunterStep = 0;
-      if (dist(h, d.player) < 7) this.events.push({ type: "step" });
+      if (!this.inSafeRoom && dist(h, d.player) < 7) this.events.push({ type: "step" });
     }
   }
   /** A discrete isotropic Gaussian, conditioned on safe, connected B1 cells. */
@@ -766,6 +782,7 @@ export class EscapeWorld {
     this.events.push({ type: "laugh" }); this.say("奶蛙瞬移了。留意四周的脚步。"); return true;
   }
   private investigateSound(at: Vec) {
+    if (upstairsAt(at)) return;
     const d = this.data;
     if (d.hunter.state === "chase" || d.hunt!.freeze > 0) return;
     if (this.coopPlayerId !== undefined) { this.coopInvestigation = { x: at.x, z: at.z }; return; }
@@ -773,6 +790,7 @@ export class EscapeWorld {
     d.hunter.state = "investigate"; this.target = this.reachableTarget(at); this.wait = 4; this.pathTimer = 0;
   }
   noise(at: Vec, range: number, score = 0) {
+    if (this.inSafeRoom || upstairsAt(at)) return;
     const d = this.data, h = d.hunter;
     const effectiveRange = range * (score === 0 || this.lineOfSight(h, at) ? 1 : .7);
     const distance = dist(h, at);
@@ -921,7 +939,7 @@ export class EscapeWorld {
   }
   toggleLight() { if (this.data.player.battery > 0) this.data.player.light = !this.data.player.light; else this.say("手电已经没电了。"); }
   capture() {
-    if (this.data.phase !== "playing") return;
+    if (this.data.phase !== "playing" || this.inSafeRoom) return;
     this.data.captures++; this.data.phase = this.data.captures >= 3 ? "lost" : "caught";
     this.clearHuntAlerts();
     this.pending = undefined; this.events.push({ type: "caught" });
@@ -953,6 +971,12 @@ export class EscapeWorld {
     delete hunt.focus;
     this.lastMovement = "still";
   }
+  private clearSafeRoomExposure() {
+    const hunt = this.data.hunt!;
+    Object.assign(hunt, { noise: 0, sight: 0, glare: 0, exposure: 0, alert: 0, lightArmed: true, traces: {}, listenIn: 0 });
+    delete hunt.focus;
+    this.coopInvestigation = undefined;
+  }
   snapshot(): EscapeSnapshot {
     return JSON.parse(JSON.stringify({ ...this.data, pursuit: { target: this.target, seenHide: this.seenHide, unseen: this.unseen, wait: this.wait, patrolIndex: this.patrolIndex } }));
   }
@@ -961,13 +985,15 @@ export class EscapeWorld {
     const d = raw as EscapeSnapshot;
     const number = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
     const ids = (a: unknown, allowed: string[]) => Array.isArray(a) && new Set(a).size === a.length && a.every(id => typeof id === "string" && allowed.includes(id));
-    if (Object.keys(d).some(k => !["version", "player", "hunter", "elapsed", "captures", "phase", "inventory", "searched", "opened", "unlocked", "notes", "hidden", "power", "drained", "stones", "pursuit", "explored", "expansion", "hunt", "basement", "abilities", "interference"].includes(k))
+    const savedWidth = d.mapWidth ?? 25;
+    if (Object.keys(d).some(k => !["version", "mapWidth", "player", "hunter", "elapsed", "captures", "phase", "inventory", "searched", "opened", "unlocked", "notes", "hidden", "power", "drained", "stones", "pursuit", "explored", "expansion", "hunt", "basement", "abilities", "interference"].includes(k))
+      || savedWidth !== 25 && savedWidth !== SIZE
       || !d.basement || typeof d.basement !== "object" || Array.isArray(d.basement)
       || Object.keys(d.basement).length !== 2 || Object.keys(d.basement).some(k => !["power", "sluice"].includes(k))
       || typeof d.basement.power !== "boolean" || typeof d.basement.sluice !== "boolean" || !isAbilityState(d.abilities) || !isInterferenceState(d.interference)
       || !d.expansion || !d.hunt || !Array.isArray(d.explored)
       || !number(d.player?.pitch, -1.3, 1.3) || typeof d.player?.sprinting !== "boolean" || typeof d.player?.winded !== "boolean"
-      || d.explored !== undefined && (!Array.isArray(d.explored) || d.explored.length > SIZE * HEIGHT || new Set(d.explored).size !== d.explored.length || !d.explored.every(v => Number.isInteger(v) && v >= 0 && v < SIZE * HEIGHT))
+      || d.explored !== undefined && (!Array.isArray(d.explored) || d.explored.length > savedWidth * HEIGHT || new Set(d.explored).size !== d.explored.length || !d.explored.every(v => Number.isInteger(v) && v >= 0 && v < savedWidth * HEIGHT))
       || d.version !== 2 || !d.player || !d.hunter || !number(d.elapsed, 0, 86400) || !Number.isInteger(d.captures) || !number(d.captures, 0, 3)
       || d.pursuit !== undefined && (!d.pursuit || typeof d.pursuit !== "object" || Array.isArray(d.pursuit)
         || !d.pursuit.target || typeof d.pursuit.target !== "object" || Array.isArray(d.pursuit.target))
@@ -989,7 +1015,7 @@ export class EscapeWorld {
         || d.hunt.alert !== undefined && !number(d.hunt.alert, 0, 6)
         || d.hunt.traces !== undefined && (!d.hunt.traces || typeof d.hunt.traces !== "object" || Array.isArray(d.hunt.traces)
           || Object.keys(d.hunt.traces).some(k => !SENSES.includes(k as Sense))
-          || Object.values(d.hunt.traces).some(p => !p || typeof p !== "object" || Array.isArray(p) || Object.keys(p).some(k => !["x", "z"].includes(k)) || !number(p.x, .2, SIZE - .2) || !number(p.z, .2, HEIGHT - .2)))
+          || Object.values(d.hunt.traces).some(p => !p || typeof p !== "object" || Array.isArray(p) || Object.keys(p).some(k => !["x", "z"].includes(k)) || !number(p.x, .2, savedWidth - .2) || !number(p.z, .2, HEIGHT - .2)))
         || d.hunt.version !== 1 || !number(d.hunt.effort, 0, 100) || typeof d.hunt.panting !== "boolean" || !number(d.hunt.breathIn, 0, 2.5)
         || !number(d.hunt.glare, 0, 100) || typeof d.hunt.lightArmed !== "boolean" || !number(d.hunt.freeze, 0, 10) || !number(d.hunt.reveal, 0, 10)
         || !ids(d.hunt.collected, CRYSTALS.map(c => c.id)) || !Number.isInteger(d.hunt.freezeUsed) || !number(d.hunt.freezeUsed, 0, CRYSTALS.filter(c => c.kind === "freeze").length)
@@ -998,7 +1024,7 @@ export class EscapeWorld {
         || d.hunt.revealUsed > CRYSTALS.filter(c => c.kind === "reveal" && d.hunt!.collected.includes(c.id)).length
         || (d.hunt.wardUsed ?? 0) > CRYSTALS.filter(c => c.kind === "ward" && d.hunt!.collected.includes(c.id)).length
         || !Number.isInteger(d.hunt.rng) || d.hunt.rng < 0 || d.hunt.rng > 0xffffffff
-        || !Array.isArray(d.hunt.recent) || d.hunt.recent.length > 6 || !d.hunt.recent.every(v => Number.isInteger(v) && v >= 0 && v < SIZE * HEIGHT)
+        || !Array.isArray(d.hunt.recent) || d.hunt.recent.length > 6 || !d.hunt.recent.every(v => Number.isInteger(v) && v >= 0 && v < savedWidth * HEIGHT)
         || d.hunt.panting && d.hunt.effort < 35 || !d.hunt.panting && (d.hunt.effort >= 100 || d.hunt.breathIn !== 0)
         || d.hunt.lightArmed && d.hunt.glare >= 100 || !d.hunt.lightArmed && d.hunt.glare < 60
         || d.hunt.freeze > 0 && d.hunt.freezeUsed === 0 || d.hunt.reveal > 0 && d.hunt.revealUsed === 0
@@ -1026,6 +1052,12 @@ export class EscapeWorld {
       || DOORS.some(door => door.key && d.unlocked.includes(door.id) && !d.inventory.includes(door.key))
       || PROPS.some(o => o.loot && d.searched.includes(o.id) && !d.inventory.includes(o.loot))) throw new Error("逃生存档目标状态不正确");
     const world = new EscapeWorld(); world.data = JSON.parse(JSON.stringify(d));
+    if (savedWidth !== SIZE) {
+      const remap = (index: number) => Math.floor(index / savedWidth) * SIZE + index % savedWidth;
+      world.data.explored = world.data.explored?.map(remap);
+      world.data.hunt!.recent = world.data.hunt!.recent.map(remap);
+    }
+    world.data.mapWidth = SIZE;
     if (cooperativeContext) world.setCoopPerceptionContext(cooperativeContext.playerId, cooperativeContext.targetId);
     if (!world.data.hunt) world.data.hunt = { version: 1, effort: 0, panting: false, breathIn: 0, glare: 0, lightArmed: true, freeze: 0, reveal: 0, collected: [], freezeUsed: 0, revealUsed: 0, rng: (Math.random() * 0xffffffff) >>> 0 || 1, recent: [] };
     const hunt = world.data.hunt;
@@ -1034,7 +1066,7 @@ export class EscapeWorld {
     hunt.exposure = world.perception.total;
     if (world.data.player.sprinting === undefined && !d.hidden) world.data.player.crouched = false;
     world.data.player.sprinting ??= false; world.data.player.winded ??= false;
-    for (const p of [d.player, d.hunter]) if (!number(p.x, .2, SIZE - .2) || !number(p.z, .2, HEIGHT - .2) || world.wall(p.x, p.z)) throw new Error("逃生存档位置不正确");
+    for (const p of [d.player, d.hunter]) if (!number(p.x, .2, savedWidth - .2) || !number(p.z, .2, HEIGHT - .2) || world.wall(p.x, p.z, p === d.hunter)) throw new Error("逃生存档位置不正确");
     if (d.hidden && dist(d.player, PROPS.find(o => o.id === d.hidden)!) > 1.9) throw new Error("逃生存档藏匿位置不正确");
     world.data.player.pitch ??= 0;
     if (d.hidden) {
@@ -1043,11 +1075,12 @@ export class EscapeWorld {
     }
     if (d.pursuit) {
       const m = d.pursuit;
-      if (!m.target || !number(m.target.x, .2, SIZE - .2) || !number(m.target.z, .2, HEIGHT - .2) || !number(m.unseen, 0, 86400) || !number(m.wait, -10, 86400)
+      if (!m.target || !number(m.target.x, .2, savedWidth - .2) || !number(m.target.z, .2, HEIGHT - .2) || !number(m.unseen, 0, 86400) || !number(m.wait, -10, 86400)
         || !Number.isInteger(m.patrolIndex) || !number(m.patrolIndex, 0, (d.expansion?.enabled ? patrol.length : 6) - 1) || m.seenHide !== undefined && !PROPS.some(o => o.id === m.seenHide && o.kind === "wardrobe")) throw new Error("逃生存档格式不正确");
       world.target = { ...m.target }; world.seenHide = m.seenHide; world.unseen = m.unseen; world.wait = m.wait; world.patrolIndex = m.patrolIndex;
     }
     world.mapPosition = "";
+    if (world.inSafeRoom) { world.clearSafeRoomExposure(); world.data.interference = createInterference(0); }
     if (!d.explored) world.revealMap();
     return world;
   }

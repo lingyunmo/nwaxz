@@ -1,5 +1,6 @@
 import { CRYSTALS, DOORS, HAZARDS, MAP, PROPS, ROOMS, SIZE, HEIGHT, type CrystalKind, type EscapeWorld, type Prop, type Vec } from "./world.ts";
-import { floorAt, stairsAt } from "./basement-map.ts";
+import { floorAt, stairsAt, type Floor } from "./basement-map.ts";
+import { upstairsStairsAt } from "./upstairs-map.ts";
 
 export type MapReveal = "explored" | "near" | "fog";
 export type MapTerrain = "floor" | "wall" | "outside";
@@ -20,8 +21,9 @@ type ExploredData = EscapeWorld["data"] & { explored?: number[] };
 const EXPANSION_FEATURE_IDS = new Set(["changing-drawer", "changing-hide", "boiler-note", "boiler-hide", "valve-cold", "valve-return", "valve-vent"]);
 
 /** Map grid coordinates to the fixed whole-map view or player-centered 13x13 crop. */
-export function mapWindow(player: Vec, compact = false, floor: 0 | -1 = floorAt(player)): MapWindow {
-  if (!compact) return floor === -1 ? { x: 0, z: 24, columns: SIZE, rows: HEIGHT - 24 } : { x: 0, z: 0, columns: SIZE, rows: SIZE };
+export function mapWindow(player: Vec, compact = false, floor: Floor = floorAt(player)): MapWindow {
+  if (!compact) return floor === 1 ? { x: 22, z: 0, columns: 17, rows: 12 }
+    : floor === -1 ? { x: 0, z: 24, columns: 25, rows: HEIGHT - 24 } : { x: 0, z: 0, columns: 25, rows: 25 };
   const columns = 13;
   return {
     x: Math.floor(player.x) - Math.floor(columns / 2),
@@ -32,7 +34,7 @@ export function mapWindow(player: Vec, compact = false, floor: 0 | -1 = floorAt(
 }
 
 /** Return display-safe map samples; unexplored doors and objects are never included. */
-export function visibleTiles(world: EscapeWorld, compact = false, floor: 0 | -1 = floorAt(world.data.player)): MapTile[] {
+export function visibleTiles(world: EscapeWorld, compact = false, floor: Floor = floorAt(world.data.player)): MapTile[] {
   const d = world.data as ExploredData;
   const p = d.player;
   const window = mapWindow(p, compact, floor);
@@ -45,7 +47,7 @@ export function visibleTiles(world: EscapeWorld, compact = false, floor: 0 | -1 
       const x = window.x + column, z = window.z + row;
       const index = z * SIZE + x;
       const inBounds = x >= 0 && z >= 0 && x < SIZE && z < HEIGHT
-        && (floor === floorAt({ x, z }) || stairsAt(p) && stairsAt({ x, z }));
+        && (floor === floorAt({ x, z }) || stairsAt(p) && stairsAt({ x, z }) || upstairsStairsAt(p) && upstairsStairsAt({ x, z }));
       const seen = inBounds && (explored.has(index) || x === playerX && z === playerZ);
       const nearby = inBounds && Math.abs(x - playerX) <= 2 && Math.abs(z - playerZ) <= 2;
       const reveal: MapReveal = seen ? "explored" : nearby ? "near" : "fog";
@@ -103,7 +105,7 @@ export class EscapeMap {
     this.art = art;
   }
 
-  draw(canvas: HTMLCanvasElement, world: EscapeWorld, compact = false, floor: 0 | -1 = floorAt(world.data.player)): void {
+  draw(canvas: HTMLCanvasElement, world: EscapeWorld, compact = false, floor: Floor = floorAt(world.data.player)): void {
     const context = canvas.getContext("2d");
     if (!context || !canvas.width || !canvas.height) return;
     const ctx = context;
@@ -160,7 +162,7 @@ export class EscapeMap {
   }
 
   private drawRoomLabels(ctx: CanvasRenderingContext2D, world: EscapeWorld, view: MapWindow,
-    left: number, top: number, cell: number, floor: 0 | -1, compact: boolean) {
+    left: number, top: number, cell: number, floor: Floor, compact: boolean) {
     const data = world.data as ExploredData;
     const explored = new Set(Array.isArray(data.explored) ? data.explored : []);
     const playerX = Math.floor(data.player.x), playerZ = Math.floor(data.player.z);

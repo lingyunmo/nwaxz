@@ -13,6 +13,8 @@ import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine.js";
 import { DOORS, HAZARDS, MAP, SIZE, TORCH_CONE, TORCH_RANGE, type EscapeWorld } from "./world.ts";
 import { floorYAt } from "./basement-map.ts";
+import { upstairsWindowAt } from "./upstairs-map.ts";
+import { createUpstairsScene } from "./upstairs-scene.ts";
 
 export const CELL = 1.5, WALL_HEIGHT = 3.35;
 export type PaintedTextures = { wall?: BaseTexture; floor?: BaseTexture; ceiling?: BaseTexture; wood?: BaseTexture };
@@ -51,9 +53,12 @@ export function createEscapeScene(engine: AbstractEngine, textures: PaintedTextu
   const basementFloorMat = colorMaterial(scene, "basement-floor", "#b5b5a3");
   const basementCeilingMat = colorMaterial(scene, "basement-ceiling", "#8b9691");
   const basementSecretMat = colorMaterial(scene, "basement-secret", "#ffffff");
+  const upstairsWallMat = colorMaterial(scene, "upstairs-wall", "#f1dfbf");
+  const upstairsFloorMat = colorMaterial(scene, "upstairs-floor", "#c59b67");
+  const upstairsCeilingMat = colorMaterial(scene, "upstairs-ceiling", "#fff0d2");
   // Room surfaces are authored from inside. Explicit two-sided rasterisation
   // keeps them visible with RH cameras on WebGL1 and WebGL2 alike.
-  for (const mat of [wallMat, floorMat, ceilingMat, basementWallMat, basementFloorMat, basementCeilingMat, basementSecretMat]) mat.backFaceCulling = false;
+  for (const mat of [wallMat, floorMat, ceilingMat, basementWallMat, basementFloorMat, basementCeilingMat, basementSecretMat, upstairsWallMat, upstairsFloorMat, upstairsCeilingMat]) mat.backFaceCulling = false;
   const wood = colorMaterial(scene, "painted-door", "#8c8170"); wood.diffuseTexture = textures.wood ?? null;
   const iron = colorMaterial(scene, "rusty-trim", "#3f3930");
   const glass = colorMaterial(scene, "corridor-glass-shards", "#8fa3a0", true);
@@ -78,18 +83,21 @@ export function createEscapeScene(engine: AbstractEngine, textures: PaintedTextu
   }
   const floors: number[][][] = [], ceilings: number[][][] = [], walls: number[][][] = [];
   const basementFloors: number[][][] = [], basementCeilings: number[][][] = [], basementWalls: number[][][] = [];
+  const upstairsFloors: number[][][] = [], upstairsCeilings: number[][][] = [], upstairsWalls: number[][][] = [];
   // All callers pass map-space Z; floorYAt returns world-space meters.
   const floorY = (z: number) => floorYAt({ x: 0, z });
   for (let z = 0; z < MAP.length; z++) for (let x = 0; x < MAP[z].length; x++) {
     if (MAP[z][x]) continue;
-    const floorQuads = z >= 28 ? basementFloors : floors;
-    const ceilingQuads = z >= 28 ? basementCeilings : ceilings;
-    const wallQuads = z >= 28 ? basementWalls : walls;
+    const upper = x >= 23;
+    const floorQuads = upper ? upstairsFloors : z >= 28 ? basementFloors : floors;
+    const ceilingQuads = upper ? upstairsCeilings : z >= 28 ? basementCeilings : ceilings;
+    const wallQuads = upper ? upstairsWalls : z >= 28 ? basementWalls : walls;
     const x0 = x * CELL, x1 = x0 + CELL, z0 = z * CELL, z1 = z0 + CELL, h = WALL_HEIGHT;
-    const y0 = floorY(z), y1 = floorY(z + 1);
-    floorQuads.push([[x0, y1, z1], [x1, y1, z1], [x1, y0, z0], [x0, y0, z0]]);
-    ceilingQuads.push([[x0, y0 + h, z0], [x1, y0 + h, z0], [x1, y1 + h, z1], [x0, y1 + h, z1]]);
-    if (MAP[z - 1]?.[x]) wallQuads.push([[x0, y0, z0], [x1, y0, z0], [x1, y0 + h, z0], [x0, y0 + h, z0]]);
+    const y0 = floorYAt({ x, z }), y1 = floorYAt({ x, z: z + 1 });
+    const r0 = floorYAt({ x: x + 1, z }), r1 = floorYAt({ x: x + 1, z: z + 1 });
+    floorQuads.push([[x0, y1, z1], [x1, r1, z1], [x1, r0, z0], [x0, y0, z0]]);
+    ceilingQuads.push([[x0, y0 + h, z0], [x1, r0 + h, z0], [x1, r1 + h, z1], [x0, y1 + h, z1]]);
+    if (MAP[z - 1]?.[x]) wallQuads.push([[x0, y0, z0], [x1, r0, z0], [x1, r0 + h, z0], [x0, y0 + h, z0]]);
     if (MAP[z + 1]?.[x]) {
       if (x === 20 && z === 22) {
         const left = x0 + .2, right = x1 - .2, base = y1, top = base + 1.1, end = z1 + 3;
@@ -101,10 +109,15 @@ export function createEscapeScene(engine: AbstractEngine, textures: PaintedTextu
           [[right, y1, z1], [right, base, end], [right, top, end], [right, top, z1]]);
         floorQuads.push([[left, base, end], [right, base, end], [right, y1, z1], [left, y1, z1]]);
         ceilingQuads.push([[left, top, z1], [right, top, z1], [right, top, end], [left, top, end]]);
-      } else wallQuads.push([[x1, y1, z1], [x0, y1, z1], [x0, y1 + h, z1], [x1, y1 + h, z1]]);
+      } else wallQuads.push([[x1, r1, z1], [x0, y1, z1], [x0, y1 + h, z1], [x1, r1 + h, z1]]);
     }
     if (MAP[z]?.[x - 1]) wallQuads.push([[x0, y1, z1], [x0, y0, z0], [x0, y0 + h, z0], [x0, y1 + h, z1]]);
-    if (MAP[z]?.[x + 1]) wallQuads.push([[x1, y0, z0], [x1, y1, z1], [x1, y1 + h, z1], [x1, y0 + h, z0]]);
+    if (MAP[z]?.[x + 1]) {
+      if (upstairsWindowAt(x, z)) {
+        wallQuads.push([[x1, r0, z0], [x1, r1, z1], [x1, r1 + .85, z1], [x1, r0 + .85, z0]],
+          [[x1, r0 + 2.9, z0], [x1, r1 + 2.9, z1], [x1, r1 + h, z1], [x1, r0 + h, z0]]);
+      } else wallQuads.push([[x1, r0, z0], [x1, r1, z1], [x1, r1 + h, z1], [x1, r0 + h, z0]]);
+    }
   }
   surfaces("fixed-floor-uv", floors, floorMat);
   surfaces("fixed-ceiling-uv", ceilings, ceilingMat);
@@ -112,6 +125,10 @@ export function createEscapeScene(engine: AbstractEngine, textures: PaintedTextu
   surfaces("basement-floor-surfaces", basementFloors, basementFloorMat);
   surfaces("basement-ceiling-surfaces", basementCeilings, basementCeilingMat);
   surfaces("basement-wall-surfaces", basementWalls, basementWallMat);
+  const upstairsSurfaces = [surfaces("upstairs-floor-surfaces", upstairsFloors, upstairsFloorMat),
+    surfaces("upstairs-ceiling-surfaces", upstairsCeilings, upstairsCeilingMat),
+    surfaces("upstairs-wall-surfaces", upstairsWalls, upstairsWallMat)];
+  const upstairs = createUpstairsScene(scene, upstairsSurfaces);
   function box(name: string, w: number, h: number, depth: number, x: number, y: number, z: number, mat: StandardMaterial, parent?: TransformNode) {
     const m = MeshBuilder.CreateBox(name, { width: w, height: h, depth }, scene);
     m.position.set(x, y, z); m.material = mat; m.parent = parent ?? null; m.receiveShadows = true;
@@ -168,7 +185,7 @@ export function createEscapeScene(engine: AbstractEngine, textures: PaintedTextu
   basementMaintenance.diffuse = new Color3(.65, .08, .035); basementMaintenance.intensity = .07; basementMaintenance.range = 3;
   const sumpGlow = new PointLight("basement-sump-glow", new Vector3(20.5 * CELL, floorY(49.5) + .18, 49.5 * CELL), scene);
   sumpGlow.diffuse = new Color3(.08, .28, .24); sumpGlow.intensity = .055; sumpGlow.range = 2.2;
-  return { scene, camera, torch, ambient, eyeFill, corridorLamp, sewerGlow, basementMaintenance, sumpGlow, doors, meshes, glassMeshes, iron };
+  return { scene, camera, torch, ambient, eyeFill, corridorLamp, sewerGlow, basementMaintenance, sumpGlow, doors, meshes, glassMeshes, iron, upstairs };
 }
 export type EscapeScene = ReturnType<typeof createEscapeScene>;
 

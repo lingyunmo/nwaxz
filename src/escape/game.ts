@@ -378,9 +378,11 @@ export class EscapeGame {
     const status = this.root.querySelector<HTMLElement>("#escape-coop-status"); if (!status) return;
     status.hidden = !this.coopMode || !this.started;
     status.dataset.state = this.coopState === "connected" && (this.coopLatency ?? 0) > 250 ? "unstable" : this.coopState;
+    const latency = this.coopLatency;
+    status.title = latency === undefined ? "" : `延迟 ${latency} ms`;
     const lives = this.coopSnapshot?.room.players.find(player => player.id === this.coop?.session.playerId)?.lives ?? 0;
     // Latency only matters when it is bad; a healthy connection shows just the remaining lives.
-    status.textContent = `${"♥".repeat(Math.max(0, lives))}${this.coopState !== "connected" ? " · 重连中" : (this.coopLatency ?? 0) > 250 ? " · 网络不稳" : ""}`;
+    status.textContent = `${"♥".repeat(Math.max(0, lives))}${this.coopState !== "connected" ? " · 重连中" : (latency ?? 0) > 250 ? ` · ${latency} ms` : ""}`;
   }
   private adoptPrepared() {
     const bundle = takePreparedEscape();

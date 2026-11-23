@@ -7,16 +7,36 @@ import {attachCoopSockets} from '../server/coop-socket.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
 const coopService = new CoopService();
-const server = createApp({ distDir: fileURLToPath(new URL('../dist/', import.meta.url)), coopService }).listen(0, '127.0.0.1');
+const browserHost = process.env.NWAXZ_BROWSER_LAN_HOST ?? '127.0.0.1';
+const server = createApp({ distDir: fileURLToPath(new URL('../dist/', import.meta.url)), coopService, lan: browserHost !== '127.0.0.1' }).listen(0, browserHost);
 await new Promise(resolve => server.once('listening', resolve));
 attachCoopSockets(server,coopService);
-const base = `http://127.0.0.1:${server.address().port}`;
+const base = `http://${browserHost}:${server.address().port}`;
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH, headless: true, args: ['--disable-gpu', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-background-networking'] });
 const instrumentation = `
   window.__coopSnapshots = []; window.__coopInputs = []; window.__coopSessions = [];
   const NativeSocket=window.WebSocket;
   window.WebSocket=class extends NativeSocket {
-    constructor(...args){super(...args);this.addEventListener('message',event=>{try{const p=JSON.parse(event.data);if(p.type==='snapshot'){window.__coopSnapshots.push(p.data);if(window.__coopSnapshots.length>300)window.__coopSnapshots.shift();}}catch{}});}
+    constructor(...args){
+      super(...args);
+      let snapshot;
+      const merge = (prior, delta) => {
+        const next = {...prior, ...delta.set};
+        for (const key of delta.clear) delete next[key];
+        return next;
+      };
+      this.addEventListener('message',event=>{
+        try {
+          const p=JSON.parse(event.data);
+          if (p.type==='snapshot') snapshot=p.data;
+          else if(p.type==='snapshot-delta' && snapshot?.revision===p.data.base)
+            snapshot={...merge(snapshot,p.data.snapshot),world:merge(snapshot.world,p.data.world)};
+          else return;
+          window.__coopSnapshots.push(snapshot);
+          if(window.__coopSnapshots.length>300)window.__coopSnapshots.shift();
+        } catch {}
+      });
+    }
     send(data){try{const p=JSON.parse(data);if(p.type==='input')window.__coopInputs.push(p.data);}catch{}return super.send(data);}
   };
   const realFetch = window.fetch.bind(window);

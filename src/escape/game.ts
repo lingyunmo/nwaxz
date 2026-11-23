@@ -276,8 +276,9 @@ export class EscapeGame {
           else this.coopMovement.reset();
           this.coopMovement.accept(this.world,performance.now(),this.coopLatency??100,snapshot.viewPlayerId);
           const receivedAt = performance.now(), hunter = this.world.data.hunter;
-          this.coopPoses.push("hunter", receivedAt, { x: hunter.x, z: hunter.z, angle: hunter.angle });
-          for (const peer of snapshot.room.players) if (peer.position) this.coopPoses.push(peer.id, receivedAt, { x: peer.position.x, z: peer.position.z, angle: peer.position.angle });
+          this.coopPoses.observeClock(snapshot.serverTime, receivedAt);
+          this.coopPoses.push("hunter", snapshot.serverTime, { x: hunter.x, z: hunter.z, angle: hunter.angle });
+          for (const peer of snapshot.room.players) if (peer.position) this.coopPoses.push(peer.id, snapshot.serverTime, { x: peer.position.x, z: peer.position.z, angle: peer.position.angle });
           this.coopPoses.retain(["hunter", ...snapshot.room.players.map(peer => peer.id)]);
           this.phase = this.world.data.phase; this.coopSyncFaulted = false; this.coopRecovering = false;
         }
@@ -299,6 +300,7 @@ export class EscapeGame {
       else if (this.coopMode) this.renderCoopLobby();
     }));
     this.coopUnsubscribers.push(client.onState((state, message, latency) => {
+      if (state === "reconnecting" && this.coopState !== "reconnecting") this.coopPoses.clear();
       this.coopState = state; this.coopMessage = message; if (latency !== undefined) this.coopLatency = latency; this.renderCoopStatus();
       if(this.coopMode&&this.lobbyVisible)this.renderCoopLobby();
       if(this.started&&state==='connected'&&message!=='已连接')this.world.say(message);

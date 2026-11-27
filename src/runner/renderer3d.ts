@@ -14,18 +14,28 @@ import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTextur
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight.js";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight.js";
 import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem.js";
+import { FresnelParameters } from "@babylonjs/core/Materials/fresnelParameters.js";
+import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline.js";
+import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration.js";
+import { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator.js";
+import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent.js";
+import { Matrix, Quaternion } from "@babylonjs/core/Maths/math.vector.js";
+import "@babylonjs/core/Meshes/thinInstanceMesh.js";
 import "@babylonjs/core/Particles/particleSystemComponent.js";
 import type { Settings } from "../settings.ts";
 import { loadImage, withTimeout } from "../loading.ts";
 import { cleanSheet, createRunnerSprite, sheetTexture } from "./actors2d.ts";
 import { CAPTURE_LAUGH_AT, MINECART_SURPRISE_ART, captureMotion, chaserFrame, dogFall, dogPose } from "./animation.ts";
 import { FROG_EXTRA_ART } from "../escape/extra-art.ts";
+import { frogViewDirection } from "../escape/facing.ts";
+import type { Graphics } from "./progression.ts";
 import { BRIDGE_LENGTH, BRIDGE_WATER_Y, elevationAt, featureOf, GORGE_HALF_WIDTH, GORGE_Y, isDownhillRope, riderHeightAt, rideLateralScale, ROPE_GRAB_DISTANCE, ROPE_LANE_SCALE, ropeHeightAt, ropeReleaseProgress, SEA_Y, sectionFeature, sectionIndexAt, type CourseFeature } from "./course.ts";
 import { flameMesh } from "./fire3d.ts";
+import { RunnerAmbience } from "./ambience3d.ts";
 import { GroundOpenings, MAX_GROUND_OPENINGS, type GroundOpening } from "./groundOpenings.ts";
-import { CORNER_RADIUS, RunnerRoute3D, type RoutePoint } from "./route3d.ts";
+import { BEND_SLACK, CORNER_RADIUS, RunnerRoute3D, type RoutePoint } from "./route3d.ts";
 import { getDogLook } from "./shop.ts";
-import { BRIDGE_FORK_BREAK, coversLane, FORK_BRIDGE_BREAK, FORK_BRIDGE_START, isFallObstacle, isRunObstacle, isRunPower, LANE_WIDTH, obstacleHalfDepth, RUN_POWERS, RUN_SCENES, sceneAt, SHAFT_EDGE, type RunItem, type RunPowerKind, type RunTurn, type RunnerWorld } from "./world.ts";
+import { BRIDGE_FORK_BREAK, coversLane, FORK_BRIDGE_BREAK, FORK_BRIDGE_START, isFallObstacle, isRunObstacle, isRunPickup, isRunPower, RUN_PICKUPS, type RunPickupKind, LANE_WIDTH, obstacleHalfDepth, RUN_POWERS, RUN_SCENES, sceneAt, SHAFT_EDGE, type RunItem, type RunPowerKind, type RunTurn, type RunnerWorld } from "./world.ts";
 
 /**
  * Everything lives in fixed world coordinates along the route; only the camera, the dog
@@ -43,6 +53,25 @@ const DOG_SIZE = 2.1;
 const FROG_SIZE = 2.4;
 // Feet sit near the bottom of each sheet cell (measured from the drawings).
 const DOG_FEET = .39, FROG_FEET = .48;
+/** The haunted frog's directional sheets (front, front-left, left, back-left, back, back-right, right, front-right). */
+type FrogSheet = "grab" | "laugh" | "stalk" | "stalkB" | "search";
+const FROG_ATLAS: Record<FrogSheet, keyof typeof FROG_EXTRA_ART> = { grab: "directionAttack", laugh: "directionLaugh", stalk: "directionStalk", stalkB: "directionStalkB", search: "directionSearch" };
+const FRONT = 0, BACK = 4;
+/** Directional frames are cropped to the frog, so they show a little smaller than the frog in its walk cells. */
+const FROG_CROP_SCALE = .9;
+/** Milk frogs at the roadside: cells of the 4×2 atlas and the 2×2 extras. */
+const MILK = { neutral: 0, blink: 1, look: 2, raise: 3, tap: 4, wait: 5, laugh: 6, celebrate: 7 } as const;
+const MILK_EXTRA = { wave: 0, yawn: 1, surprise: 2, wash: 3 } as const;
+const SPECTATOR_SIZE = 1.7;
+/** Road surfaces that get wet in the rain (no rain falls in the mine or on the snowfield). */
+const WET_ROADS = ["road-aqueduct", "road-temple", "road-bamboo", "road-canyon"] as const;
+/** Scenes with puddles in the rain. */
+const PUDDLE_SCENES = new Set([0, 1, 3, 4]);
+const RIPPLES = 48;
+/** Templates that cast real-time shadows: obstacles, pickups, lamps and arches (dense plants and walls left out: they cost the most). */
+const SHADOW_CASTERS = /^(block|beam|spikes|boulder|cart-block|crate|runaway-cart|magnet|shield|boost|slow|double|spring|bike|balloon|chest|clock|lantern|coin-bag|star|temple-arch|mine-frame|lamp-post|snow-lamp|canyon-lamp|stone-lantern|snowman)/;
+/** Seconds the camera takes to swing round from the menu's front view to behind the running dog. */
+const INTRO_TIME = 1.15;
 const FISSURE_HALF = obstacleHalfDepth("gap", 0);
 const SKY_RADIUS = 330, SKY_HEIGHT = 345;
 const GROUND_SIZE = 900, GROUND_SNAP = 70;
@@ -51,8 +80,12 @@ const GROUND_SIZE = 900, GROUND_SNAP = 70;
 const FORK_STUB_START = (ROAD_HALF * 2 + 2) / 2;
 const FORK_GAP_END = 11.5;
 const FORK_CHASM = { start: .25, end: FORK_GAP_END + .75, half: 4.2 };
-// Straight on at a mine junction, in metres past the corner: the floor opens into a flooded shaft.
-const SHAFT = { start: SHAFT_EDGE - 1.2, end: SHAFT_EDGE + 4.6, half: ROAD_HALF + .3, water: 9 };
+// Corner geometry is built out from the corner point, but the dog's distance past a corner counts
+// along its bend: round a bend it is BEND_SLACK further from the corner point, straight on that much
+// short of it. These put the broken bridge and the shaft where the dog actually reaches them.
+const FORK_DECK = FORK_BRIDGE_START + BEND_SLACK;
+// Straight on at a mine junction, in metres past the corner point: the floor opens into a flooded shaft.
+const SHAFT = { start: SHAFT_EDGE - BEND_SLACK - 1.2, end: SHAFT_EDGE - BEND_SLACK + 4.6, half: ROAD_HALF + .3, water: 9 };
 /** Inner face of the mine walls, from the track centre. */
 const MINE_WALL = ROAD_HALF + 4.4;
 /** Open water either side of each leg of the log bridge. */
@@ -66,16 +99,20 @@ const FLAMES = [
 ] as const;
 const POWER_COLORS: Record<RunPowerKind, [string, string]> = {
   magnet: ["#ff5a4a", "#ffb0a0"], shield: ["#5fe0ff", "#d6f8ff"], boost: ["#ffc73a", "#fff1b0"],
-  slow: ["#ba91ee", "#ecd6ff"], double: ["#e8a344", "#ffe8ab"],
-  bike: ["#44cbb2", "#acf9e8"], fruit: ["#ffb831", "#fff0a3"],
+  slow: ["#ba91ee", "#ecd6ff"], double: ["#e8a344", "#ffe8ab"], spring: ["#6fe05a", "#d8ffc8"],
+  bike: ["#44cbb2", "#acf9e8"], fruit: ["#ffb831", "#fff0a3"], balloon: ["#ff7eb6", "#ffe0f0"],
 };
-const POWER_ART = {
-  magnet: 0, shield: 1, boost: 2,
-  slow: "/assets/runner/pickup-hourglass-v1.webp", double: "/assets/runner/pickup-double-score-v1.webp",
-  bike: "/assets/runner/pickup-bicycle-v1.webp",
-} satisfies Record<Exclude<RunPowerKind, "fruit">, number | string>;
+const PICKUP_COLORS: Record<RunPickupKind, [string, string]> = {
+  chest: ["#ffcf4a", "#fff3c0"], clock: ["#6fe3ff", "#dff8ff"], lantern: ["#ff9a4a", "#ffe1c4"],
+  "coin-bag": ["#ffb43a", "#fff0c8"], star: ["#ffe45a", "#fff9d6"],
+};
 const FRUIT_TREE = "runner-fruit-tree";
 const ORES = ["mine-amethyst", "mine-calcite", "mine-malachite"] as const;
+/** Radius of the rolling boulders and snowballs, for how far they turn as they roll. */
+const ROLLER_RADIUS = 1.03;
+/** Dust kicked up underfoot and by rolling hazards, by scene (half see-through): canal stone, temple earth, mine grit, bamboo loam, red sand, powder snow. */
+const DUST: readonly [string, string][] = [["#d9d3c280", "#a59f8f66"], ["#b8a27f80", "#7f6c4f66"], ["#8a7b6880", "#4d423766"], ["#a7a27a80", "#6e6a4a66"], ["#e0a06a99", "#a7653b77"], ["#ffffffb3", "#d6e4f099"]];
+const SPLASH: [string, string] = ["#eef7fa80", "#9fb9c455"];
 type Grove = { ground: number; spacing: number; trees: readonly { name: string; height: number }[] };
 /** Painted tree cards by scene; the bamboo, canyon and snow scenes grow modelled plants as slot decor instead. */
 const GROVES: readonly Grove[] = [
@@ -129,7 +166,7 @@ const PAINTED_SKIES: Partial<Record<number, { top: string; horizon: string; nigh
 type Theme = { sky: Color3; fog: Color3; nightSky: Color3; nightFog: Color3; ground: StandardMaterial; groundY: number };
 type Decor = { node: TransformNode; every: number; offset: number; vary: boolean };
 type RoadLane = { main: TransformNode; otherSide?: TransformNode };
-type Slot = { n: number; root: TransformNode; group?: TransformNode; lanes: RoadLane[]; trees: Mesh[]; ores: Mesh[]; decor: Decor[]; theme: number; holes: (RunItem | "rope" | "bridge" | undefined)[]; pierCut: boolean; crossingGap: boolean; forkCut: boolean };
+type Slot = { n: number; root: TransformNode; group?: TransformNode; lanes: RoadLane[]; trees: Mesh[]; ores: Mesh[]; decor: Decor[]; theme: number; holes: (RunItem | "rope" | "bridge" | undefined)[]; pierCut: boolean; crossingGap: boolean; forkCut: boolean; puddle?: TransformNode; puddleLane?: number };
 
 const angleTo = (from: number, to: number) => { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
 /** Repeatable pseudo-random numbers for building scenery: the same seed always gives the same plants. */
@@ -161,7 +198,51 @@ export class RunnerRenderer3D {
   private ropeLanyard: AbstractMesh;
   private cartLane = 0;
   private textures = new Map<string, Texture>();
-  private sheets: Partial<Record<"run" | "actions" | "fall" | "cart" | "walk" | "grab" | "laugh", Texture>> = {};
+  private sheets: Partial<Record<"run" | "actions" | "fall" | "cart" | "walk" | FrogSheet | "milkFrog" | "milkFrogExtra", Texture>> = {};
+  /** Roadside milk frogs cheering the dog on (two at most), with what each is up to. */
+  private spectators: { sprite: ReturnType<typeof createRunnerSprite>; atlas?: Texture; extra?: Texture; z: number; side: number; on: boolean; seed: number }[] = [];
+  private nextSpectator = 220;
+  /** The splash ring left where the dog hits water. */
+  private ripple!: Mesh;
+  /** A ring of light that spreads from the dog's feet when it picks up a power or opens a chest. */
+  private pickupRing!: Mesh;
+  private pickupRingAge = 9;
+  /** The menu's showcase round the dog: two glowing outlines behind it, a lit disc and a pulsing ring under it, rising sparks. */
+  private heroGlow: Mesh[] = [];
+  private heroDisc!: Mesh;
+  private heroRing!: Mesh;
+  private heroSparkles!: ParticleSystem;
+  private heroSparkTime = 0;
+  /** Rain: how wet the roads are (0 dry to 1 soaked), eased as the rain starts and stops. */
+  private wetness = 0;
+  private shownWet = -1;
+  private wetBase = new Map<string, { diffuse: Color3; specular: Color3; power: number }>();
+  private skyReflection!: DynamicTexture;
+  private wetFresnel = new FresnelParameters({ bias: .12, power: 1.8, leftColor: Color3.White(), rightColor: Color3.Black() });
+  private puddleFresnel = new FresnelParameters({ bias: .5, power: 1.2, leftColor: Color3.White(), rightColor: new Color3(.6, .6, .6) });
+  private puddlesShown = false;
+  /** Raindrops landing on the road: rings that spread and fade, drawn together in one call. */
+  private ripples!: Mesh;
+  private rippleState: { x: number; y: number; z: number; age: number; life: number }[] = [];
+  private rippleMatrix = new Matrix();
+  private rippleScale = new Vector3();
+  private rippleAt = new Vector3();
+  private rippleTurn = Quaternion.Identity();
+  private rippleColours = new Float32Array(RIPPLES * 4);
+  /** Slowly turning rays of light fanning out behind the dog on the menu. */
+  private heroRays!: Mesh;
+  private seenChests = 0;
+  private rippleAge = 9;
+  /** The dog's sway under a zipline or the balloons: angle and angular speed (a damped pendulum). */
+  /** Real seconds on the clock, for the menu's idle motion (the run's own clock stands still there). */
+  private idleClock = 0;
+  /** How far back the chaser is drawn, eased so it never jumps (menu, start, stumbles). */
+  private frogBack = 9;
+  private frogSide = -1;
+  private frogDirection = BACK;
+  private sway = 0;
+  private swayVelocity = 0;
+  private lastLateral = 0;
   private mats: Record<string, StandardMaterial> = {};
   private themes: Theme[] = [];
   private groundPlane: Mesh;
@@ -170,6 +251,8 @@ export class RunnerRenderer3D {
   private sea: Mesh;
   private shark!: { root: TransformNode; fin: AbstractMesh; shadow: Mesh; wake: Mesh; z: number; side: number; lateral: number; age: number; wait: number; active: boolean };
   private waterImpact = false;
+  /** Counts the dog's splashes into water, for the game to play the sound. */
+  splashes = 0;
   private sky: Mesh;
   private skyMat: StandardMaterial;
   private skies: { day: Texture; night: Texture }[] = [];
@@ -189,13 +272,37 @@ export class RunnerRenderer3D {
   private appleSparkles: ParticleSystem;
   /** Chase mode: the golden apple held over the fleeing frog's head, and the lane it is drifting into. */
   private chaseApple!: TransformNode;
+  /** Balloons over the flying dog, springs under its paws, and the glow of the lantern it carries in the dark. */
+  private balloonBunch!: TransformNode;
+  private springFeet!: TransformNode;
+  private dogLantern!: Mesh;
   private frogLane = 1;
   private fireEmbers: ParticleSystem;
   private fireSmoke: ParticleSystem;
   private fireParticleTime = 0;
+  /** Dust or snow underfoot (landings, slides, running) and behind rolling boulders; sparks under runaway carts; streaks on a near miss. */
+  private dust: ParticleSystem;
+  private rollDust: ParticleSystem;
+  private cartSparks: ParticleSystem;
+  private splash: ParticleSystem;
+  /** Fraction of a dust particle owed while running, so the trail does not depend on the frame rate. */
+  private stepDust = 0;
+  private nearStreaks: ParticleSystem;
+  private dustTime = 0;
+  /** The animals round the road. */
+  private ambience: RunnerAmbience;
+  private placeOnRoute = (distance: number, lateral: number) => this.place(distance, lateral);
+  /** How hard the ground shakes under a boulder or cart rolling close by, 0–1. */
+  private rumble = 0;
+  /** The dog's lean into the bend it is running round, smoothed (radians). */
+  private turnLean = 0;
+  /** The camera's roll, smoothed (radians). */
+  private camBank = 0;
+  /** How far the camera follows the dog up, from a jump's little (0) to a balloon flight's all the way (1), smoothed. */
+  private camRise = 0;
   private coinMats: Record<"silver" | "gold" | "diamond", StandardMaterial>;
   private dogLook = "original";
-  private seen = { silver: 0, gold: 0, diamond: 0, power: 0, shield: 0, stumble: 0, turns: 0, wrong: -1, bumps: 0 };
+  private seen = { silver: 0, gold: 0, diamond: 0, power: 0, shield: 0, stumble: 0, turns: 0, wrong: -1, bumps: 0, landed: -Infinity, slides: 0, doubles: 0, near: 0, revives: 0 };
   private flash = { shield: 0, power: 0 };
   private turnBlend = { x: 0, z: 0 };
   private camYaw = 0;
@@ -211,6 +318,8 @@ export class RunnerRenderer3D {
   private frameAverage = 1 / 60;
   private slowTime = 0;
   private fastTime = 0;
+  /** The last run held a steady 57+ frames a second for 20 seconds: the next one may try a sharper picture. */
+  private spare = false;
 
   constructor(private canvas: HTMLCanvasElement, private settings: Settings) {
     this.engine = new Engine(canvas, true, { stencil: false, powerPreference: "high-performance", preserveDrawingBuffer: false }, false);
@@ -233,9 +342,73 @@ export class RunnerRenderer3D {
     this.skyMat.disableLighting = true; this.skyMat.emissiveColor = Color3.White(); this.skyMat.fogEnabled = false; this.skyMat.backFaceCulling = false; this.skyMat.useAlphaFromDiffuseTexture = true;
     this.sky = MeshBuilder.CreateCylinder("runner-sky-dome", { diameter: SKY_RADIUS * 2, height: SKY_HEIGHT, tessellation: 48, cap: Mesh.NO_CAP, sideOrientation: Mesh.BACKSIDE }, this.scene);
     this.sky.material = this.skyMat; this.sky.isPickable = false; this.sky.infiniteDistance = false;
+    // The sky band first among see-through things, so nothing in front of it is drawn over.
+    this.sky.alphaIndex = -3;
+    this.ambience = new RunnerAmbience(this.scene);
 
     this.dog = createRunnerSprite(this.scene, "runner-milk-dog-2d", DOG_SIZE);
     this.chaserSprite = createRunnerSprite(this.scene, "runner-milk-frog-2d", FROG_SIZE);
+    for (let i = 0; i < 2; i++) {
+      const sprite = createRunnerSprite(this.scene, `runner-spectator-${i}`, SPECTATOR_SIZE); sprite.root.setEnabled(false);
+      this.spectators.push({ sprite, z: 0, side: 1, on: false, seed: i * 3.7 });
+    }
+    // A ring of foam spreading where the dog lands in water.
+    this.ripple = MeshBuilder.CreateGround("runner-ripple", { width: 1, height: 1 }, this.scene);
+    const rippleTexture = new DynamicTexture("runner-ripple-tex", { width: 128, height: 128 }, this.scene, false);
+    const rippleCtx = rippleTexture.getContext() as CanvasRenderingContext2D, ring = rippleCtx.createRadialGradient(64, 64, 30, 64, 64, 62);
+    ring.addColorStop(0, "rgba(255,255,255,0)"); ring.addColorStop(.55, "rgba(235,250,255,.9)"); ring.addColorStop(.75, "rgba(220,245,255,.35)"); ring.addColorStop(1, "rgba(255,255,255,0)");
+    rippleCtx.fillStyle = ring; rippleCtx.fillRect(0, 0, 128, 128); rippleTexture.update(); rippleTexture.hasAlpha = true;
+    const rippleMat = new StandardMaterial("runner-ripple", this.scene);
+    rippleMat.diffuseTexture = rippleTexture; rippleMat.useAlphaFromDiffuseTexture = true; rippleMat.disableLighting = true; rippleMat.emissiveColor = Color3.White();
+    rippleMat.alphaMode = Engine.ALPHA_ADD; rippleMat.backFaceCulling = false; rippleMat.zOffset = -2;
+    this.ripple.material = rippleMat; this.ripple.isPickable = false; this.ripple.setEnabled(false);
+    this.pickupRing = MeshBuilder.CreateGround("runner-pickup-ring", { width: 1, height: 1 }, this.scene);
+    const pickupMat = new StandardMaterial("runner-pickup-ring", this.scene);
+    pickupMat.diffuseTexture = rippleTexture; pickupMat.useAlphaFromDiffuseTexture = true; pickupMat.disableLighting = true; pickupMat.emissiveColor = Color3.White();
+    pickupMat.alphaMode = Engine.ALPHA_ADD; pickupMat.backFaceCulling = false; pickupMat.zOffset = -3;
+    this.pickupRing.material = pickupMat; this.pickupRing.isPickable = false; this.pickupRing.setEnabled(false);
+    // The showcase outline is the dog's own drawing as a flat glowing shape, a little bigger and just behind it.
+    this.heroGlow = [[1.045, .36], [1.1, .2], [1.17, .11], [1.27, .055]].map(([scale, alpha], i) => {
+      const material = new StandardMaterial(`runner-hero-glow-${i}`, this.scene);
+      material.disableLighting = true; material.diffuseColor = Color3.Black(); material.specularColor = Color3.Black();
+      material.emissiveColor = Color3.FromHexString("#ffd36b"); material.alphaMode = Engine.ALPHA_ADD; material.backFaceCulling = false; material.alpha = alpha;
+      const plane = MeshBuilder.CreatePlane(`runner-hero-glow-${i}`, { size: DOG_SIZE }, this.scene);
+      plane.material = material; plane.isPickable = false; plane.billboardMode = Mesh.BILLBOARDMODE_Y; plane.setEnabled(false);
+      plane.metadata = { scale, alpha };
+      return plane;
+    });
+    const raysTexture = new DynamicTexture("runner-hero-rays-tex", { width: 256, height: 256 }, this.scene, false);
+    const raysCtx = raysTexture.getContext() as CanvasRenderingContext2D;
+    const fade = raysCtx.createRadialGradient(128, 128, 10, 128, 128, 128);
+    fade.addColorStop(0, "rgba(255,255,255,.95)"); fade.addColorStop(.45, "rgba(255,255,255,.45)"); fade.addColorStop(1, "rgba(255,255,255,0)");
+    raysCtx.fillStyle = fade;
+    for (let i = 0; i < 14; i++) {
+      const a = i / 14 * Math.PI * 2, w = Math.PI / 14 * .55;
+      raysCtx.beginPath(); raysCtx.moveTo(128, 128);
+      raysCtx.arc(128, 128, 128, a - w, a + w); raysCtx.closePath(); raysCtx.fill();
+    }
+    raysTexture.update(); raysTexture.hasAlpha = true;
+    const raysMat = new StandardMaterial("runner-hero-rays", this.scene);
+    raysMat.diffuseTexture = raysTexture; raysMat.useAlphaFromDiffuseTexture = true; raysMat.disableLighting = true;
+    raysMat.emissiveColor = Color3.FromHexString("#ffd36b"); raysMat.alphaMode = Engine.ALPHA_ADD; raysMat.backFaceCulling = false;
+    this.heroRays = MeshBuilder.CreatePlane("runner-hero-rays", { size: 1 }, this.scene);
+    this.heroRays.material = raysMat; this.heroRays.isPickable = false; this.heroRays.billboardMode = Mesh.BILLBOARDMODE_ALL; this.heroRays.setEnabled(false);
+    this.ripples = MeshBuilder.CreateGround("runner-rain-ripples", { width: 1, height: 1 }, this.scene);
+    const rippleDropMat = new StandardMaterial("runner-rain-ripple", this.scene);
+    rippleDropMat.diffuseTexture = rippleTexture; rippleDropMat.useAlphaFromDiffuseTexture = true; rippleDropMat.disableLighting = true;
+    rippleDropMat.emissiveColor = new Color3(.85, .92, 1); rippleDropMat.alphaMode = Engine.ALPHA_ADD; rippleDropMat.backFaceCulling = false; rippleDropMat.zOffset = -3;
+    this.ripples.material = rippleDropMat; this.ripples.isPickable = false; this.ripples.alwaysSelectAsActiveMesh = true;
+    this.ripples.thinInstanceRegisterAttribute("color", 4);
+    for (let i = 0; i < RIPPLES; i++) { this.ripples.thinInstanceAdd(Matrix.Identity(), false); this.rippleState.push({ x: 0, y: -100, z: 0, age: 1, life: 1 }); }
+    this.ripples.thinInstanceSetAttributeAt("color", 0, [0, 0, 0, 0], true);
+    this.ripples.setEnabled(false);
+    this.heroDisc = MeshBuilder.CreateGround("runner-hero-disc", { width: 1, height: 1 }, this.scene);
+    this.heroDisc.material = this.radialMaterial("hero-disc", "rgba(255,210,110,.6)", true); this.heroDisc.isPickable = false; this.heroDisc.setEnabled(false);
+    this.heroRing = MeshBuilder.CreateGround("runner-hero-ring", { width: 1, height: 1 }, this.scene);
+    const heroRingMat = new StandardMaterial("runner-hero-ring", this.scene);
+    heroRingMat.diffuseTexture = rippleTexture; heroRingMat.useAlphaFromDiffuseTexture = true; heroRingMat.disableLighting = true;
+    heroRingMat.emissiveColor = Color3.FromHexString("#ffd36b"); heroRingMat.alphaMode = Engine.ALPHA_ADD; heroRingMat.backFaceCulling = false; heroRingMat.zOffset = -3;
+    this.heroRing.material = heroRingMat; this.heroRing.isPickable = false; this.heroRing.setEnabled(false);
     this.shadow = MeshBuilder.CreateGround("runner-dog-shadow", { width: 1.8, height: 1.1 }, this.scene);
     this.shadow.material = this.radialMaterial("blob", "rgba(0,0,0,.55)", false);
 
@@ -256,6 +429,11 @@ export class RunnerRenderer3D {
     this.silverSparks = this.particles("silver-sparks", 240, "#ffffff", "#a8cfdf");
     this.diamondSparks = this.particles("diamond-sparks", 240, "#eaffff", "#6bd6ff");
     this.magic = this.particles("power-sparks", 300, "#ffffff", "#ffffff");
+    this.heroSparkles = this.particles("hero-sparkles", 140, "#fff7cf", "#ffc24a");
+    this.heroSparkles.gravity.set(0, .9, 0); this.heroSparkles.minSize = .04; this.heroSparkles.maxSize = .13;
+    this.heroSparkles.minLifeTime = .9; this.heroSparkles.maxLifeTime = 1.9; this.heroSparkles.minEmitPower = .1; this.heroSparkles.maxEmitPower = .45;
+    this.heroSparkles.direction1.set(-.3, .7, -.3); this.heroSparkles.direction2.set(.3, 1.3, .3);
+    this.heroSparkles.minEmitBox.set(-1.1, 0, -.7); this.heroSparkles.maxEmitBox.set(1.1, .35, .7);
     this.appleSparkles = this.particles("apple-sparkles", 260, "#fff2a0", "#c38bff");
     this.appleSparkles.gravity.set(0, .8, 0); this.appleSparkles.minEmitPower = .3; this.appleSparkles.maxEmitPower = 1.2;
     this.appleSparkles.minSize = .06; this.appleSparkles.maxSize = .2; this.appleSparkles.minLifeTime = .4; this.appleSparkles.maxLifeTime = .9;
@@ -267,6 +445,34 @@ export class RunnerRenderer3D {
     this.fireSmoke.color1 = new Color4(.28, .25, .23, .32); this.fireSmoke.color2 = new Color4(.39, .35, .32, .14);
     this.fireSmoke.gravity.set(0, 1.1, 0); this.fireSmoke.minSize = .16; this.fireSmoke.maxSize = .5;
     this.fireSmoke.minLifeTime = .6; this.fireSmoke.maxLifeTime = 1.6; this.fireSmoke.minEmitPower = .15; this.fireSmoke.maxEmitPower = .6;
+    // Soft dust (or snow) puffs: blended, not added, so they read on bright snow as well as on dark rock.
+    // The dog and the rolling boulders each have their own, since a burst moves its system's emitter.
+    const dust = (name: string, capacity: number) => {
+      const ps = this.particles(name, capacity, "#d9d3c2", "#a59f8f");
+      ps.blendMode = ParticleSystem.BLENDMODE_STANDARD; ps.colorDead = new Color4(.6, .6, .6, 0);
+      ps.gravity.set(0, -1.2, 0); ps.minSize = .12; ps.maxSize = .34;
+      ps.minLifeTime = .35; ps.maxLifeTime = .85; ps.minEmitPower = .5; ps.maxEmitPower = 2.2;
+      ps.direction1 = new Vector3(-1.2, .5, -1.2); ps.direction2 = new Vector3(1.2, 1.6, 1.2);
+      ps.minEmitBox = new Vector3(-.35, 0, -.35); ps.maxEmitBox = new Vector3(.35, .1, .35);
+      return ps;
+    };
+    this.dust = dust("ground-dust", 360);
+    this.rollDust = dust("roll-dust", 260); this.rollDust.minSize = .3; this.rollDust.maxSize = .8; this.rollDust.maxLifeTime = 1.1;
+    this.cartSparks = this.particles("cart-sparks", 160, "#fff3b0", "#ff8a2a");
+    this.cartSparks.gravity.set(0, -9, 0); this.cartSparks.minSize = .03; this.cartSparks.maxSize = .08;
+    this.cartSparks.minLifeTime = .15; this.cartSparks.maxLifeTime = .38; this.cartSparks.minEmitPower = 1.6; this.cartSparks.maxEmitPower = 4;
+    // Water thrown up where the dog goes in: a column of drops that falls back.
+    this.splash = this.particles("water-splash", 140, "#f4fcff", "#9ad6e2");
+    this.splash.blendMode = ParticleSystem.BLENDMODE_STANDARD; this.splash.colorDead = new Color4(.85, .96, 1, 0);
+    this.splash.gravity.set(0, -13, 0); this.splash.minSize = .09; this.splash.maxSize = .27;
+    this.splash.minLifeTime = .55; this.splash.maxLifeTime = 1; this.splash.minEmitPower = 2.5; this.splash.maxEmitPower = 3.8;
+    this.splash.direction1 = new Vector3(-.5, 1.5, -.5); this.splash.direction2 = new Vector3(.5, 2, .5);
+    this.splash.minEmitBox = new Vector3(-.3, 0, -.3); this.splash.maxEmitBox = new Vector3(.3, .05, .3);
+    // Near misses leave a few white streaks whipping past the dog.
+    this.nearStreaks = this.particles("near-streaks", 80, "#ffffff", "#bfeaff");
+    this.nearStreaks.billboardMode = ParticleSystem.BILLBOARDMODE_STRETCHED; this.nearStreaks.gravity.set(0, 0, 0);
+    this.nearStreaks.minSize = .05; this.nearStreaks.maxSize = .1; this.nearStreaks.minLifeTime = .18; this.nearStreaks.maxLifeTime = .3;
+    this.nearStreaks.minEmitPower = 9; this.nearStreaks.maxEmitPower = 15;
     this.coinMats = { silver: this.glow("silver-coin", "#d9e5eb", "#293b44"), gold: this.mats.gold, diamond: this.glow("diamond-coin", "#a9f4ff", "#4794cb") };
 
     this.buildTemplates();
@@ -278,6 +484,12 @@ export class RunnerRenderer3D {
     this.cart.setEnabled(false); this.bicycle.setEnabled(false); this.ropeHandle.setEnabled(false);
     this.chaseApple = new TransformNode("runner-chase-apple", this.scene);
     this.instance("fruit", this.chaseApple); this.chaseApple.setEnabled(false);
+    this.balloonBunch = new TransformNode("runner-balloon-bunch", this.scene);
+    this.instance("balloon-bunch", this.balloonBunch); this.balloonBunch.setEnabled(false);
+    this.springFeet = new TransformNode("runner-spring-feet", this.scene);
+    this.instance("spring-feet", this.springFeet); this.springFeet.setEnabled(false);
+    this.dogLantern = MeshBuilder.CreatePlane("runner-dog-lantern", { size: 5.5 }, this.scene);
+    this.dogLantern.material = this.mats["lamp-halo"]; this.dogLantern.billboardMode = Mesh.BILLBOARDMODE_ALL; this.dogLantern.isPickable = false; this.dogLantern.setEnabled(false);
     this.buildShark();
     this.buildSlots();
     this.buildWeather();
@@ -398,6 +610,34 @@ export class RunnerRenderer3D {
     this.mats["shark-shadow"] = m;
     return m;
   }
+  /** A tileable normal map of fine, irregular bumps: three octaves of wrapped value noise. */
+  private detailBump(seed: number) {
+    const size = 256, random = seeded(seed);
+    const octaves = [[8, .55], [16, .3], [48, .15]].map(([cells, weight]) => ({ cells, weight, grid: Array.from({ length: cells * cells }, () => random()) }));
+    const height = new Float32Array(size * size);
+    const smooth = (t: number) => t * t * (3 - 2 * t);
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      let h = 0;
+      for (const { cells, weight, grid } of octaves) {
+        const fx = x / size * cells, fy = y / size * cells, x0 = Math.floor(fx), y0 = Math.floor(fy), tx = smooth(fx - x0), ty = smooth(fy - y0);
+        const at = (gx: number, gy: number) => grid[((gy % cells) * cells) + (gx % cells)];
+        const top = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * tx, bottom = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * tx;
+        h += (top + (bottom - top) * ty) * weight;
+      }
+      height[y * size + x] = h;
+    }
+    const canvas = document.createElement("canvas"); canvas.width = canvas.height = size;
+    const ctx = canvas.getContext("2d")!, image = ctx.createImageData(size, size), strength = 6;
+    const h = (x: number, y: number) => height[((y + size) % size) * size + ((x + size) % size)];
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const dx = (h(x + 1, y) - h(x - 1, y)) * strength, dy = (h(x, y + 1) - h(x, y - 1)) * strength, length = Math.hypot(dx, dy, 1), i = (y * size + x) * 4;
+      image.data[i] = (-dx / length * .5 + .5) * 255; image.data[i + 1] = (-dy / length * .5 + .5) * 255; image.data[i + 2] = (1 / length * .5 + .5) * 255; image.data[i + 3] = 255;
+    }
+    ctx.putImageData(image, 0, 0);
+    const texture = new Texture(canvas.toDataURL("image/png"), this.scene, false, true, Texture.TRILINEAR_SAMPLINGMODE);
+    texture.wrapU = texture.wrapV = Texture.WRAP_ADDRESSMODE; texture.anisotropicFilteringLevel = 8;
+    return texture;
+  }
   private dotTexture() {
     const texture = new DynamicTexture("runner-dot", { width: 32, height: 32 }, this.scene, false);
     const ctx = texture.getContext() as CanvasRenderingContext2D, g = ctx.createRadialGradient(16, 16, 1, 16, 16, 15);
@@ -419,8 +659,10 @@ export class RunnerRenderer3D {
     ps.start();
     return ps;
   }
+  /** Emits `count` particles at `at`; colours are #rrggbb (opaque) or #rrggbbaa. */
   private burst(ps: ParticleSystem, at: Vector3, count: number, colors?: [string, string]) {
-    if (colors) { ps.color1 = Color4.FromHexString(`${colors[0]}ff`); ps.color2 = Color4.FromHexString(`${colors[1]}ff`); }
+    const colour = (hex: string) => Color4.FromHexString(hex.length === 9 ? hex : `${hex}ff`);
+    if (colors) { ps.color1 = colour(colors[0]); ps.color2 = colour(colors[1]); }
     (ps.emitter as Vector3).copyFrom(at);
     ps.manualEmitCount = Math.max(ps.manualEmitCount, 0) + count;
   }
@@ -435,6 +677,32 @@ export class RunnerRenderer3D {
     this.mat("road-bamboo", "#b9c0a2", stone);
     // Lit colours saturate, so warm tints must stay dark enough to survive full sun.
     this.mat("road-canyon", "#b37b50", stone).emissiveColor.set(.06, .03, .01);
+    // The sky as a wet surface sees it: dark overhead, bright along the horizon (tinted per scene by the fresnel colour).
+    this.skyReflection = new DynamicTexture("runner-sky-reflection", { width: 64, height: 128 }, this.scene, false);
+    const paintSky = (texture: DynamicTexture) => {
+      const ctx = texture.getContext() as CanvasRenderingContext2D, fade = ctx.createLinearGradient(0, 0, 0, 128);
+      fade.addColorStop(0, "#7d8a94"); fade.addColorStop(.38, "#d6dfe6"); fade.addColorStop(.5, "#ffffff"); fade.addColorStop(.56, "#8a959b"); fade.addColorStop(1, "#1c2226");
+      ctx.fillStyle = fade; ctx.fillRect(0, 0, 64, 128); texture.update();
+      texture.coordinatesMode = Texture.EQUIRECTANGULAR_MODE;
+    };
+    paintSky(this.skyReflection); this.skyReflection.level = 0;
+    // Puddles mirror the sky at full strength: their own copy, so the road can take less.
+    const puddleSky = new DynamicTexture("runner-puddle-sky", { width: 64, height: 128 }, this.scene, false);
+    paintSky(puddleSky); puddleSky.level = 1.1;
+    const puddle = new StandardMaterial("runner-puddle", this.scene), puddleMask = new DynamicTexture("runner-puddle-mask", { width: 128, height: 128 }, this.scene, false);
+    const maskCtx = puddleMask.getContext() as CanvasRenderingContext2D, randomPuddle = seeded(907);
+    for (let i = 0; i < 7; i++) {
+      const x = 40 + randomPuddle() * 48, y = 40 + randomPuddle() * 48, r = 18 + randomPuddle() * 22;
+      const blob = maskCtx.createRadialGradient(x, y, r * .55, x, y, r);
+      blob.addColorStop(0, "rgba(255,255,255,1)"); blob.addColorStop(1, "rgba(255,255,255,0)");
+      maskCtx.fillStyle = blob; maskCtx.fillRect(0, 0, 128, 128);
+    }
+    puddleMask.update(); puddleMask.hasAlpha = true;
+    puddle.diffuseColor = new Color3(.035, .04, .045); puddle.opacityTexture = puddleMask;
+    puddle.specularColor = new Color3(.95, .95, .95); puddle.specularPower = 220; puddle.useSpecularOverAlpha = false; puddle.useReflectionOverAlpha = false;
+    puddle.reflectionTexture = puddleSky; puddle.reflectionFresnelParameters = this.puddleFresnel;
+    puddle.zOffset = -1; puddle.maxSimultaneousLights = 2;
+    this.mats.puddle = puddle;
     const packed = this.mat("road-snow", "#a4b2bf"); packed.diffuseTexture = this.snowTexture(1.5); packed.emissiveColor.set(.05, .06, .08);
     this.mat("stone", "#d8cfb8", stone);
     this.mat("stone-dark", "#8e8a7c", stone);
@@ -477,6 +745,8 @@ export class RunnerRenderer3D {
     this.mat("pit", "#05080a").specularColor.setAll(0);
     this.mat("foliage-dark", "#4a6538", rock, 2).specularColor.setAll(0);
     this.glow("gold", "#f2c443", "#7a560a").specularColor.set(.9, .8, .4);
+    const pouch = this.mat("pouch", "#b8362c"); pouch.emissiveColor.set(.18, .04, .03); pouch.specularColor.set(.35, .25, .25); pouch.specularPower = 24;
+    const starGold = this.glow("star-gold", "#ffd94a", "#b8860b"); starGold.specularColor.set(1, .95, .6); starGold.specularPower = 48; starGold.backFaceCulling = false;
     this.glow("lamp", "#ffe2a0", "#ffc25a");
     this.glow("warning", "#f2c443", "#3a2a00");
     this.glow("fork-flag", "#d8342a", "#5a0d08").backFaceCulling = false;
@@ -484,6 +754,16 @@ export class RunnerRenderer3D {
     this.signMaterial("shaft-sign", "竖井", "危险 · 小心坠落");
     this.radialMaterial("lamp-halo", "rgba(255,200,110,.9)", true);
     this.radialMaterial("wake", "rgba(235,248,250,.75)", true);
+    // The runaway cart's headlight: a cone of light fading out along its length. The canvas bottom
+    // lands at the cone's narrow top end, at the lamp.
+    const beamTexture = new DynamicTexture("runner-headlight-tex", { width: 8, height: 128 }, this.scene, false);
+    const beamCtx = beamTexture.getContext() as CanvasRenderingContext2D, fade = beamCtx.createLinearGradient(0, 128, 0, 0);
+    fade.addColorStop(0, "rgba(255,228,160,.5)"); fade.addColorStop(.6, "rgba(255,220,150,.12)"); fade.addColorStop(1, "rgba(255,220,150,0)");
+    beamCtx.fillStyle = fade; beamCtx.fillRect(0, 0, 8, 128); beamTexture.update(); beamTexture.hasAlpha = true;
+    const headlight = new StandardMaterial("runner-headlight-beam", this.scene);
+    headlight.diffuseTexture = beamTexture; headlight.useAlphaFromDiffuseTexture = true; headlight.disableLighting = true;
+    headlight.emissiveColor = Color3.White(); headlight.alphaMode = Engine.ALPHA_ADD; headlight.backFaceCulling = false;
+    this.mats["headlight-beam"] = headlight;
     // Scenery for the newer scenes and the finer details: plain colours, so they cost no extra textures.
     this.mat("lamp-iron", "#2f2b28").specularColor.set(.35, .33, .3);
     this.mat("bamboo", "#a7bb5e").specularColor.set(.28, .3, .18);
@@ -524,10 +804,29 @@ export class RunnerRenderer3D {
     this.sharkShadowMaterial();
     this.leafMaterial("bamboo-leaves", ["#5f8f36", "#77a644", "#4b7a2e", "#89b552"], [26, 5], 70, 11);
     this.leafMaterial("fern-leaves", ["#4f8a39", "#6aa249", "#3f7430"], [18, 6], 44, 29);
-    for (const [kind, [color]] of Object.entries(POWER_COLORS)) {
+    for (const [kind, [color]] of [...Object.entries(POWER_COLORS), ...Object.entries(PICKUP_COLORS)]) {
       const ring = this.glow(`ring-${kind}`, color, color); ring.alpha = .8; ring.disableLighting = true;
       const beam = this.glow(`beam-${kind}`, color, color); beam.alpha = .18; beam.disableLighting = true; beam.backFaceCulling = false; beam.alphaMode = Engine.ALPHA_ADD;
     }
+    // Power-up models: glossy paint, polished metal, glass and paper.
+    const glossy = (name: string, color: string, emissive: string, specular = .6, power = 64) => {
+      const m = this.glow(name, color, emissive); m.specularColor.setAll(specular); m.specularPower = power;
+      return m;
+    };
+    glossy("magnet-red", "#d8312a", "#3c0906");
+    glossy("chrome", "#d9dde2", "#30353b", .95, 110);
+    glossy("shield-face", "#3fa2e2", "#0d3d60");
+    glossy("shoe-red", "#ec5236", "#3c0d06");
+    glossy("feather", "#ffffff", "#6a6a6a", .3, 24);
+    const glass = glossy("glass", "#d8f2ff", "#25485a", 1, 110); glass.alpha = .38; glass.backFaceCulling = false;
+    glossy("sand", "#f2c768", "#5c3c08", .1, 16);
+    glossy("spring-green", "#58d454", "#123c10", .7, 80);
+    for (const [name, color, emissive] of [["balloon-pink", "#ff6aa6", "#4c0a26"], ["balloon-yellow", "#ffd640", "#4c3a06"], ["balloon-blue", "#52b4ff", "#0a2c4c"], ["balloon-green", "#62e08a", "#0c3a1c"], ["balloon-purple", "#b27cff", "#2a1050"]] as const) glossy(name, color, emissive, .95, 90);
+    glossy("chest-wood", "#9c5c2c", "#200f04", .15, 20);
+    glossy("clock-red", "#e4463a", "#3c0a06");
+    glossy("clock-face", "#fff8ea", "#6a6660", .2, 20);
+    glossy("lantern-paper", "#ff5c36", "#d8401c", .2, 20);
+    glossy("string", "#f2f2f2", "#5a5a5a", 0, 1);
     for (const grove of GROVES) for (const { name } of grove.trees) {
       if (this.mats[`tree-${name}`]) continue;
       const tree = this.mat(`tree-${name}`, "#ffffff", `/assets/runner/trees/${name}-v1.webp`);
@@ -564,6 +863,16 @@ export class RunnerRenderer3D {
     const moss = ground("bamboo-floor", "#5b7a43"), sand = ground("sand", "#9a663c", stone), drift = ground("snowfield", "#eef3f6");
     drift.diffuseTexture = this.snowTexture(groundRepeat(8));
     drift.emissiveColor.set(.34, .36, .38); sand.emissiveColor.set(.12, .06, .02);
+    // High quality only: fine bumps on road and stone, so they catch the light instead of looking printed.
+    if (this.settings.quality === "high") {
+      const bumps = this.detailBump(613);
+      for (const name of ["road-aqueduct", "road-temple", "road-mine", "road-bamboo", "road-canyon", "stone", "stone-dark", "moss-stone", "rock", "sandstone", "sandstone-light", "mesa-rock", "cliff-rock", "obstacle-rock", "bank-earth"]) {
+        const material = this.mats[name], diffuse = material?.diffuseTexture as Texture | null | undefined;
+        if (!material || !diffuse) continue;
+        const bump = bumps.clone(); bump.uScale = diffuse.uScale * 2; bump.vScale = diffuse.vScale * 2; bump.level = .55;
+        material.bumpTexture = bump;
+      }
+    }
     this.themes = [
       { sky: new Color3(.62, .74, .78), fog: new Color3(.66, .74, .74), nightSky: new Color3(.07, .1, .18), nightFog: new Color3(.1, .13, .2), ground: water, groundY: -7 },
       { sky: new Color3(.66, .76, .62), fog: new Color3(.6, .67, .55), nightSky: new Color3(.06, .09, .1), nightFog: new Color3(.08, .12, .12), ground: grass, groundY: -.35 },
@@ -574,17 +883,23 @@ export class RunnerRenderer3D {
     ];
   }
   async load() {
-    const [run, actions, fall, cart, walk, grab, laugh] = await Promise.all([
+    const [run, actions, fall, cart, walk, grab, laugh, stalk, stalkB, search, milkFrog, milkFrogExtra] = await Promise.all([
       loadImage("/assets/runner/milk-dog-run-v2.png"), loadImage("/assets/runner/milk-dog-actions-v2.png"),
       loadImage("/assets/runner/milk-dog-fall-v1.png"), loadImage(MINECART_SURPRISE_ART),
       loadImage("/assets/character/haunted-frog-directions-walk-v1.webp"),
       loadImage(FROG_EXTRA_ART.directionAttack.url), loadImage(FROG_EXTRA_ART.directionLaugh.url),
+      loadImage(FROG_EXTRA_ART.directionStalk.url), loadImage(FROG_EXTRA_ART.directionStalkB.url), loadImage(FROG_EXTRA_ART.directionSearch.url),
+      loadImage("/assets/character/milk-frog-atlas.webp"), loadImage("/assets/character/milk-frog-extra-v2.webp"),
     ]);
     this.sheets = {
       run: sheetTexture(this.scene, cleanSheet(run)), actions: sheetTexture(this.scene, cleanSheet(actions)),
       fall: sheetTexture(this.scene, cleanSheet(fall)), cart: sheetTexture(this.scene, cart.src),
       walk: sheetTexture(this.scene, walk.src), grab: sheetTexture(this.scene, grab.src), laugh: sheetTexture(this.scene, laugh.src),
+      stalk: sheetTexture(this.scene, stalk.src), stalkB: sheetTexture(this.scene, stalkB.src), search: sheetTexture(this.scene, search.src),
+      milkFrog: sheetTexture(this.scene, milkFrog.src), milkFrogExtra: sheetTexture(this.scene, milkFrogExtra.src),
     };
+    // Each spectator owns its textures (a sprite sets its frame on the texture), so they get their own copies.
+    for (const spectator of this.spectators) { spectator.atlas = this.sheets.milkFrog!.clone(); spectator.extra = this.sheets.milkFrogExtra!.clone(); spectator.sprite.frame(spectator.atlas, 0, 4, 2); }
     this.dog.frame(this.sheets.actions!, 0, 4, 2);
     this.chaserSprite.frame(this.sheets.walk!, 4, 4, 4);
     // The sky is a world-fixed band: the side strip (cliffs, trees, sky) of each scene picture,
@@ -608,19 +923,32 @@ export class RunnerRenderer3D {
     const warm = new TransformNode("runner-warm-up", this.scene);
     warm.position.set(0, 0, 12);
     for (const name of this.templates.keys()) this.instance(name, warm);
-    const effects = [this.bubble, this.magnetRing, this.boostGlow, this.rain[0], this.snow[0], this.streaks[0], this.sea];
+    // The shadow map covers the warm-up props, so their shadow shaders (and the shadowed road's) compile now.
+    const dir = this.sun.direction;
+    this.sun.position.set(-dir.x * 70, -dir.y * 70, 12 - dir.z * 70);
+    this.shadows?.getShadowMap()?.resetRefreshCounter();
+    const effects = [this.bubble, this.magnetRing, this.boostGlow, this.rain[0], this.snow[0], this.streaks[0], this.sea, this.ripples, this.pickupRing, this.ripple, this.heroDisc, this.heroRing, this.heroRays, ...this.heroGlow];
     this.shark.root.setEnabled(true); this.shark.root.position.set(0, 0, 14);
     effects.forEach(mesh => { mesh.setEnabled(true); mesh.position.set(0, 1, 10); });
     this.mats["lamp-halo"].alpha = .9;
-    this.burst(this.sparks, new Vector3(0, 1, 10), 4); this.burst(this.magic, new Vector3(0, 1, 10), 4);
+    const at = new Vector3(0, 1, 10);
+    for (const system of [this.sparks, this.silverSparks, this.diamondSparks, this.magic, this.dust, this.rollDust, this.cartSparks, this.nearStreaks, this.splash, this.heroSparkles, this.appleSparkles, this.fireEmbers, this.fireSmoke]) this.burst(system, at, 4);
+    for (const plane of this.heroGlow) (plane.material as StandardMaterial).opacityTexture = this.dog.material.diffuseTexture;
+    this.ambience.warm(true, at);
     this.camera.position.set(0, 4, -8); this.camera.setTarget(new Vector3(0, 1, 8));
+    // Each scene has its own ground under the road: draw each once so none compiles when its scene arrives.
+    const ground = this.groundPlane.material;
+    for (const look of this.themes) { this.groundPlane.material = look.ground; this.scene.render(); }
+    this.groundPlane.material = ground;
     this.scene.render();
     warm.dispose();
     // Templates only feed instances from here on, and instances keep drawing when their source is
     // switched off; this keeps some 1,600 template meshes out of the per-frame walk.
     this.templates.values().next().value?.parent?.setEnabled(false);
     [...effects, ...this.rain, ...this.snow, ...this.streaks].forEach(mesh => mesh.setEnabled(false));
+    this.shadowCell = "";
     this.shark.root.setEnabled(false);
+    this.ambience.warm(false, at);
   }
 
   private panorama(image: HTMLImageElement, scene: number) {
@@ -700,8 +1028,9 @@ export class RunnerRenderer3D {
     const fps = 1 / this.frameAverage;
     this.slowTime = fps < 47 ? this.slowTime + dt : 0;
     this.fastTime = fps > 57 ? this.fastTime + dt : 0;
-    if (this.slowTime > 1.5 && this.renderScale > .55) { this.renderScale = Math.max(.55, this.renderScale - .12); this.slowTime = 0; this.resize(); }
-    else if (this.fastTime > 8 && this.renderScale < 1) { this.renderScale = Math.min(1, this.renderScale + .12); this.fastTime = 0; this.resize(); }
+    if (this.slowTime > 1.5 && this.shadows && !this.shadowsResting) { this.shadowsResting = true; this.slowTime = 0; this.fastTime = 0; this.spare = false; }
+    else if (this.slowTime > 1.5 && this.renderScale > .55) { this.renderScale = Math.max(.55, this.renderScale - .12); this.slowTime = 0; this.fastTime = 0; this.spare = false; this.resize(); }
+    if (this.fastTime > 20) this.spare = true;
   }
 
   resize() {
@@ -1281,7 +1610,31 @@ export class RunnerRenderer3D {
   }
 
   /** Off-screen source meshes; every road slot and prop is an instance of these, so they batch. */
+  /** Light shafts: a cone of light under a lamp (bright at the lamp, gone at the ground) and a pool of light where it lands. */
+  private buildLightShafts() {
+    const texture = new DynamicTexture("runner-light-cone-tex", { width: 4, height: 128 }, this.scene, false);
+    const ctx = texture.getContext() as CanvasRenderingContext2D, fade = ctx.createLinearGradient(0, 0, 0, 128);
+    fade.addColorStop(0, "rgba(255,255,255,.95)"); fade.addColorStop(.35, "rgba(255,255,255,.45)"); fade.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = fade; ctx.fillRect(0, 0, 4, 128); texture.update(); texture.hasAlpha = true;
+    for (const [name, colour, alpha] of [["light-cone-night", "#ffd9a0", .2], ["light-cone-mine", "#ffcf8a", .055]] as const) {
+      const material = new StandardMaterial(`runner-${name}`, this.scene);
+      material.diffuseTexture = texture; material.useAlphaFromDiffuseTexture = true; material.disableLighting = true;
+      material.emissiveColor = Color3.FromHexString(colour); material.alphaMode = Engine.ALPHA_ADD; material.backFaceCulling = false; material.alpha = alpha;
+      this.mats[name] = material;
+    }
+    this.radialMaterial("light-pool-night", "rgba(255,214,150,.6)", true);
+    this.radialMaterial("light-pool-mine", "rgba(255,206,140,.28)", true);
+  }
+
+  /** A cone of light from a lamp at `(x, top)` down to the road, and its pool of light there. */
+  private lightShaft(r: TransformNode, x: number, top: number, spread: number, kind: "night" | "mine") {
+    this.cylinder("light-cone", r, { diameterTop: .3, diameterBottom: spread, height: top, tessellation: 20 }, [x, top / 2, 0], `light-cone-${kind}`);
+    const pool = MeshBuilder.CreateGround("light-pool", { width: spread * 1.15, height: spread * 1.15 }, this.scene);
+    pool.parent = r; pool.position.set(x, .03, 0); pool.material = this.mats[`light-pool-${kind}`]; pool.isPickable = false;
+  }
+
   private buildTemplates() {
+    this.buildLightShafts();
     const stash = new TransformNode("runner-templates", this.scene);
     stash.position.y = -500;
     // Built at the origin, then parked under the stash. `merge` folds static parts into one mesh per
@@ -1347,6 +1700,7 @@ export class RunnerRenderer3D {
       this.cylinder("lantern-roof", r, { diameterTop: .05, diameterBottom: .42, height: .18, tessellation: 6 }, [0, 6.42, 0], "lamp-iron");
       this.cylinder("lantern", r, { diameterTop: .32, diameterBottom: .25, height: .36, tessellation: 6 }, [0, 6.15, 0], "lamp");
       this.cylinder("lantern-base", r, { diameter: .27, height: .05, tessellation: 6 }, [0, 5.95, 0], "lamp-iron");
+      this.lightShaft(r, 0, 5.9, 3.2, "mine");
       const halo = MeshBuilder.CreatePlane("halo", { size: 2.4 }, this.scene); halo.parent = r; halo.position.set(0, 6.15, 0); halo.material = this.mats["lamp-halo"]; halo.billboardMode = Mesh.BILLBOARDMODE_ALL;
     }, true);
     make("mine-cart-parked", r => {
@@ -1420,20 +1774,22 @@ export class RunnerRenderer3D {
       const glow = MeshBuilder.CreatePlane("apple-glow", { size: 3 }, this.scene);
       glow.parent = r; glow.material = this.mats["apple-glow"]; glow.billboardMode = Mesh.BILLBOARDMODE_ALL; glow.isPickable = false;
     });
-    make("minecart", r => {
-      this.box("cart-floor", r, [1.55, .26, 1.86], [0, .28, 0], "metal");
-      for (const side of [-1, 1]) {
-        const sideWall = this.box("cart-side", r, [.16, .60, 1.91], [side * .77, .59, 0], "log-bark");
-        sideWall.rotation.z = -side * .18;
-        const endWall = this.box("cart-end", r, [1.66, .59, .16], [0, .59, side * .89], "log-bark");
-        endWall.rotation.x = side * .19;
-        this.box("cart-rim", r, [1.77, .10, .13], [0, .91, side * .96], "metal");
-        for (const z of [-.63, .63]) {
-          const wheel = this.cylinder("cart-wheel", r, { height: .17, diameter: .48, tessellation: 18 }, [side * .61, .25, z], "metal");
-          wheel.rotation.z = Math.PI / 2;
-        }
+    make("minecart", r => this.minecart(r));
+    // A runaway ore cart that comes down a lane at the dog: loaded with ore, its lamp lit and throwing a beam ahead.
+    make("runaway-cart", r => {
+      const body = new TransformNode("cart-body", this.scene); body.parent = r;
+      this.minecart(body);
+      const random = seeded(91);
+      for (let k = 0; k < 9; k++) {
+        const ore = MeshBuilder.CreatePolyhedron("runaway-ore", { type: k % 2 ? 2 : 1, size: .2 + random() * .14 }, this.scene);
+        ore.parent = body; ore.material = this.mats[k % 4 === 0 ? "gold" : k % 4 === 2 ? "crystal" : "obstacle-rock"];
+        ore.position.set((random() - .5) * 1.1, .86 + random() * .2, (random() - .5) * 1.4); ore.rotation.set(random() * 3, random() * 3, 0);
       }
-      this.box("cart-lantern", r, [.23, .26, .18], [0, .68, .99], "lamp");
+      this.mergeByMaterial(body);
+      // Narrow end (+Y) at the lamp, widening out ahead of the cart.
+      const beam = this.cylinder("headlight-beam", r, { diameterTop: .3, diameterBottom: 3.4, height: 9, tessellation: 18 }, [0, .62, 5.5], "headlight-beam");
+      beam.rotation.x = -Math.PI / 2;
+      const halo = MeshBuilder.CreatePlane("halo", { size: 2.2 }, this.scene); halo.parent = r; halo.position.set(0, .68, 1.05); halo.material = this.mats["lamp-halo"]; halo.billboardMode = Mesh.BILLBOARDMODE_ALL;
     });
     make("lamp-post", r => this.lampPost(r, false), true);
     make("snow-lamp", r => this.lampPost(r, true), true);
@@ -1456,6 +1812,7 @@ export class RunnerRenderer3D {
     make("canyon-lamp", r => {
       for (const s of [-1, 1]) {
         const x = s * (ROAD_HALF + .65), lx = x - s * .78;
+        this.lightShaft(r, lx, 2.4, 2.3, "night");
         this.box("lamp-post-wood", r, [.22, 3.3, .22], [x, 1.5, 0], "wood");
         for (const k of [0, 1, 2]) {
           const stone = MeshBuilder.CreatePolyhedron("lamp-foot-rock", { type: 2, size: .2 + k * .05 }, this.scene);
@@ -1634,7 +1991,7 @@ export class RunnerRenderer3D {
     });
     // Fork, broken side. Local +Z runs away from the corner; y = 0 is the road surface.
     make("fork-stub", r => {
-      const length = FORK_BRIDGE_START - FORK_STUB_START;
+      const length = FORK_DECK - FORK_STUB_START;
       this.box("fork-stub-base", r, [W, 24, length], [0, -12.5, length / 2], "stone-dark");
       for (const s of [-1, 1]) this.box("fork-stub-curb", r, [.4, .3, length], [s * (ROAD_HALF + .05), .1, length / 2], "stone");
     });
@@ -1755,6 +2112,7 @@ export class RunnerRenderer3D {
       make(`beam${at}`, r => this.barrier(r, scene), true);
       make(`beam-wide${at}`, r => this.gate(r, scene), true);
       make(`boulder${at}`, r => this.boulder(r, scene), true);
+      if (scene === 0 || scene === 1 || scene >= 4) make(`boulder-rolling${at}`, r => this.rollingBoulder(r, scene));
       make(`spikes-double${at}`, r => this.debris(r, scene), true);
       // Flames flicker, trapdoor planks swing open and long pits stretch their banks apart, so these keep their parts.
       make(`fire-double${at}`, r => this.campfire(r, scene, flameMaterial));
@@ -1798,30 +2156,284 @@ export class RunnerRenderer3D {
       const gem = MeshBuilder.CreatePolyhedron("diamond-gem", { type: 1, size: .38 }, this.scene);
       gem.parent = r; gem.material = this.coinMats.diamond;
     });
-    const powers = this.texture("/assets/runner/powerups-v1.png");
-    for (const kind of RUN_POWERS) {
-      if (kind === "fruit") continue;
-      const art = POWER_ART[kind];
-      const texture = typeof art === "number" ? powers.clone() : this.texture(art);
-      texture.hasAlpha = true;
-      if (typeof art === "number") {
-        texture.uScale = texture.vScale = .5; texture.uOffset = (art % 2) * .5; texture.vOffset = art < 2 ? .5 : 0;
-      }
-      const m = new StandardMaterial(`runner-power-${kind}`, this.scene);
-      m.diffuseTexture = texture; m.useAlphaFromDiffuseTexture = true; m.disableLighting = true; m.backFaceCulling = false;
-      m.emissiveColor = Color3.White(); m.transparencyMode = StandardMaterial.MATERIAL_ALPHATEST; m.alphaCutOff = .4;
-      this.mats[`power-${kind}`] = m;
-      make(kind, r => {
-        const icon = MeshBuilder.CreatePlane("icon", { size: 1.25 }, this.scene); icon.parent = r; icon.position.y = 1.15; icon.material = m; icon.billboardMode = Mesh.BILLBOARDMODE_Y;
-        const ring = MeshBuilder.CreateTorus("halo", { diameter: 1.42, thickness: .08, tessellation: 28 }, this.scene); ring.parent = r; ring.position.y = .06; ring.material = this.mats[`ring-${kind}`];
-        // A light pillar so power-ups read from far away.
-        this.cylinder("beam", r, { diameterTop: .65, diameterBottom: 1.2, height: 4.5, tessellation: 16 }, [0, 2.25, 0], `beam-${kind}`);
-      });
+    // The double-score medal keeps its painted face.
+    const medalArt = this.texture("/assets/runner/pickup-double-score-v1.webp"); medalArt.hasAlpha = true;
+    const medal = new StandardMaterial("runner-medal-art", this.scene);
+    medal.diffuseTexture = medalArt; medal.useAlphaFromDiffuseTexture = true; medal.disableLighting = true; medal.backFaceCulling = false;
+    medal.emissiveColor = Color3.White(); medal.transparencyMode = StandardMaterial.MATERIAL_ALPHATEST; medal.alphaCutOff = .4;
+    this.mats["medal-art"] = medal;
+    // Power-ups and pickups are small models that turn over a ring of light, under a light pillar so they read from far away.
+    for (const kind of [...RUN_POWERS.filter(kind => kind !== "fruit"), ...RUN_PICKUPS] as const) make(kind, r => {
+      const model = new TransformNode("model", this.scene); model.parent = r; model.position.y = 1.15;
+      this.pickupModel(kind, model);
+      this.mergeByMaterial(model);
+      const ring = MeshBuilder.CreateTorus("halo", { diameter: 1.42, thickness: .08, tessellation: 28 }, this.scene); ring.parent = r; ring.position.y = .06; ring.material = this.mats[`ring-${kind}`];
+      this.cylinder("beam", r, { diameterTop: .65, diameterBottom: 1.2, height: 4.5, tessellation: 16 }, [0, 2.25, 0], `beam-${kind}`);
+    });
+    // Carried while flying: a big bunch of balloons on strings gathered in the dog's paws.
+    // A puddle: a dark, glossy patch with a ragged edge that mirrors the sky.
+    make("puddle", r => {
+      const puddle = MeshBuilder.CreateGround("puddle", { width: 1, height: 1 }, this.scene);
+      puddle.parent = r; puddle.position.y = .014; puddle.material = this.mats.puddle; puddle.isPickable = false;
+    });
+    make("balloon-bunch", r => this.balloons(r, 1.6, 5));
+    // Worn while the spring shoes last: a coil under each pair of paws.
+    make("spring-feet", r => {
+      for (const x of [-.26, .26]) this.coil(r, x, .07, .3, 3.5, .03);
+      this.mergeByMaterial(r);
+    });
+    this.addContactShadows();
+  }
+
+  /**
+   * A soft dark patch on the road under every obstacle and pickup, sized to the model's own footprint
+   * (lights, halos and the cart's lamp beam left out), so things sit on the road instead of floating.
+   */
+  private addContactShadows() {
+    const pickups = new Set<string>([...RUN_POWERS.filter(kind => kind !== "fruit"), ...RUN_PICKUPS]);
+    const standing = /^(block|beam|spikes|boulder|cart-block|crate|runaway-cart)/;
+    // Darkest under the model and still dark at its edge, where the camera actually sees it, then fading out.
+    const texture = new DynamicTexture("runner-contact-tex", { width: 128, height: 128 }, this.scene, false);
+    const ctx = texture.getContext() as CanvasRenderingContext2D, gradient = ctx.createRadialGradient(64, 64, 2, 64, 64, 63);
+    gradient.addColorStop(0, "rgba(0,0,0,.72)"); gradient.addColorStop(.5, "rgba(0,0,0,.5)"); gradient.addColorStop(.75, "rgba(0,0,0,.2)"); gradient.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, 128, 128); texture.update(); texture.hasAlpha = true;
+    const material = new StandardMaterial("runner-contact", this.scene);
+    material.diffuseTexture = texture; material.useAlphaFromDiffuseTexture = true; material.disableLighting = true;
+    material.emissiveColor = Color3.Black(); material.zOffset = -2; material.backFaceCulling = false;
+    for (const [name, root] of this.templates) {
+      const base = name.split("@")[0];
+      if (!pickups.has(base) && !standing.test(base)) continue;
+      root.computeWorldMatrix(true);
+      for (const mesh of root.getChildMeshes()) mesh.computeWorldMatrix(true);
+      const { min, max } = root.getHierarchyBoundingVectors(true, mesh => !/halo|beam|light|glint/.test(mesh.name));
+      const origin = root.getAbsolutePosition();
+      const width = Math.min(7, (max.x - min.x) * 1.55 + .4), depth = Math.min(4.5, (max.z - min.z) * 1.55 + .4);
+      if (!(width > 0 && depth > 0)) continue;
+      const shadow = MeshBuilder.CreateGround("contact-shadow", { width, height: depth }, this.scene);
+      shadow.parent = root; shadow.material = material; shadow.isPickable = false;
+      shadow.position.set((min.x + max.x) / 2 - origin.x, .035, (min.z + max.z) / 2 - origin.z);
     }
+  }
+
+  /** A coil spring of `turns` turns, `height` tall, standing at (x, 0, 0). */
+  private coil(parent: TransformNode, x: number, radius: number, height: number, turns: number, wire: number) {
+    const path: Vector3[] = [];
+    for (let i = 0; i <= turns * 16; i++) { const a = i / 16 * Math.PI * 2; path.push(new Vector3(x + Math.cos(a) * radius, i / (turns * 16) * height, Math.sin(a) * radius)); }
+    const tube = MeshBuilder.CreateTube("spring-coil", { path, radius: wire, tessellation: 8 }, this.scene);
+    tube.parent = parent; tube.material = this.mats.chrome; tube.isPickable = false;
+    return tube;
+  }
+
+  /** `count` balloons in a cluster, their strings gathered at the parent's origin; `size` scales the lot. */
+  private balloons(parent: TransformNode, size: number, count: number) {
+    const colours = ["balloon-pink", "balloon-yellow", "balloon-blue", "balloon-green", "balloon-purple"];
+    const spots = [[0, 1.05, 0], [-.34, .86, .12], [.34, .9, -.1], [-.12, .78, -.3], [.16, .8, .3]] as const;
+    for (let i = 0; i < count; i++) {
+      const [x, y, z] = spots[i];
+      const balloon = MeshBuilder.CreateSphere("balloon", { diameter: .46, segments: 14 }, this.scene);
+      balloon.parent = parent; balloon.position.set(x * size, y * size, z * size); balloon.scaling.set(size, size * 1.18, size); balloon.material = this.mats[colours[i % colours.length]]; balloon.isPickable = false;
+      const knot = this.cylinder("balloon-knot", parent, { diameterTop: .08, diameterBottom: 0, height: .08, tessellation: 6 }, [x * size, y * size - .29 * size, z * size], colours[i % colours.length]);
+      knot.scaling.setAll(size);
+      // A string from the knot down to where the paws hold them.
+      const top = new Vector3(x * size, (y - .33) * size, z * size), length = top.length();
+      const line = this.cylinder("balloon-string", parent, { diameter: .012 * size, height: length, tessellation: 4 }, [top.x / 2, top.y / 2, top.z / 2], "string");
+      line.rotation.set(Math.acos(Math.max(-1, Math.min(1, top.y / length))), Math.atan2(top.x, top.z), 0);
+    }
+  }
+
+  /** The model for each power-up and pickup, built round the origin. */
+  private pickupModel(kind: RunPowerKind | RunPickupKind, r: TransformNode) {
+    switch (kind) {
+      case "coin-bag": {
+        // A plump velvet pouch tied with gold cord, gold coins showing at its mouth.
+        const pouch = MeshBuilder.CreateSphere("pouch", { diameter: .7, segments: 18 }, this.scene); pouch.parent = r; pouch.scaling.set(1, .9, 1); pouch.position.y = -.08; pouch.material = this.mats.pouch;
+        this.cylinder("pouch-neck", r, { diameterTop: .36, diameterBottom: .24, height: .2, tessellation: 14 }, [0, .3, 0], "pouch");
+        const cord = MeshBuilder.CreateTorus("pouch-cord", { diameter: .27, thickness: .045, tessellation: 18 }, this.scene); cord.parent = r; cord.position.y = .22; cord.material = this.mats.gold;
+        for (const [x, z, tilt] of [[-.06, .02, .5], [.07, -.03, -.4], [0, .07, .2]] as const) {
+          const coin = this.cylinder("pouch-coin", r, { diameter: .2, height: .035, tessellation: 18 }, [x, .43, z], "gold");
+          coin.rotation.set(Math.PI / 2 - .35, 0, tilt);
+        }
+        return;
+      }
+      case "star": {
+        // A five-pointed star with bevelled faces: two fans of triangles meeting at a raised centre.
+        const positions: number[] = [0, 0, .13, 0, 0, -.13], indices: number[] = [];
+        for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? .19 : .46; positions.push(Math.cos(a) * rad, Math.sin(a) * rad, 0); }
+        for (let i = 0; i < 10; i++) { const a = 2 + i, b = 2 + (i + 1) % 10; indices.push(0, b, a, 1, a, b); }
+        const normals: number[] = []; VertexData.ComputeNormals(positions, indices, normals);
+        const data = new VertexData(); data.positions = positions; data.indices = indices; data.normals = normals;
+        const star = new Mesh("lucky-star", this.scene); data.applyToMesh(star); star.parent = r; star.material = this.mats["star-gold"];
+        const halo = MeshBuilder.CreatePlane("halo", { size: 1.7 }, this.scene); halo.parent = r; halo.material = this.mats["lamp-halo"]; halo.billboardMode = Mesh.BILLBOARDMODE_ALL;
+        return;
+      }
+      case "magnet": {
+        // A horseshoe magnet, poles down, with polished tips.
+        const path: Vector3[] = [new Vector3(-.3, -.34, 0), new Vector3(-.3, -.05, 0)];
+        for (let i = 0; i <= 16; i++) { const a = Math.PI - i / 16 * Math.PI; path.push(new Vector3(Math.cos(a) * .3, Math.sin(a) * .3, 0)); }
+        path.push(new Vector3(.3, -.05, 0), new Vector3(.3, -.34, 0));
+        const arch = MeshBuilder.CreateTube("magnet-arch", { path, radius: .12, tessellation: 14, cap: Mesh.CAP_ALL }, this.scene);
+        arch.parent = r; arch.material = this.mats["magnet-red"]; arch.isPickable = false;
+        for (const x of [-.3, .3]) this.cylinder("magnet-tip", r, { diameter: .25, height: .16, tessellation: 14 }, [x, -.42, 0], "chrome");
+        return;
+      }
+      case "shield": {
+        const face = this.cylinder("shield-face", r, { diameter: .95, height: .09, tessellation: 28 }, [0, 0, 0], "shield-face"); face.rotation.x = Math.PI / 2;
+        const rim = MeshBuilder.CreateTorus("shield-rim", { diameter: .95, thickness: .08, tessellation: 32 }, this.scene); rim.parent = r; rim.rotation.x = Math.PI / 2; rim.material = this.mats.chrome;
+        for (const side of [-1, 1]) {
+          const boss = MeshBuilder.CreateSphere("shield-boss", { diameter: .26, segments: 10 }, this.scene); boss.parent = r; boss.position.z = side * .05; boss.scaling.z = .5; boss.material = this.mats.gold;
+          this.box("shield-bar", r, [.62, .07, .04], [0, 0, side * .055], "gold"); this.box("shield-bar", r, [.07, .62, .04], [0, 0, side * .055], "gold");
+        }
+        return;
+      }
+      case "boost": {
+        // A winged running shoe.
+        this.box("shoe-sole", r, [.34, .08, .66], [0, -.2, 0], "lamp-iron");
+        this.box("shoe-upper", r, [.32, .26, .44], [0, -.04, -.08], "shoe-red");
+        const toe = MeshBuilder.CreateSphere("shoe-toe", { diameter: .34, segments: 10 }, this.scene); toe.parent = r; toe.position.set(0, -.1, .17); toe.scaling.set(1, .62, 1.1); toe.material = this.mats["shoe-red"];
+        this.box("shoe-stripe", r, [.33, .05, .3], [0, .04, -.06], "gold");
+        for (const side of [-1, 1]) for (let k = 0; k < 3; k++) {
+          const feather = MeshBuilder.CreateSphere("shoe-feather", { diameter: .4 - k * .07, segments: 8 }, this.scene);
+          feather.parent = r; feather.position.set(side * (.2 + k * .02), .08 + k * .1, -.2 - k * .05); feather.scaling.set(.12, .35, 1); feather.rotation.set(-.6 - k * .25, side * .25, side * .35); feather.material = this.mats.feather;
+        }
+        return;
+      }
+      case "slow": {
+        // An hourglass: glass bulbs, running sand, a wooden frame.
+        this.cylinder("hourglass-glass", r, { diameterTop: .5, diameterBottom: .07, height: .4, tessellation: 18 }, [0, .2, 0], "glass");
+        this.cylinder("hourglass-glass", r, { diameterTop: .07, diameterBottom: .5, height: .4, tessellation: 18 }, [0, -.2, 0], "glass");
+        this.cylinder("hourglass-sand", r, { diameterTop: .3, diameterBottom: .05, height: .16, tessellation: 14 }, [0, .1, 0], "sand");
+        this.cylinder("hourglass-sand", r, { diameterTop: .05, diameterBottom: .42, height: .17, tessellation: 14 }, [0, -.31, 0], "sand");
+        this.cylinder("hourglass-stream", r, { diameter: .025, height: .26, tessellation: 4 }, [0, -.13, 0], "sand");
+        for (const y of [-.43, .43]) this.cylinder("hourglass-cap", r, { diameter: .62, height: .07, tessellation: 18 }, [0, y, 0], "chest-wood");
+        for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2; this.cylinder("hourglass-post", r, { diameter: .045, height: .84, tessellation: 6 }, [Math.cos(a) * .27, 0, Math.sin(a) * .27], "gold"); }
+        return;
+      }
+      case "double": {
+        const disc = this.cylinder("medal", r, { diameter: .95, height: .1, tessellation: 30 }, [0, 0, 0], "gold"); disc.rotation.x = Math.PI / 2;
+        const rim = MeshBuilder.CreateTorus("medal-rim", { diameter: .95, thickness: .07, tessellation: 32 }, this.scene); rim.parent = r; rim.rotation.x = Math.PI / 2; rim.material = this.mats.gold;
+        for (const side of [-1, 1]) {
+          const face = MeshBuilder.CreatePlane("medal-face", { size: .78 }, this.scene); face.parent = r; face.position.z = side * .056; face.rotation.y = side > 0 ? Math.PI : 0; face.material = this.mats["medal-art"]; face.isPickable = false;
+        }
+        return;
+      }
+      case "spring": {
+        this.box("spring-sole", r, [.36, .08, .62], [0, -.38, 0], "spring-green");
+        this.coil(r, 0, .17, .5, 4.5, .045).position.y = -.34;
+        this.box("spring-plate", r, [.4, .06, .4], [0, .2, 0], "spring-green");
+        return;
+      }
+      case "bike": {
+        const bike = this.templates.get("bicycle")!.instantiateHierarchy(r, { doNotInstantiate: true })!;
+        bike.position.set(0, -.7, 0); bike.scaling.setAll(.85); bike.rotation.y = Math.PI / 2;
+        return;
+      }
+      case "balloon": this.balloons(r, .9, 3); r.position.y -= .45; return;
+      case "chest": {
+        this.box("chest-body", r, [.8, .44, .54], [0, -.16, 0], "chest-wood");
+        const lid = this.cylinder("chest-lid", r, { diameter: .54, height: .8, tessellation: 18 }, [0, .06, 0], "chest-wood"); lid.rotation.z = Math.PI / 2; lid.scaling.y = 1; lid.scaling.z = .62;
+        for (const y of [-.32, .02]) this.box("chest-band", r, [.83, .06, .57], [0, y, 0], "gold");
+        for (const x of [-.3, .3]) { const band = this.cylinder("chest-lid-band", r, { diameter: .57, height: .06, tessellation: 18 }, [x, .06, 0], "gold"); band.rotation.z = Math.PI / 2; band.scaling.z = .65; }
+        this.box("chest-lock", r, [.13, .17, .05], [0, -.04, .29], "gold");
+        return;
+      }
+      case "clock": {
+        const body = this.cylinder("clock-body", r, { diameter: .72, height: .26, tessellation: 28 }, [0, 0, 0], "clock-red"); body.rotation.x = Math.PI / 2;
+        for (const side of [-1, 1]) {
+          const face = this.cylinder("clock-face", r, { diameter: .58, height: .02, tessellation: 28 }, [0, 0, side * .135], "clock-face"); face.rotation.x = Math.PI / 2;
+          this.box("clock-hand", r, [.04, .22, .02], [0, .08, side * .15], "lamp-iron");
+          const hand = this.box("clock-hand", r, [.035, .17, .02], [.06, -.03, side * .15], "lamp-iron"); hand.rotation.z = -1.1;
+        }
+        for (const side of [-1, 1]) {
+          const bell = MeshBuilder.CreateSphere("clock-bell", { diameter: .3, segments: 10 }, this.scene); bell.parent = r; bell.position.set(side * .22, .38, 0); bell.scaling.y = .7; bell.material = this.mats.chrome;
+          this.cylinder("clock-leg", r, { diameter: .06, height: .14, tessellation: 6 }, [side * .2, -.4, 0], "lamp-iron");
+        }
+        this.box("clock-hammer", r, [.06, .16, .06], [0, .42, 0], "chrome");
+        return;
+      }
+      case "lantern": {
+        const paper = MeshBuilder.CreateSphere("lantern-paper", { diameter: .62, segments: 16 }, this.scene); paper.parent = r; paper.scaling.y = .85; paper.material = this.mats["lantern-paper"];
+        for (const y of [-.28, .28]) this.cylinder("lantern-cap", r, { diameter: .3, height: .08, tessellation: 12 }, [0, y, 0], "lamp-iron");
+        for (const y of [-.12, .12]) { const rib = MeshBuilder.CreateTorus("lantern-rib", { diameter: .6, thickness: .02, tessellation: 24 }, this.scene); rib.parent = r; rib.position.y = y; rib.material = this.mats["lamp-iron"]; }
+        this.cylinder("lantern-tassel", r, { diameterTop: .04, diameterBottom: .12, height: .22, tessellation: 8 }, [0, -.42, 0], "lantern-paper");
+        const ring = MeshBuilder.CreateTorus("lantern-hook", { diameter: .12, thickness: .02, tessellation: 12 }, this.scene); ring.parent = r; ring.position.y = .36; ring.rotation.x = Math.PI / 2; ring.material = this.mats["lamp-iron"];
+        const halo = MeshBuilder.CreatePlane("halo", { size: 1.8 }, this.scene); halo.parent = r; halo.material = this.mats["lamp-halo"]; halo.billboardMode = Mesh.BILLBOARDMODE_ALL;
+        return;
+      }
+    }
+  }
+
+  /** The ore cart the dog rides in the mine (and the runaway one). Its lantern is at the front, +Z. */
+  private minecart(r: TransformNode) {
+    this.box("cart-floor", r, [1.55, .26, 1.86], [0, .28, 0], "metal");
+    for (const side of [-1, 1]) {
+      const sideWall = this.box("cart-side", r, [.16, .60, 1.91], [side * .77, .59, 0], "log-bark");
+      sideWall.rotation.z = -side * .18;
+      const endWall = this.box("cart-end", r, [1.66, .59, .16], [0, .59, side * .89], "log-bark");
+      endWall.rotation.x = side * .19;
+      this.box("cart-rim", r, [1.77, .10, .13], [0, .91, side * .96], "metal");
+      for (const z of [-.63, .63]) {
+        const wheel = this.cylinder("cart-wheel", r, { height: .17, diameter: .48, tessellation: 18 }, [side * .61, .25, z], "metal");
+        wheel.rotation.z = Math.PI / 2;
+      }
+    }
+    this.box("cart-lantern", r, [.23, .26, .18], [0, .68, .99], "lamp");
+  }
+
+  /**
+   * Boulders and snowballs that roll: the ball sits on a pivot at its centre ("roller"), which turns as
+   * it rolls, so nothing is left lying round its foot.
+   */
+  private rollingBoulder(r: TransformNode, scene: number) {
+    const ball = new TransformNode("roller", this.scene); ball.parent = r; ball.position.y = ROLLER_RADIUS;
+    const random = seeded(471 + scene);
+    const onSurface = (up: number, around: number, out = 1) => new Vector3(Math.cos(around) * Math.sin(up), Math.cos(up), Math.sin(around) * Math.sin(up)).scale(out);
+    switch (scene) {
+      case 1: {
+        const stone = MeshBuilder.CreateSphere("stone-ball", { diameter: ROLLER_RADIUS * 2, segments: 20 }, this.scene);
+        stone.parent = ball; stone.material = this.mats["moss-stone"];
+        for (const [tilt, roll] of [[0, 0], [Math.PI / 2, .35]] as const) {
+          const band = MeshBuilder.CreateTorus("stone-ball-band", { diameter: ROLLER_RADIUS * 2, thickness: .1, tessellation: 36 }, this.scene);
+          band.parent = ball; band.rotation.set(tilt, 0, roll + Math.PI / 2); band.material = this.mats["stone-dark"];
+        }
+        for (let k = 0; k < 3; k++) {
+          const moss = MeshBuilder.CreateSphere("stone-ball-moss", { diameter: .7 + random() * .4, segments: 8 }, this.scene);
+          // Flattened against the stone: squashed along its own Z, which lookAt points outward.
+          moss.parent = ball; moss.position.copyFrom(onSurface(.5 + random() * 2, random() * 6.3, .93)); moss.scaling.set(1, 1, .35);
+          moss.lookAt(moss.position.scale(2)); moss.material = this.mats.moss;
+        }
+        break;
+      }
+      case 5: {
+        this.roughRock("snowball", ball, 1.05, 816, "snow", [0, 0, 0], .35, true);
+        for (let k = 0; k < 4; k++) { const out = onSurface(.4 + random() * 2.2, random() * 6.3); this.spike("snowball-twig", ball, out.scale(.9), out, .4 + random() * .3, .05, "pine-trunk", 4); }
+        for (let k = 0; k < 6; k++) {
+          const stone = MeshBuilder.CreateSphere("snowball-stone", { diameter: .1 + random() * .08, segments: 5 }, this.scene);
+          stone.parent = ball; stone.position.copyFrom(onSurface(.3 + random() * 2.5, random() * 6.3, 1.03)); stone.material = this.mats.coal;
+        }
+        break;
+      }
+      case 4: {
+        this.roughRock("boulder", ball, ROLLER_RADIUS, 814, "sandstone", [0, 0, 0]);
+        for (const [y, size] of [[-.28, 2.02], [.32, 1.9]] as const) {
+          const band = MeshBuilder.CreateTorus("boulder-band", { diameter: size, thickness: .1, tessellation: 28 }, this.scene);
+          band.parent = ball; band.position.y = y; band.scaling.set(1, .6, 1); band.material = this.mats["sandstone-light"];
+        }
+        break;
+      }
+      default: this.roughRock("boulder", ball, ROLLER_RADIUS, 811, "obstacle-rock", [0, 0, 0]);
+    }
+    this.mergeByMaterial(ball);
   }
 
   /** Folds a template's static parts into one mesh per material; billboards (lamp halos) stay separate. */
   private mergeByMaterial(root: TransformNode) {
+    // MergeMeshes bakes each part's world transform into the merged mesh, which then hangs under
+    // `root` again; so `root` sits at the origin while merging (a turning pivot or a raised model
+    // would otherwise count twice) and goes back afterwards.
+    const parent = root.parent, place = { p: root.position.clone(), r: root.rotation.clone(), s: root.scaling.clone() };
+    root.parent = null; root.position.setAll(0); root.rotation.setAll(0); root.scaling.setAll(1);
+    root.computeWorldMatrix(true);
+    for (const node of root.getDescendants(false)) if (node instanceof TransformNode) node.computeWorldMatrix(true);
     const meshes = root.getChildMeshes(false).filter((mesh): mesh is Mesh => mesh instanceof Mesh && mesh.billboardMode === Mesh.BILLBOARDMODE_NONE);
     for (const mesh of meshes) mesh.setParent(root);
     const groups = new Map<unknown, Mesh[]>();
@@ -1834,6 +2446,7 @@ export class RunnerRenderer3D {
     }
     // Pivots used while building are empty now.
     for (const node of root.getDescendants(false)) if (node.getClassName() === "TransformNode" && (node as TransformNode).getChildMeshes(false).length === 0) node.dispose();
+    root.parent = parent; root.position.copyFrom(place.p); root.rotation.copyFrom(place.r); root.scaling.copyFrom(place.s);
   }
 
   /** A creeper wound round a log, with leaves, in the log's own frame (its axis along local Y). */
@@ -1876,6 +2489,7 @@ export class RunnerRenderer3D {
   private lampPost(r: TransformNode, snowy: boolean) {
     for (const s of [-1, 1]) {
       const x = s * (ROAD_HALF + .55), lx = x - s * .74;
+      this.lightShaft(r, lx, 3.78, 2.9, "night");
       this.box("lamp-base", r, [.5, .36, .5], [x, .14, 0], "stone-dark");
       this.box("lamp-plinth", r, [.34, .14, .34], [x, .39, 0], "lamp-iron");
       this.cylinder("lamp-pole", r, { diameterBottom: .17, diameterTop: .1, height: 3.9, tessellation: 10 }, [x, 2.4, 0], "lamp-iron");
@@ -2078,6 +2692,9 @@ export class RunnerRenderer3D {
       return { main };
     });
     slot.decor = SCENE_DECOR[theme].map(([name, every, offset, vary]) => ({ node: this.instance(name, group), every, offset, vary: !!vary }));
+    slot.puddle = PUDDLE_SCENES.has(theme) ? this.instance("puddle", group) : undefined;
+    this.shaftsShown = "";
+    slot.puddle?.setEnabled(false);
     slot.ores = theme !== 2 ? [] : [-1, 1].map(side => {
       const ore = this.orePlane.clone("mine-ore-vein");
       ore.parent = group; ore.rotation.y = side * 1.15; ore.setEnabled(false);
@@ -2193,17 +2810,17 @@ export class RunnerRenderer3D {
   private roadPitch(distance: number, half = .75) {
     return -Math.atan2(elevationAt(distance + half) - elevationAt(distance - half), half * 2);
   }
-  /** Road centre under the dog: straight on into the corner until the turn is actually taken. */
-  private dogCentre(world: RunnerWorld): RoutePoint {
+  /** Road centre under the dog (at `at`, its drawn distance): straight on into the corner until the turn is actually taken. */
+  private dogCentre(world: RunnerWorld, at = world.distance): RoutePoint {
     const wrong = world.wrongTurn;
     if (wrong) {
       // The trap side is level with the corner plaza.
-      const point = wrong.wrong === "straight" ? this.route.straight(world.distance, wrong.z) : this.route.branch(world.distance, wrong.z, wrong.direction === "left" ? "right" : "left");
-      if (point) return { ...point, y: elevationAt(Math.min(world.distance, wrong.z)) };
+      const point = wrong.wrong === "straight" ? this.route.straight(at, wrong.z) : this.route.branch(at, wrong.z, wrong.direction === "left" ? "right" : "left");
+      if (point) return { ...point, y: elevationAt(Math.min(at, wrong.z)) };
     }
     const turn = world.approachingTurn;
-    if (turn && !turn.taken && world.distance > turn.z - CORNER_RADIUS) return this.route.straight(world.distance, turn.z) ?? this.route.sample(world.distance);
-    return this.route.sample(world.distance);
+    if (turn && !turn.taken && at > turn.z - CORNER_RADIUS) return this.route.straight(at, turn.z) ?? this.route.sample(at);
+    return this.route.sample(at);
   }
 
   /** Height of the water the dog falls into. */
@@ -2227,16 +2844,25 @@ export class RunnerRenderer3D {
     const now = performance.now() / 1000, dt = this.lastTime ? Math.min(.1, now - this.lastTime) : 0;
     this.lastTime = now;
     if (this.lastWorld !== world) this.reset(world);
+    if (world.revives !== this.seen.revives) {
+      // Back on its feet: no splash pending, the camera back behind the dog, a burst of light round it.
+      this.seen.revives = world.revives; this.waterImpact = false; this.captureCamera = undefined; this.turnBlend = { x: 0, z: 0 };
+      this.flash.shield = 1;
+    }
     this.adaptResolution(world, dt);
     this.route.sync(world.turns, world.distance);
 
     const theme = world.sceneIndex, look = this.themes[theme], night = world.night;
     const weather = world.weather; // already sunny underground and snowing on the snowfield
     const capture = world.phase === "caught" || world.phase === "lost" || (world.phase === "paused" && world.reason !== "");
-    const t = world.elapsed + (capture ? world.captureTime : 0);
+    const t = world.drawnElapsed + (capture ? world.captureTime : 0);
+    this.idleClock += dt;
+    // On the menu the camera looks at the dog from the front; a new run swings it round behind.
+    const intro = this.introProgress(world);
+    const heroFront = intro < .45 && this.dogLook === "original" && !this.schoolSheet;
     const running = world.phase === "running";
 
-    this.drawAtmosphere(theme, look, night, weather);
+    this.drawAtmosphere(theme, look, night, weather, world.mode === "dark");
     this.drawRoad(world);
     this.drawCorners(world);
     this.drawProps(world, t, dt);
@@ -2258,12 +2884,16 @@ export class RunnerRenderer3D {
       if (straight && bend) { this.turnBlend.x += straight.x - bend.x; this.turnBlend.z += straight.z - bend.z; }
     }
     const decay = Math.exp(-dt * 9); this.turnBlend.x *= decay; this.turnBlend.z *= decay;
-    const centre = this.dogCentre(world);
+    // Drawn where the dog is now, not where the last fixed step left it: up to one step further on.
+    const lag = world.lag, view = world.distance + lag * world.speed;
+    const centre = this.dogCentre(world, view);
     centre.x += this.turnBlend.x; centre.z += this.turnBlend.z;
     // A bump against the side of the road throws the dog at the edge and straight back.
     const sinceBump = world.elapsed - world.wallBumpAt;
     const lurch = sinceBump >= 0 && sinceBump < .28 && !this.settings.reducedMotion ? world.wallSide * .55 * Math.sin(Math.PI * sinceBump / .28) : 0;
-    const lateral = (world.position - 1) * LANE_WIDTH * rideLateralScale(world.distance, world.ride) + lurch;
+    // The lane glide (rate 16 a second in the simulation) carried on over the same lag.
+    const position = world.position + (world.lane - world.position) * Math.min(1, lag * 16);
+    const lateral = (position - 1) * LANE_WIDTH * rideLateralScale(world.distance, world.ride) + lurch;
     const rx = Math.cos(centre.heading), rz = -Math.sin(centre.heading), fx = Math.sin(centre.heading), fz = Math.cos(centre.heading);
     const player = new Vector3(centre.x + rx * lateral, centre.y, centre.z + rz * lateral);
     this.drawRides(world, player, centre, lateral);
@@ -2287,56 +2917,106 @@ export class RunnerRenderer3D {
     } else {
       this.dog.frame(this.sheets[pose.sheet]!, pose.frame, 4, 2);
     }
+    // Only the default dog has front views: standing happy on the menu, trotting off as the run starts.
+    if (heroFront && !capture) this.dog.frame(this.sheets.actions!, world.phase === "ready" || Math.floor(world.drawnGait * 4) % 2 ? 4 : 5, 4, 2);
     const bike = world.cycling && !capture;
     const lift = bike ? this.drawBike(world, player, centre.heading) : 0;
     this.bicycle.setEnabled(bike);
     const rope = world.ride?.kind === "rope" ? world.ride : undefined;
-    const release = rope ? ropeReleaseProgress(world.distance, rope) : 0;
+    const release = rope ? ropeReleaseProgress(view, rope) : 0;
     // Squash on touchdown (rope release or any jump), stretch just after take-off.
     const animate = !this.settings.reducedMotion && !capture;
-    const land = animate ? Math.max(0, 1 - (world.elapsed - world.ropeLandedAt) / .16, 1 - (world.elapsed - world.landedAt) / .14) : 0;
-    const takeoff = animate && world.airborne ? Math.max(0, 1 - (world.elapsed - world.jumpedAt) / .18) : 0;
+    const sinceLand = Math.min(world.drawnElapsed - world.ropeLandedAt, world.drawnElapsed - world.landedAt);
+    const land = animate && sinceLand >= 0 && sinceLand < .2 ? Math.sin(Math.PI * sinceLand / .2) * (1 - sinceLand / .2) * 1.6 : 0;
+    // Stretched along the way it is moving, most just after take-off and just before landing, round at the top.
+    const takeoff = animate ? Math.min(1, Math.abs(world.drawnRise) / 10) * .85 : 0;
     const squash = (pose.sheet === "actions" && pose.frame === 3 ? .1 : 0) + land * .08;
-    this.dog.root.position.set(player.x + fx * fall.forward, player.y + DOG_SIZE * DOG_FEET + world.jumpHeight + lift - squash - fall.drop, player.z + fz * fall.forward);
-    const roll = this.schoolSheet ? fall.roll : fall.roll * .66;
     const motion = !capture && !this.settings.reducedMotion;
-    const swing = rope ? -lateral * .11 * (1 - release) + Math.sin(Math.PI * release) * .17 : 0;
-    // Lean into lane changes: a little on foot, more on a ride or the bicycle.
-    const lean = motion ? (world.lane - world.position) * (world.ride || bike ? .13 : .07) + swing : 0;
+    // A gallop bounces once a stride.
+    const gallop = motion && pose.sheet === "run" && !this.schoolSheet ? Math.sin(Math.PI * world.drawnGait) ** 2 * .07 : 0;
+    // Waiting on the menu the dog breathes and gives a little hop now and then.
+    const waiting = world.phase === "ready" && !this.settings.reducedMotion, beat = this.idleClock % 4.2;
+    const idleHop = waiting && beat < .42 ? Math.sin(Math.PI * beat / .42) * .32 : 0, breathe = waiting ? Math.sin(this.idleClock * 2.7) * .022 : 0;
+    this.dog.root.position.set(player.x + fx * fall.forward, player.y + DOG_SIZE * DOG_FEET + world.drawnJumpHeight + lift - squash - fall.drop + gallop + idleHop, player.z + fz * fall.forward);
+    const roll = this.schoolSheet ? fall.roll : fall.roll * .66;
+    // Hanging from the zipline or the balloons the body swings like a pendulum: steering throws it out
+    // to the side, then it swings back and settles. On the ground it straightens up again.
+    const lateralSpeed = dt > 0 ? (lateral - this.lastLateral) / dt : 0;
+    this.lastLateral = lateral;
+    if (((rope && release < .2) || world.flying) && motion && dt > 0) {
+      this.swayVelocity += (-this.sway * 30 - this.swayVelocity * 3.6 - lateralSpeed * .75) * dt;
+      this.sway = Math.max(-.4, Math.min(.4, this.sway + this.swayVelocity * dt));
+    } else { this.sway *= dt > 0 ? Math.exp(-dt * 8) : 1; this.swayVelocity = 0; }
+    const swing = this.sway + (rope ? Math.sin(Math.PI * release) * .17 : 0);
+    // Lean into lane changes (a little on foot, more on a ride or the bicycle) and into bends.
+    const turning = this.route.turnRate(view) * world.speed;
+    this.turnLean += (Math.max(-.16, Math.min(.16, turning * .035)) - this.turnLean) * (dt > 0 ? 1 - Math.exp(-dt * 10) : 1);
+    const lean = motion ? (world.lane - position) * (world.ride || bike ? .13 : .07) + swing + this.turnLean : 0;
     this.dog.root.rotation.set(0, 0, roll * (lateral > 0 ? -1 : 1) + lean);
     this.dog.root.billboardMode = grab ? Mesh.BILLBOARDMODE_NONE : Mesh.BILLBOARDMODE_Y;
-    this.dog.root.scaling.set(1 + land * .06 - takeoff * .05, 1 - land * .10 + takeoff * .09, 1);
+    this.dog.root.scaling.set(1 + land * .06 - takeoff * .05 - breathe * .5, 1 - land * .10 + takeoff * .09 + breathe, 1);
     this.dog.material.alpha = 1;
     if (falling && world.fallObstacle) {
       const surface = this.fallSurface(world, world.fallObstacle);
-      const below = surface - player.y - world.jumpHeight + fall.drop;
+      const below = surface - player.y - world.drawnJumpHeight + fall.drop;
       this.dog.material.alpha = Math.min(1, Math.max(0, (1.35 - below) / .45));
       if (!this.waterImpact && below > .28 && world.phase === "caught") {
-        this.waterImpact = true;
+        this.waterImpact = true; this.splashes++;
+        // A splash thrown up, and a ring of foam spreading on the water.
+        this.ripple.position.set(this.dog.root.position.x, surface + .05, this.dog.root.position.z); this.rippleAge = 0;
         if (!this.settings.reducedMotion) {
-          this.burst(this.magic, new Vector3(this.dog.root.position.x, surface + .08, this.dog.root.position.z), 12, ["#d7eeee", "#416e72"]);
+          const at = new Vector3(this.dog.root.position.x, surface + .06, this.dog.root.position.z);
+          this.burst(this.splash, at, 96); this.burst(this.magic, at, 16, ["#eefaff", "#5a9aa0"]);
+          this.burst(this.dust, new Vector3(this.dog.root.position.x, surface + .1, this.dog.root.position.z), 18, ["#f4fcffcc", "#9fc8d099"]);
         }
       }
     }
     this.dog.root.setEnabled(this.dog.material.alpha > 0);
-    this.skinHalo.setEnabled((world.fruit > 0 || this.dogLook !== "original") && !capture && !world.ride);
+    this.drawShowcase(world, player, intro, dt);
+    // Balloons overhead while flying, swaying; spring coils under the paws while the shoes last.
+    const flying = world.flying && !capture;
+    this.balloonBunch.setEnabled(flying);
+    if (flying) {
+      this.balloonBunch.position.set(this.dog.root.position.x, this.dog.root.position.y + .45, this.dog.root.position.z);
+      this.balloonBunch.rotation.set(motion ? Math.sin(t * 1.1) * .06 : 0, centre.heading, motion ? Math.sin(t * 1.4) * .09 - lean * .5 : 0);
+    }
+    const springs = world.spring > 0 && !capture && !world.ride && !world.flying && !bike;
+    this.springFeet.setEnabled(springs);
+    if (springs) {
+      this.springFeet.position.set(player.x, player.y + world.drawnJumpHeight - .02, player.z);
+      this.springFeet.rotation.y = centre.heading;
+      this.springFeet.scaling.set(1, 1 - land * .45 + takeoff * .5, 1);
+    }
+    // In the dark run the dog carries a lantern: a warm pool of light round it.
+    const lantern = world.mode === "dark" && !falling;
+    this.dogLantern.setEnabled(lantern);
+    if (lantern) {
+      this.dogLantern.position.set(player.x + fx * .6, player.y + 1.1 + world.drawnJumpHeight, player.z + fz * .6);
+      this.dogLantern.scaling.setAll(1 + (motion ? Math.sin(t * 7) * .04 : 0));
+    }
+    this.skinHalo.setEnabled((world.fruit > 0 || this.dogLook !== "original") && !capture && !world.ride && world.phase !== "ready");
     if (this.skinHalo.isEnabled()) {
       const hue = Color3.FromHexString(world.fruit > 0 ? "#ffcf41" : getDogLook(this.dogLook).color);
       (this.skinHalo.material as StandardMaterial).emissiveColor.copyFrom(hue);
-      this.skinHalo.position.set(player.x, player.y + .08 + world.jumpHeight + lift, player.z);
+      this.skinHalo.position.set(player.x, player.y + .08 + world.drawnJumpHeight + lift, player.z);
       this.skinHalo.scaling.setAll(1 + Math.sin(t * 5) * .07);
     }
     const overGap = world.items.some(gap => (gap.kind === "gap" || gap.kind === "long-gap") && Math.abs(gap.z - world.distance) < obstacleHalfDepth(gap.kind, gap.z) && coversLane(gap, world.position, .6));
     this.shadow.position.set(player.x, player.y + .03, player.z); this.shadow.rotation.set(this.roadPitch(world.distance), centre.heading, 0);
-    this.shadow.scaling.setAll(Math.max(.4, 1 - world.jumpHeight * .25));
+    this.shadow.scaling.setAll(Math.max(.4, 1 - world.drawnJumpHeight * .25));
     this.shadow.setEnabled(!falling && !overGap && !world.ride);
 
     this.drawEffects(world, player, t, dt, capture, lift);
 
-    if (!falling) this.updateCamera(world, player, centre, grab, dt, t);
+    if (!falling) this.updateCamera(world, player, centre, grab, dt, t, view, turning);
+    else this.followFall(world, player, dt);
     // Chaser: shown for the opening sprint and after a stumble.
     const frog = this.chaserSprite;
-    const close = capture ? 1 : world.phase === "ready" ? 0 : world.danger > 0 ? Math.min(1, world.danger / 2) : Math.max(0, 1 - world.elapsed / 3.5);
+    // In the dark run the frog is always there, as far back as it actually is.
+    // On the menu the frog lurks further back down the road, watching the dog.
+    const lurking = world.phase === "ready" && !world.hunt;
+    const close = capture || world.hunt || lurking ? 1 : world.danger > 0 ? Math.min(1, world.danger / 2) : Math.max(0, 1 - world.elapsed / 3.5);
+    const huntBack = world.hunt && world.phase !== "ready" ? Math.max(2.4, Math.min(18, world.hunt.gap)) : undefined;
     this.chaseApple.setEnabled(false);
     if (world.chase) {
       this.drawFrogAhead(world, t, dt);
@@ -2347,15 +3027,28 @@ export class RunnerRenderer3D {
     } else if (!capture) {
       frog.root.billboardMode = Mesh.BILLBOARDMODE_Y;
       frog.root.rotation.setAll(0);
-      frog.frame(this.sheets.walk!, chaserFrame(world, this.settings.reducedMotion), 4, 4);
-      frog.root.scaling.setAll(1);
+      // Stalking after the dog, lunging when it is right there, casting about once it has lost it.
+      const pose = this.chaserPose(world, t);
+      // It turns to face the camera on the menu and while the camera swings round; in the run it is seen from behind.
+      const direction = lurking || intro < 1 ? this.facing(frog.root.position, centre.heading) : BACK;
+      const centreHeight = this.frogPose(lurking ? (this.idleClock % 6.5 > 5.2 ? "laugh" : "search") : pose.sheet, direction);
       // On the log bridge the frog follows the log's centre line instead of an empty side lane.
       const onBridge = !!world.bridge;
       const base = onBridge ? centre : player;
       // Straight behind the dog it keeps further back so it does not hide the dog from the camera.
-      const side = onBridge ? 0 : world.position > 1.4 ? -1 : 1, back = onBridge ? 3.9 + (1 - close) * 3.2 : 2.4 + (1 - close) * 7;
-      frog.root.position.set(base.x - fx * back + rx * side * 1.45, elevationAt(world.distance - back) + FROG_SIZE * FROG_FEET + Math.abs(Math.sin(world.gait * Math.PI * 2)) * .12, base.z - fz * back + rz * side * 1.45);
-      frog.root.setEnabled(close > .02 && !world.ride && (!onBridge || world.danger > 0));
+      // While the camera swings round on the right at the start, the frog keeps to the left.
+      const sideTarget = onBridge ? 0 : lurking || intro < 1 || world.position > 1.4 ? -1 : 1;
+      const target = lurking ? 11 : huntBack ?? (onBridge ? 3.9 + (1 - close) * 3.2 : 2.4 + (1 - close) * 7);
+      // Eased, so it closes in when the run starts (and after a stumble) and crosses lanes instead of jumping.
+      const ease = (rate: number) => dt > 0 && !this.settings.reducedMotion ? 1 - Math.exp(-dt * rate) : 1;
+      this.frogBack += (target - this.frogBack) * ease(intro < 1 ? 2.2 : 6);
+      this.frogSide += (sideTarget - this.frogSide) * ease(5);
+      const back = this.frogBack, side = this.frogSide;
+      const stride = lurking || pose.sheet === "search" ? 0 : Math.abs(Math.sin(world.drawnGait * Math.PI * 2)) * .14;
+      const spread = lurking ? 2.2 : 1.45;
+      frog.root.position.set(base.x - fx * back + rx * side * spread, elevationAt(world.distance - back) + centreHeight + stride, base.z - fz * back + rz * side * spread);
+      frog.tint(lurking ? .62 : 1);
+      frog.root.setEnabled(close > .02 && !world.ride && (!onBridge || world.danger > 0 || !!world.hunt));
       frog.material.alpha = Math.min(1, close * 1.5);
     } else if (grab) this.drawCapture(world, player, centre.heading, grab);
 
@@ -2371,8 +3064,82 @@ export class RunnerRenderer3D {
     }
     this.mats["apple-glint"].alpha = .22 + (this.settings.reducedMotion ? 0 : Math.sin(t * 5) * .1);
     this.drawShark(world, dt);
-    this.drawWeather(weather, t, running && world.boost > 0, centre.heading, player.y);
+    // Speed lines on a dash, and streaming past on a downhill zipline; sparks from the pulley on the cable.
+    const zipping = !!rope && isDownhillRope(rope) && release < .2;
+    this.drawWeather(weather, t, running && (world.boost > 0 || zipping), centre.heading, player.y);
+    if (rope && release < .15 && running && !this.settings.reducedMotion && Math.random() < .6) this.burst(this.cartSparks, this.ropeHandle.position, 2);
+    this.drawSpectators(world, view, t, dt);
+    this.drawRain(world, view, weather, dt);
+    this.placeShadows(world, player, centre.heading, !night && theme !== 2);
+    this.updateLightShafts(night);
+    const nearBridge = this.bridgeNear(world);
+    this.ambience.update({
+      dt: world.phase === "paused" ? 0 : dt, scene: theme, night, weather, camera: this.camera.position, distance: world.distance,
+      place: this.placeOnRoute, sea: !!nearBridge && world.distance > nearBridge.start - 60 && world.distance < nearBridge.end, reducedMotion: this.settings.reducedMotion,
+    });
     this.scene.render();
+  }
+
+  /**
+   * Shows a frame of one of the haunted frog's directional sheets on the chaser sprite, cropped to the
+   * frog and `scale` times its usual size. Returns how high its centre sits above its feet.
+   */
+  private frogPose(sheet: FrogSheet, direction: number, scale = 1) {
+    const atlas = FROG_EXTRA_ART[FROG_ATLAS[sheet]], rect = atlas.frames[direction], size = scale * FROG_CROP_SCALE;
+    this.chaserSprite.region(this.sheets[sheet]!, rect.x / atlas.width, rect.y / atlas.height, rect.width / atlas.width, rect.height / atlas.height);
+    this.chaserSprite.root.scaling.set(size * rect.width / rect.height, size, 1);
+    return FROG_SIZE * size / 2;
+  }
+
+  /** The frog behind the dog: two stalking strides in turn; a lunge when right on it; looking about as it gives up. */
+  private chaserPose(world: RunnerWorld, t: number): { sheet: FrogSheet } {
+    if (this.settings.reducedMotion) return { sheet: "stalk" };
+    const lunging = world.hunt ? world.hunt.gap < 4.5 : world.danger > 6.8;
+    if (lunging) return { sheet: Math.floor(t * 5) % 2 ? "grab" : "stalkB" };
+    if (!world.hunt && world.danger > 0 && world.danger < .9 && world.elapsed > 4) return { sheet: "search" };
+    return { sheet: Math.floor(world.drawnGait * 2) % 2 ? "stalk" : "stalkB" };
+  }
+
+  /**
+   * Now and then a milk frog stands at the roadside to cheer the dog past: waving as it comes, jumping
+   * for joy as it goes by, turning to watch it go. At night they yawn and rub their eyes; a near miss
+   * right in front of them makes them gasp. Not underground, on the log bridge, or in the dark run.
+   */
+  private drawSpectators(world: RunnerWorld, view: number, t: number, dt: number) {
+    const live = world.phase === "running" || world.phase === "paused" || world.phase === "ready";
+    if (live && view + 130 > this.nextSpectator) {
+      const spot = this.nextSpectator;
+      this.nextSpectator += 240 + Math.random() * 260;
+      const section = sectionFeature(spot), nearFeature = !!section && spot > section.start - 40 && spot < section.end + 25;
+      const free = this.spectators.find(s => !s.on);
+      if (free && sceneAt(spot) !== 2 && world.mode !== "dark" && !nearFeature && !world.turns.some(turn => Math.abs(turn.z - spot) < 32)) {
+        Object.assign(free, { on: true, z: spot, side: Math.random() < .5 ? -1 : 1, seed: Math.random() * 10 });
+      }
+    }
+    const motion = this.settings.reducedMotion ? 0 : 1, gasp = world.elapsed - world.nearAt < 1.3;
+    for (const s of this.spectators) {
+      const ahead = s.z - view;
+      if (!s.on || ahead < -14 || !s.atlas || !s.extra) { s.on = s.on && ahead >= -14; s.sprite.root.setEnabled(false); continue; }
+      let extra = false, cell: number = MILK.neutral, hop = 0;
+      const beat = (rate: number) => Math.floor(t * rate + s.seed) % 2 === 0;
+      if (world.night) { extra = beat(.6); cell = extra ? MILK_EXTRA.yawn : MILK.blink; }
+      else if (gasp && Math.abs(ahead) < 30) { extra = true; cell = MILK_EXTRA.surprise; }
+      else if (ahead > 22) { extra = beat(2.2); cell = extra ? MILK_EXTRA.wave : MILK.raise; }
+      else if (ahead > -3) { cell = beat(3) ? MILK.celebrate : MILK.laugh; hop = Math.abs(Math.sin(t * 9 + s.seed)) * .2 * motion; }
+      else cell = MILK.look;
+      if (extra) s.sprite.frame(s.extra, cell, 2, 2); else s.sprite.frame(s.atlas, cell, 4, 2);
+      const p = this.place(s.z, s.side * (ROAD_HALF + 1.9));
+      s.sprite.root.position.set(p.x, p.y + SPECTATOR_SIZE * .43 + hop, p.z);
+      s.sprite.tint(world.night ? .78 : 1);
+      s.sprite.root.setEnabled(true);
+    }
+    if (dt > 0 && this.rippleAge < 1.4) {
+      this.rippleAge += dt;
+      const k = this.rippleAge / 1.4;
+      this.ripple.scaling.setAll(.8 + k * 4.5);
+      (this.ripple.material as StandardMaterial).alpha = (1 - k) * .85;
+    }
+    this.ripple.setEnabled(this.rippleAge < 1.4);
   }
 
   /**
@@ -2389,18 +3156,19 @@ export class RunnerRenderer3D {
     // Over a zipline it hangs from the cable like the dog does.
     const hang = ride?.kind === "rope" && z > ride.start && z < ride.end ? Math.max(0, riderHeightAt(z, ride)) : 0;
     const done = world.phase !== "running" && world.phase !== "paused";
-    const bob = done ? 0 : Math.abs(Math.sin(world.gait * Math.PI * 2)) * .12 * motion;
+    const bob = done ? 0 : Math.abs(Math.sin(world.drawnGait * Math.PI * 2)) * .12 * motion;
     frog.root.position.set(at.x, at.y + hang + FROG_SIZE * FROG_FEET + bob, at.z);
     frog.material.alpha = 1;
     frog.root.setEnabled(true);
-    if (done) {
-      // Turned to face the camera, doubled up laughing.
-      const atlas = FROG_EXTRA_ART.directionLaugh, rect = atlas.frames[0], scale = 1.15;
-      frog.region(this.sheets.laugh!, rect.x / atlas.width, rect.y / atlas.height, rect.width / atlas.width, rect.height / atlas.height);
+    // It turns round to lob a crate back, and to laugh at the dog when the dog runs into something.
+    const throwing = world.items.some(item => item.thrownAt !== undefined && world.elapsed - item.thrownAt < .35);
+    const taunting = world.hitAt > 0 && world.elapsed - world.hitAt < .9;
+    if (done || (motion && (taunting || throwing))) {
+      // Facing the camera: doubled up laughing at the end or at a stumble, arms out as it throws.
       frog.root.billboardMode = Mesh.BILLBOARDMODE_Y;
       frog.root.rotation.setAll(0);
-      frog.root.scaling.set(scale * rect.width / rect.height, scale, 1);
-      frog.root.position.y += Math.abs(Math.sin(t * 9)) * .08 * motion;
+      const laughing = done || taunting, centreHeight = this.frogPose(laughing ? "laugh" : "grab", FRONT, done ? 1.28 : 1.12);
+      frog.root.position.y += centreHeight - FROG_SIZE * FROG_FEET + (laughing ? Math.abs(Math.sin(t * 9)) * .08 * motion : 0);
     } else {
       frog.root.billboardMode = Mesh.BILLBOARDMODE_Y;
       frog.root.rotation.setAll(0); frog.root.scaling.setAll(1);
@@ -2429,7 +3197,17 @@ export class RunnerRenderer3D {
     this.lastTime = 0;
     this.fireParticleTime = 0;
     this.waterImpact = false;
-    this.seen = { silver: world.silver, gold: world.gold, diamond: world.diamond, power: world.powerPicked, shield: world.shieldSaves, stumble: world.stumbles, turns: world.turnCount, wrong: world.wrongTurn?.z ?? -1, bumps: world.wallBumps };
+    this.seen = {
+      silver: world.silver, gold: world.gold, diamond: world.diamond, power: world.powerPicked, shield: world.shieldSaves, stumble: world.stumbles, turns: world.turnCount, wrong: world.wrongTurn?.z ?? -1, bumps: world.wallBumps,
+      landed: world.landedAt, slides: world.slides, doubles: world.doubleJumps, near: world.nearMisses, revives: world.revives,
+    };
+    this.ambience.reset(); this.rumble = 0; this.stepDust = 0; this.dustTime = 0; this.turnLean = 0; this.camBank = 0; this.camRise = 0; this.frogBack = 8; this.frogSide = -1;
+    this.sway = this.swayVelocity = this.lastLateral = 0; this.rippleAge = 9; this.nextSpectator = world.distance + 160;
+    this.pickupRingAge = 9; this.seenChests = world.chests;
+    if (this.spare && this.renderScale < 1) { this.renderScale = Math.min(1, this.renderScale + .12); this.resize(); }
+    else if (this.spare) this.shadowsResting = false;
+    this.spare = false; this.slowTime = this.fastTime = 0;
+    for (const spectator of this.spectators) { spectator.on = false; spectator.sprite.root.setEnabled(false); }
     this.flash = { shield: 0, power: 0 };
     this.turnBlend = { x: 0, z: 0 };
     this.camYaw = 0; this.camLateral = 0;
@@ -2439,13 +3217,15 @@ export class RunnerRenderer3D {
     this.cameraPos.set(0, 4.2, -8); this.cameraTarget.set(0, 1.2, 6);
   }
 
-  private drawAtmosphere(theme: number, look: Theme, night: boolean, weather: string) {
+  /** `dark`: the dark run, where night closes in to a few dozen metres round the dog's lantern. */
+  private drawAtmosphere(theme: number, look: Theme, night: boolean, weather: string, dark = false) {
     const dim = night ? .6 : weather === "sunny" ? 1 : .82;
     const sky = night ? look.nightSky : look.sky, fog = night ? look.nightFog : look.fog;
     const wet = weather === "rain" ? .85 : weather === "snow" ? 1.12 : 1;
     this.scene.clearColor = new Color4(sky.r * wet, sky.g * wet, sky.b * wet, 1);
     this.scene.fogColor = weather === "snow" && !night ? Color3.Lerp(fog, new Color3(.85, .88, .9), .5) : fog.scale(wet);
-    this.scene.fogEnd = weather === "sunny" ? 170 : 125; this.scene.fogStart = weather === "sunny" ? 55 : 28;
+    this.scene.fogEnd = dark ? 52 : weather === "sunny" ? 170 : 125; this.scene.fogStart = dark ? 7 : weather === "sunny" ? 55 : 28;
+    if (dark) { this.scene.fogColor = fog.scale(.55); this.scene.clearColor = new Color4(fog.r * .55, fog.g * .55, fog.b * .55, 1); }
     this.ambient.intensity = theme === 2 ? .7 : night ? .62 : .75 * dim;
     this.ambient.groundColor.set(.3 * dim, .27 * dim, .22 * dim);
     this.ambient.diffuse.set(night ? .7 : 1, night ? .76 : 1, night ? 1 : 1);
@@ -2466,7 +3246,8 @@ export class RunnerRenderer3D {
     const skies = this.skies[theme];
     if (skies) this.skyMat.diffuseTexture = night ? skies.night : skies.day;
     this.skyMat.emissiveColor.setAll(night ? .8 : weather === "sunny" ? 1 : .78);
-    this.sky.setEnabled(theme !== 2);
+    // In the dark run the night closes in completely: no distant skyline, just the fog.
+    this.sky.setEnabled(theme !== 2 && !dark);
     this.mats["lamp-halo"].alpha = night || theme === 2 ? .9 : 0;
     for (const sign of ["fork-sign", "shaft-sign"]) this.mats[sign].emissiveColor.setAll(night ? .62 : theme === 2 ? .78 : .95);
   }
@@ -2509,10 +3290,18 @@ export class RunnerRenderer3D {
     }
     this.groundCuts.length = Math.min(this.groundCuts.length, MAX_GROUND_OPENINGS);
     if (this.route.version !== this.routeVersion) { this.routeVersion = this.route.version; for (const slot of this.slots) slot.n = Number.NaN; }
+    // Dressing a slot for another scene is the costliest step of a frame. After a restart every slot needs
+    // it at once, which stalled the first frame of the run; now the far ones (deep in the fog) wait a frame or two.
+    let dressBudget = 6;
     for (let n = first; n < first + SLOTS; n++) {
       const slot = this.slots[((n % SLOTS) + SLOTS) % SLOTS];
       const recycled = slot.n !== n;
       const at = n * TILE + TILE / 2;
+      if (recycled && slot.theme !== sceneAt(at)) {
+        if (dressBudget <= 0 && n - first > 10) { slot.root.setEnabled(false); continue; }
+        dressBudget--;
+      }
+      if (recycled) slot.root.setEnabled(true);
       // Placing a slot (or opening a hole in it) briefly thaws its frozen world matrices.
       let thawed = recycled;
       if (recycled) {
@@ -2532,6 +3321,16 @@ export class RunnerRenderer3D {
           const size = 1.5 + (n % 3) * .35, side = index === 0 ? -1 : 1;
           ore.material = this.mats[ORES[variant]];
           ore.scaling.set(side * size, size, 1); ore.position.set(side * (MINE_WALL - .2), size * .46 + (variant % 2) * .6, -.42);
+        }
+        if (slot.puddle) {
+          const pick = hash01(n, 71);
+          slot.puddleLane = pick < .34 ? Math.floor(hash01(n, 72) * 3) : undefined;
+          if (slot.puddleLane !== undefined) {
+            slot.puddle.position.set((slot.puddleLane - 1) * LANE_WIDTH + (hash01(n, 73) - .5) * .9, 0, (hash01(n, 74) - .5) * 2.2);
+            slot.puddle.rotation.y = hash01(n, 75) * Math.PI;
+            slot.puddle.scaling.set(1.3 + hash01(n, 76) * 1.2, 1, 1 + hash01(n, 77) * 1.4);
+          }
+          slot.puddle.setEnabled(this.puddlesShown && slot.puddleLane !== undefined);
         }
         // Plants and rocks turn and change size from tile to tile, so the same few models never line up.
         for (const d of slot.decor) {
@@ -2722,7 +3521,7 @@ export class RunnerRenderer3D {
     const side = turn.direction === "left" ? 1 : -1;
     const branch = new TransformNode(`fork-${turn.z}`, this.scene);
     branch.parent = corner; branch.rotation.y = side * Math.PI / 2;
-    const lane = `lane-${RUN_SCENES[theme].id}`, stub = FORK_BRIDGE_START - FORK_STUB_START;
+    const lane = `lane-${RUN_SCENES[theme].id}`, stub = FORK_DECK - FORK_STUB_START;
     for (let row = 0; row < 2; row++) for (let i = 0; i < 3; i++) {
       const tile = this.instance(lane, branch);
       tile.position.set((i - 1) * LANE_WIDTH, 0, FORK_STUB_START + stub * (row + .5) / 2);
@@ -2730,7 +3529,7 @@ export class RunnerRenderer3D {
     }
     this.instance("fork-stub", branch).position.z = FORK_STUB_START;
     const bridge = this.instance("fork-bridge", branch);
-    bridge.position.z = FORK_BRIDGE_START;
+    bridge.position.z = FORK_DECK;
     const chasm = bridge.getChildTransformNodes(true).find(node => node.name === "fork-chasm");
     // Over the canal the bridge spans open water; elsewhere a ravine is cut into the ground.
     if (chasm) { chasm.position.y = -elevationAt(turn.z); chasm.setEnabled(theme !== 0); }
@@ -2744,7 +3543,7 @@ export class RunnerRenderer3D {
     const corner = this.route.corner(turn.z);
     if (!corner) return undefined;
     const heading = corner.heading + (turn.direction === "left" ? 1 : -1) * Math.PI / 2;
-    const along = FORK_BRIDGE_START + (FORK_CHASM.start + FORK_CHASM.end) / 2;
+    const along = FORK_DECK + (FORK_CHASM.start + FORK_CHASM.end) / 2;
     return { x: corner.x + Math.sin(heading) * along, y: 0, z: corner.z + Math.cos(heading) * along, heading };
   }
 
@@ -2842,11 +3641,13 @@ export class RunnerRenderer3D {
 
     this.ropeHandle.setEnabled(mounted?.kind === "rope");
     if (mounted?.kind === "rope") {
-      const height = ropeHeightAt(world.distance, mounted);
-      const board = Math.min(1, (world.distance - mounted.start) / (ROPE_GRAB_DISTANCE * .55));
-      const spring = Math.min(1, ropeReleaseProgress(world.distance, mounted) * 4);
+      // Where the dog is drawn along the cable (the last step carried on), so the handle keeps pace with it.
+      const along = world.distance + world.lag * world.speed;
+      const height = ropeHeightAt(along, mounted);
+      const board = Math.min(1, (along - mounted.start) / (ROPE_GRAB_DISTANCE * .55));
+      const spring = Math.min(1, ropeReleaseProgress(along, mounted) * 4);
       const attached = Math.max(0, Math.min(1, board)) * (1 - spring);
-      const hand = height - player.y - world.jumpHeight - DOG_SIZE * DOG_FEET - .25;
+      const hand = height - player.y - world.drawnJumpHeight - DOG_SIZE * DOG_FEET - .25;
       const grip = .18 + (Math.max(.21, hand) - .18) * attached;
       const swing = lateral * attached;
       this.ropeHandle.position.set(centre.x, height, centre.z);
@@ -2864,7 +3665,7 @@ export class RunnerRenderer3D {
     const bump = Math.sin(Math.PI / 2 * progress);
     const rise = obstacle?.kind === "block" ? 1.04 * bump : .61 * bump;
     const tilt = this.settings.reducedMotion ? 0 : .27 * bump;
-    this.bicycle.position.set(player.x, player.y + world.jumpHeight + rise, player.z);
+    this.bicycle.position.set(player.x, player.y + world.drawnJumpHeight + rise, player.z);
     this.bicycle.rotation.set(this.roadPitch(world.distance) - tilt, heading - (this.settings.reducedMotion ? 0 : .12), this.settings.reducedMotion ? 0 : (world.lane - world.position) * .18);
     for (const wheel of this.bikeWheels) wheel.rotation.x = -world.distance / .4;
     return .72 + rise;
@@ -2916,6 +3717,11 @@ export class RunnerRenderer3D {
   private propName(item: RunItem) {
     if (item.kind === "coin") return `coin-${item.tier ?? "silver"}`;
     const scene = sceneAt(item.z), size = item.span === 3 ? "-wide" : item.span === 2 ? "-double" : "";
+    if (item.roll) {
+      if (item.kind === "runaway-cart") return "runaway-cart";
+      const themed = `boulder-rolling${scene === 0 ? "" : `@${RUN_SCENES[scene].id}`}`;
+      return this.templates.has(themed) ? themed : "boulder-rolling";
+    }
     if (item.kind === "block" && scene <= 1) {
       // Canal and temple logs: creepers in the temple, mushrooms on about half the two-lane piles.
       return `block${size}${scene === 1 ? "-vine" : ""}${item.span === 2 && hash01(item.id, 5) < .5 ? "-mushroom" : ""}`;
@@ -2924,8 +3730,40 @@ export class RunnerRenderer3D {
     return this.templates.has(themed) ? themed : `${item.kind}${size}`;
   }
 
+  /** A boulder turns as it rolls; a runaway cart faces the dog and rattles along. */
+  private drawRolling(prop: TransformNode, item: RunItem, t: number) {
+    const travelled = item.rollFrom === undefined ? 0 : item.rollFrom - item.z;
+    if (item.kind === "runaway-cart") {
+      prop.rotation.y += Math.PI;
+      const body = prop.getDescendants(false, node => node.name === "cart-body")[0] as TransformNode | undefined;
+      const rattle = item.rollFrom !== undefined && !this.settings.reducedMotion ? 1 : 0;
+      if (body) { body.rotation.z = Math.sin(t * 13 + item.id) * .045 * rattle; body.position.y = Math.abs(Math.sin(t * 17 + item.id)) * .05 * rattle; }
+      return;
+    }
+    const roller = prop.getDescendants(false, node => node.name === "roller")[0] as TransformNode | undefined;
+    if (roller) roller.rotation.x = -travelled / ROLLER_RADIUS;
+  }
+
+  private visibleProps = new Set<number>();
+  // Reused every frame instead of made anew (fewer pauses to collect garbage).
+  private effectAt = new Vector3();
+  private coinAt = new Vector3();
+  private feetAt = new Vector3();
+  private propParts = new WeakMap<TransformNode, Map<string, (TransformNode | AbstractMesh)[]>>();
+  /** A prop's parts by name (or the model's direct children when no name is given), found once and kept. */
+  private partsOf(prop: TransformNode, name = ""): (TransformNode | AbstractMesh)[] {
+    let parts = this.propParts.get(prop);
+    if (!parts) { parts = new Map(); this.propParts.set(prop, parts); }
+    let found = parts.get(name);
+    if (!found) {
+      found = name ? prop.getChildMeshes(false).filter(mesh => mesh.name === name) : (prop.getChildren()[0]?.getChildren() ?? []) as (TransformNode | AbstractMesh)[];
+      parts.set(name, found);
+    }
+    return found;
+  }
   private drawProps(world: RunnerWorld, t: number, dt: number) {
-    const visible = new Set<number>();
+    const visible = this.visibleProps;
+    visible.clear();
     for (const item of world.items) {
       const depth = item.kind === "long-gap" ? obstacleHalfDepth(item.kind, item.z) : 0;
       if (item.z + depth <= world.distance - 8 || item.z - depth >= world.distance + 155) continue;
@@ -2951,21 +3789,31 @@ export class RunnerRenderer3D {
       }
       const p = this.place(item.z, itemOffset(item) * (item.feature === "rope" ? ROPE_LANE_SCALE : 1));
       prop.position.set(p.x, p.y, p.z); prop.rotation.set(isRunObstacle(item.kind) ? this.roadPitch(item.z) : 0, p.heading, 0);
+      if (item.roll) this.drawRolling(prop, item, t);
       if (item.thrownAt !== undefined) {
         // A crate the frog has just tossed back: it drops in tumbling and lands with a bump.
         const k = Math.max(0, Math.min(1, (world.elapsed - item.thrownAt) / .5));
         prop.position.y += 3.2 * (1 - k) * (1 - k) + Math.sin(Math.PI * k) * .9;
         prop.rotation.x += (1 - k) * 4; prop.rotation.z += (1 - k) * 2.5;
+        for (const part of prop.getChildMeshes(false)) if (part.name === "contact-shadow") part.setEnabled(k >= 1);
       }
       if (item.kind === "coin") {
         prop.position.y += item.y ?? .8; prop.rotation.y += t * 3 + item.id;
         if (item.pulled) prop.scaling.setAll(1.25);
       }
       else if (item.kind === "fruit") this.drawFruit(prop, item, world.distance, t);
-      else if (isRunPower(item.kind)) { prop.position.y += Math.sin(t * 3 + item.id) * .15; prop.getChildren()[0]?.getChildren().forEach(c => { if (c.name === "halo") (c as TransformNode).rotation.y = t * 2; }); }
+      else if (isRunPower(item.kind) || isRunPickup(item.kind)) {
+        // Bob the model (its ring and shadow stay on the road), and turn it round so its shape reads.
+        const bob = Math.sin(t * 3 + item.id) * .15;
+        const parts = this.partsOf(prop);
+        const model = parts.find(child => child.name === "model") as TransformNode | undefined;
+        if (model) { model.position.y = 1.15 + bob; model.rotation.y = this.settings.reducedMotion ? .6 : t * 1.8 + item.id; model.rotation.x = item.kind === "lantern" || item.kind === "balloon" ? 0 : Math.sin(t * 1.3 + item.id) * .12; }
+        const shadow = parts.find(child => child.name === "contact-shadow") as Mesh | undefined;
+        if (shadow) shadow.scaling.setAll(1 - bob * .9);
+      }
       else if (item.kind === "fire") {
         const phase = this.settings.reducedMotion ? 0 : t;
-        for (const [index, mesh] of prop.getChildMeshes().filter(mesh => mesh.name === "flame-volume").entries()) {
+        for (const [index, mesh] of this.partsOf(prop, "flame-volume").entries()) {
           const beat = item.id * .29 + index * 2.3;
           const [, , height, width] = FLAMES[index];
           mesh.scaling.x = width * (1 + Math.sin(phase * 11 + beat) * .1);
@@ -2975,7 +3823,7 @@ export class RunnerRenderer3D {
       }
       else if (item.kind === "trap" && world.fallObstacle === item) {
         // The two leaves swing down around their outer rails, clearing the middle of the shaft.
-        const planks = prop.getChildMeshes().filter(mesh => mesh.name === "trap-plank");
+        const planks = this.partsOf(prop, "trap-plank");
         for (const [index, plank] of planks.entries()) {
           const closedX = (index - 3.5) * (LANE_WIDTH / 4);
           const side = Math.sign(closedX);
@@ -2988,7 +3836,21 @@ export class RunnerRenderer3D {
         }
       }
     }
+    // Rolling hazards: dust thrown up behind a boulder, sparks under a cart, and the ground shaking as one comes close.
+    this.rumble = 0;
     if (world.phase !== "running") return;
+    this.dustTime += dt * 60;
+    const dustTicks = Math.floor(this.dustTime); this.dustTime -= dustTicks;
+    for (const item of world.items) {
+      if (!item.roll || item.rollFrom === undefined) continue;
+      const gap = item.z - world.distance;
+      if (gap < -12 || gap > 70) continue;
+      this.rumble = Math.max(this.rumble, 1 - Math.abs(gap) / 28);
+      if (!dustTicks || this.settings.reducedMotion) continue;
+      const at = this.place(item.z + 1.1, itemOffset(item));
+      if (item.kind === "runaway-cart") this.burst(this.cartSparks, new Vector3(at.x, at.y + .15, at.z), dustTicks * 2);
+      else this.burst(this.rollDust, new Vector3(at.x, at.y + .15, at.z), dustTicks * 2, DUST[sceneAt(item.z)]);
+    }
     const fire = world.items.find(item => item.kind === "fire" && item.z > world.distance - 2 && item.z < world.distance + 22);
     if (!fire) { this.fireParticleTime = 0; return; }
     this.fireParticleTime += dt * 60 * world.timeScale;
@@ -3007,8 +3869,8 @@ export class RunnerRenderer3D {
   }
 
   private drawEffects(world: RunnerWorld, player: Vector3, t: number, dt: number, capture: boolean, lift: number) {
-    const at = new Vector3(player.x, player.y + .9 + world.jumpHeight + lift, player.z);
-    const coinAt = at.add(new Vector3(0, .3, 0));
+    const at = this.effectAt.set(player.x, player.y + .9 + world.drawnJumpHeight + lift, player.z);
+    const coinAt = this.coinAt.set(at.x, at.y + .3, at.z);
     for (const [tier, system] of [["silver", this.silverSparks], ["gold", this.sparks], ["diamond", this.diamondSparks]] as const) {
       if (world[tier] > this.seen[tier]) this.burst(system, coinAt, Math.min(30, (world[tier] - this.seen[tier]) * 8));
       this.seen[tier] = world[tier];
@@ -3019,6 +3881,18 @@ export class RunnerRenderer3D {
       this.burst(this.magic, at, apple ? 200 : 70, POWER_COLORS[world.lastPower]); this.flash.power = 1;
       if (apple) this.burst(this.appleSparkles, at, 120);
     }
+    // A ring of the power's colour spreads over the road from the dog; gold for a chest.
+    const ringColour = world.powerPicked > this.seen.power ? POWER_COLORS[world.lastPower][0] : world.chests > this.seenChests ? "#ffd75e" : "";
+    this.seenChests = world.chests;
+    if (ringColour && !this.settings.reducedMotion) { this.pickupRingAge = 0; (this.pickupRing.material as StandardMaterial).emissiveColor = Color3.FromHexString(ringColour); }
+    if (this.pickupRingAge < .55) {
+      this.pickupRingAge += dt;
+      const k = Math.min(1, this.pickupRingAge / .55);
+      this.pickupRing.position.set(player.x, player.y + .06, player.z);
+      this.pickupRing.scaling.setAll(.6 + (1 - (1 - k) ** 2) * 5.4);
+      (this.pickupRing.material as StandardMaterial).alpha = (1 - k) * .95;
+    }
+    this.pickupRing.setEnabled(this.pickupRingAge < .55);
     if (world.wallBumps > this.seen.bumps) this.burst(this.magic, new Vector3(player.x, player.y + .5, player.z), 26, ["#d9c7a4", "#7a6648"]);
     this.seen.bumps = world.wallBumps;
     this.seen.power = world.powerPicked;
@@ -3028,6 +3902,33 @@ export class RunnerRenderer3D {
     this.seen.stumble = world.stumbles;
     this.flash.power = Math.max(0, this.flash.power - dt * 2.5);
     this.flash.shield = Math.max(0, this.flash.shield - dt * 2);
+
+    // Underfoot: a puff on landing, a spray as a slide starts, a little kicked up behind while running.
+    // Rain splashes instead of raising dust, except underground.
+    const rainy = world.weather === "rain" && world.sceneIndex !== 2;
+    const colours = rainy ? SPLASH : DUST[world.sceneIndex];
+    const feet = this.feetAt.set(player.x, player.y + .06 + world.drawnJumpHeight, player.z);
+    const onFoot = !capture && !world.ride && !world.cycling;
+    if (world.landedAt > this.seen.landed) { if (onFoot) this.burst(this.dust, feet, 12, colours); this.seen.landed = world.landedAt; }
+    if (world.slides > this.seen.slides) { if (onFoot && !world.airborne) this.burst(this.dust, feet, 10, colours); this.seen.slides = world.slides; }
+    if (world.doubleJumps > this.seen.doubles) { this.burst(this.magic, feet, 16, ["#ffffff", "#bfe9ff"]); this.seen.doubles = world.doubleJumps; }
+    if (onFoot && !world.airborne && world.phase === "running" && !this.settings.reducedMotion) {
+      // Powder snow and sand kick up most, then rain splashes; stone and earth only a little.
+      const rate = world.sceneIndex >= 4 ? 16 : rainy ? 10 : world.sceneIndex === 2 ? 6 : 4;
+      this.stepDust += dt * rate * Math.min(1.5, world.speed / 18);
+      const n = Math.floor(this.stepDust);
+      if (n) {
+        this.stepDust -= n;
+        this.burst(this.dust, new Vector3(feet.x - Math.sin(this.camYaw) * .35, feet.y, feet.z - Math.cos(this.camYaw) * .35), n, colours);
+      }
+    }
+    if (world.nearMisses > this.seen.near) {
+      // A near miss: white streaks whip back past the dog.
+      const fx = Math.sin(this.camYaw), fz = Math.cos(this.camYaw);
+      this.nearStreaks.direction1.set(-fx - .5, .05, -fz - .5); this.nearStreaks.direction2.set(-fx + .5, .45, -fz + .5);
+      this.burst(this.nearStreaks, at, 14);
+      this.seen.near = world.nearMisses;
+    }
 
     const motion = this.settings.reducedMotion ? 0 : 1;
     // Shield: a bubble around the dog, blinking in its last three seconds; it bursts when used.
@@ -3047,15 +3948,15 @@ export class RunnerRenderer3D {
     const magnetOn = !capture && (golden || world.magnet > 0);
     this.magnetRing.setEnabled(magnetOn);
     if (magnetOn) {
-      this.magnetRing.position.set(player.x, player.y + .15 + world.jumpHeight + lift + Math.sin(t * 6) * .12 * motion, player.z);
+      this.magnetRing.position.set(player.x, player.y + .15 + world.drawnJumpHeight + lift + Math.sin(t * 6) * .12 * motion, player.z);
       this.magnetRing.rotation.y = t * 4; this.magnetRing.scaling.setAll(1 + Math.sin(t * 9) * .08 * motion);
       (this.magnetRing.material as StandardMaterial).alpha = world.magnet < 3 && Math.floor(t * 8) % 2 === 0 ? .25 : .8;
     }
     // Boost: golden glow under the dog plus speed lines (in drawWeather) and wider FOV.
     const boostOn = !capture && world.invincible;
     this.boostGlow.setEnabled(boostOn);
-    if (boostOn) { this.boostGlow.position.set(player.x, player.y + .05 + world.jumpHeight, player.z); this.boostGlow.rotation.y = Math.atan2(player.x - this.camera.position.x, player.z - this.camera.position.z); }
-    if (boostOn && Math.random() < .5) this.burst(this.magic, new Vector3(player.x, player.y + .5 + world.jumpHeight, player.z), 2, POWER_COLORS.boost);
+    if (boostOn) { this.boostGlow.position.set(player.x, player.y + .05 + world.drawnJumpHeight, player.z); this.boostGlow.rotation.y = Math.atan2(player.x - this.camera.position.x, player.z - this.camera.position.z); }
+    if (boostOn && Math.random() < .5) this.burst(this.magic, new Vector3(player.x, player.y + .5 + world.drawnJumpHeight, player.z), 2, POWER_COLORS.boost);
   }
 
   private drawCapture(world: RunnerWorld, player: Vector3, heading: number, motion: ReturnType<typeof captureMotion>) {
@@ -3074,22 +3975,18 @@ export class RunnerRenderer3D {
     const view = this.camera.position.subtract(frogAt);
     const angle = Math.atan2(Vector3.Dot(view, right), Vector3.Dot(view, forward));
     const frame = (8 + Math.round(-angle / (Math.PI / 4))) % 8;
-    if (time < .15) {
-      frog.frame(this.sheets.walk!, frame, 4, 4);
-    } else {
-      const laughing = time >= CAPTURE_LAUGH_AT;
-      const atlas = laughing ? FROG_EXTRA_ART.directionLaugh : FROG_EXTRA_ART.directionAttack;
-      const rect = atlas.frames[frame];
-      frog.region(this.sheets[laughing ? "laugh" : "grab"]!, rect.x / atlas.width, rect.y / atlas.height, rect.width / atlas.width, rect.height / atlas.height);
-      frog.root.scaling.x *= rect.width / rect.height;
-    }
+    // Closing in at a stalk, the grab, then doubled up laughing — every pose turned to face the camera as it swings round.
+    const sheet: FrogSheet = time < .15 ? (Math.floor(time * 20) % 2 ? "stalkB" : "stalk") : time >= CAPTURE_LAUGH_AT ? "laugh" : "grab";
+    const atlas = FROG_EXTRA_ART[FROG_ATLAS[sheet]], rect = atlas.frames[frame];
+    frog.region(this.sheets[sheet]!, rect.x / atlas.width, rect.y / atlas.height, rect.width / atlas.width, rect.height / atlas.height);
+    frog.root.scaling.x *= rect.width / rect.height;
     frog.root.billboardMode = Mesh.BILLBOARDMODE_NONE;
     frog.material.alpha = world.danger > 0 || world.elapsed < 3.5 ? 1 : Math.min(1, time / .13);
     frog.root.setEnabled(frog.material.alpha > 0);
 
     dog.position.subtractInPlace(forward.scale(.52 * reach + .73 * lift));
     dog.position.subtractInPlace(right.scale(side * .80 * lift));
-    dog.position.y += height - world.jumpHeight * reach;
+    dog.position.y += height - world.drawnJumpHeight * reach;
     dog.rotation.z = side * tilt;
     // Face each sprite toward the moving camera, including when it crosses the side of the road.
     for (const actor of [frog.root, dog]) {
@@ -3099,15 +3996,262 @@ export class RunnerRenderer3D {
     }
     this.shadow.position.x = dog.position.x;
     this.shadow.position.z = dog.position.z;
-    this.shadow.scaling.setAll(Math.max(.4, 1 - (height + world.jumpHeight * (1 - reach)) * .35));
+    this.shadow.scaling.setAll(Math.max(.4, 1 - (height + world.drawnJumpHeight * (1 - reach)) * .35));
   }
 
-  private updateCamera(world: RunnerWorld, player: Vector3, centre: RoutePoint, shot: ReturnType<typeof captureMotion> | undefined, dt: number, t: number) {
+  /**
+   * The menu's showcase: the dog outlined in light (its own drawing, bigger and glowing, just behind it),
+   * standing on a lit disc with a ring of light pulsing outward and sparks drifting up. It fades as a run starts.
+   */
+  private drawShowcase(world: RunnerWorld, player: Vector3, intro: number, dt: number) {
+    const fade = world.phase === "ready" ? 1 : world.phase === "running" ? Math.max(0, 1 - intro * 3) : 0;
+    const on = fade > 0 && this.dog.root.isEnabled();
+    for (const plane of this.heroGlow) plane.setEnabled(on);
+    this.heroDisc.setEnabled(on); this.heroRing.setEnabled(on); this.heroRays.setEnabled(on);
+    if (!on) return;
+    const motion = this.settings.reducedMotion ? 0 : 1, clock = this.idleClock;
+    const colour = Color3.FromHexString(this.dogLook === "original" ? "#ffd36b" : getDogLook(this.dogLook).color);
+    const dog = this.dog.root, cam = this.camera.position;
+    // Just behind the dog as the camera sees it, so it draws under the drawing and shows round its edge.
+    const away = Math.hypot(dog.position.x - cam.x, dog.position.z - cam.z) || 1;
+    const bx = (dog.position.x - cam.x) / away * .06, bz = (dog.position.z - cam.z) / away * .06;
+    for (const plane of this.heroGlow) {
+      const material = plane.material as StandardMaterial, { scale, alpha } = plane.metadata as { scale: number; alpha: number };
+      material.opacityTexture = this.dog.material.diffuseTexture;
+      material.emissiveColor.copyFrom(colour);
+      material.alpha = alpha * fade * (1 + Math.sin(clock * 2.2) * .22 * motion);
+      plane.position.set(dog.position.x + bx * scale, dog.position.y, dog.position.z + bz * scale);
+      plane.rotation.z = dog.rotation.z;
+      plane.scaling.set(dog.scaling.x * scale, dog.scaling.y * scale, 1);
+    }
+    // The rays sit well behind the dog and turn slowly.
+    this.heroRays.position.set(dog.position.x + bx * 9, dog.position.y + .15, dog.position.z + bz * 9);
+    this.heroRays.scaling.setAll(5.2);
+    this.heroRays.rotation.z = motion ? clock * .12 : 0;
+    const raysMat = this.heroRays.material as StandardMaterial;
+    raysMat.alpha = .42 * fade * (1 + Math.sin(clock * 1.3) * .15 * motion); raysMat.emissiveColor.copyFrom(colour);
+    this.heroDisc.position.set(player.x, player.y + .03, player.z);
+    this.heroDisc.scaling.setAll(3.4 + Math.sin(clock * 1.6) * .15 * motion);
+    const discMat = this.heroDisc.material as StandardMaterial;
+    discMat.alpha = .9 * fade; discMat.emissiveColor.copyFrom(colour);
+    // A ring of light spreading out from under the dog every 1.8 seconds.
+    const k = motion ? (clock % 1.8) / 1.8 : .4;
+    this.heroRing.position.set(player.x, player.y + .05, player.z);
+    this.heroRing.scaling.setAll(1.4 + k * 3);
+    const ringMat = this.heroRing.material as StandardMaterial;
+    ringMat.alpha = (1 - k) * .9 * fade; ringMat.emissiveColor.copyFrom(colour);
+    if (motion && dt > 0 && world.phase === "ready") {
+      this.heroSparkTime += dt * 14;
+      const n = Math.floor(this.heroSparkTime);
+      if (n) { this.heroSparkTime -= n; this.burst(this.heroSparkles, new Vector3(player.x, player.y + .1, player.z), n); }
+    }
+  }
+
+  /**
+   * Rain on the road: it darkens and starts to shine as it gets wet (and dries out slowly after),
+   * mirroring the bright horizon; puddles appear on about one tile in three; drops ring the surface.
+   */
+  private drawRain(world: RunnerWorld, view: number, weather: string, dt: number) {
+    const raining = weather === "rain" && this.graphics.wet && world.sceneIndex !== 2 && world.sceneIndex !== 5;
+    if (dt > 0) this.wetness += ((raining ? 1 : 0) - this.wetness) * (1 - Math.exp(-dt * (raining ? .6 : .2)));
+    if (!this.graphics.wet) this.wetness = 0;
+    const w = this.wetness;
+    if (Math.abs(w - this.shownWet) > .01) {
+      this.shownWet = w;
+      for (const name of WET_ROADS) {
+        const material = this.mats[name], base = this.wetBase.get(name);
+        if (!material || !base) continue;
+        material.diffuseColor.copyFrom(base.diffuse).scaleInPlace(1 - .36 * w);
+        Color3.LerpToRef(base.specular, new Color3(.42, .45, .5), w, material.specularColor);
+        material.specularPower = base.power + (110 - base.power) * w;
+      }
+      this.skyReflection.level = .8 * w;
+    }
+    // The horizon a wet road mirrors takes the colour of the fog.
+    const fog = this.scene.fogColor;
+    this.wetFresnel.leftColor.set(Math.min(1, fog.r * 1.35), Math.min(1, fog.g * 1.35), Math.min(1, fog.b * 1.35));
+    this.puddleFresnel.leftColor.copyFrom(this.wetFresnel.leftColor);
+    this.puddleFresnel.rightColor.copyFrom(this.wetFresnel.leftColor).scaleInPlace(.6);
+    const puddles = w > .35;
+    if (puddles !== this.puddlesShown) {
+      this.puddlesShown = puddles;
+      for (const slot of this.slots) slot.puddle?.setEnabled(puddles && slot.puddleLane !== undefined);
+    }
+    // Drops landing on the road ahead: each ring spreads and fades in half a second, then lands somewhere new.
+    const live = raining && w > .2 && !this.settings.reducedMotion && dt > 0;
+    this.ripples.setEnabled(live);
+    if (!live) return;
+    const scale = this.rippleScale, at = this.rippleAt, still = this.rippleTurn;
+    for (let i = 0; i < RIPPLES; i++) {
+      const drop = this.rippleState[i];
+      drop.age += dt;
+      if (drop.age >= drop.life) {
+        const z = view + 1.5 + Math.random() * 30, p = this.place(z, (Math.random() - .5) * (ROAD_HALF * 2 - .4));
+        const pit = world.items.some(item => isFallObstacle(item.kind) && Math.abs(item.z - z) < obstacleHalfDepth(item.kind, item.z) + 1);
+        drop.x = p.x; drop.y = pit ? -100 : p.y + .03; drop.z = p.z; drop.age = Math.random() * .08; drop.life = .38 + Math.random() * .22;
+      }
+      const k = drop.age / drop.life, size = .16 + k * .8;
+      scale.set(size, 1, size); at.set(drop.x, drop.y, drop.z);
+      Matrix.ComposeToRef(scale, still, at, this.rippleMatrix);
+      this.ripples.thinInstanceSetMatrixAt(i, this.rippleMatrix, false);
+      const fade = (1 - k) * (1 - k * .6) * w;
+      this.rippleColours[i * 4] = this.rippleColours[i * 4 + 1] = this.rippleColours[i * 4 + 2] = fade; this.rippleColours[i * 4 + 3] = fade;
+    }
+    this.ripples.thinInstanceBufferUpdated("matrix");
+    this.ripples.thinInstanceSetBuffer("color", this.rippleColours, 4, false);
+  }
+
+  /** Picture effects the player can switch off (all on by default). */
+  private graphics: Graphics = { post: true, shadows: true, volumetric: true, wet: true };
+  setGraphics(graphics: Graphics) {
+    this.graphics = { ...graphics };
+    this.applyGraphics();
+  }
+  /** Turns the optional effects on or off to match the player's choice. */
+  private shaftsShown = "";
+  /** Tone mapping, bloom on the brightest things (lamps, coins, light shafts) and FXAA, while the player keeps it on. */
+  private pipeline?: DefaultRenderingPipeline;
+  private applyPostProcessing() {
+    if (!this.graphics.post) { this.pipeline?.dispose(); this.pipeline = undefined; return; }
+    if (this.pipeline) return;
+    const hdr = !!this.engine.getCaps().textureHalfFloatRender;
+    const pipeline = new DefaultRenderingPipeline("runner-post", hdr, this.scene, [this.camera]);
+    pipeline.samples = 1;
+    pipeline.fxaaEnabled = true;
+    pipeline.bloomEnabled = true; pipeline.bloomThreshold = hdr ? .9 : .8; pipeline.bloomWeight = .3; pipeline.bloomKernel = 40; pipeline.bloomScale = .5;
+    pipeline.imageProcessingEnabled = true;
+    const look = pipeline.imageProcessing;
+    look.toneMappingEnabled = true; look.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_KHR_PBR_NEUTRAL;
+    look.exposure = 1.08; look.contrast = 1.1;
+    this.pipeline = pipeline;
+  }
+  /** Night shafts show at night, mine shafts always; neither when the player has turned light shafts off. */
+  private updateLightShafts(night: boolean) {
+    const key = `${night}|${this.graphics.volumetric}`;
+    if (key === this.shaftsShown) return;
+    this.shaftsShown = key;
+    const atNight = new Set([this.mats["light-cone-night"], this.mats["light-pool-night"]]), inMine = new Set([this.mats["light-cone-mine"], this.mats["light-pool-mine"]]);
+    for (const slot of this.slots) for (const d of slot.decor) for (const mesh of d.node.getChildMeshes(false)) {
+      if (atNight.has(mesh.material as StandardMaterial)) mesh.isVisible = night && this.graphics.volumetric;
+      else if (inMine.has(mesh.material as StandardMaterial)) mesh.isVisible = this.graphics.volumetric;
+    }
+  }
+
+  /**
+   * Sun shadows over the stretch of road round the dog (from 12 m behind to about 30 m ahead): obstacles,
+   * pickups, lamps, arches and plants shadow the road. Only by day above ground, where the sun is strong.
+   */
+  private shadows?: ShadowGenerator;
+  private applyShadows() {
+    if (!this.graphics.shadows) {
+      this.shadows?.dispose(); this.shadows = undefined;
+      this.setShadowReceivers(false);
+      return;
+    }
+    if (this.shadows) return;
+    const generator = new ShadowGenerator(this.settings.quality === "high" ? 2048 : 1024, this.sun);
+    generator.usePercentageCloserFiltering = true; generator.filteringQuality = ShadowGenerator.QUALITY_LOW;
+    generator.bias = .0015; generator.normalBias = .02;
+    // The sky light fills shadows in, so the sun is blocked almost completely to leave a visible shade.
+    generator.setDarkness(.1);
+    // The templates sit far below the course, so the shadow map picks out their instances on the road instead.
+    for (const [name, template] of this.templates) {
+      if (!SHADOW_CASTERS.test(name)) continue;
+      for (const mesh of template.getChildMeshes(false)) if (!/halo|beam|light|glint|contact-shadow|puddle/.test(mesh.name)) mesh.metadata = { ...(mesh.metadata ?? {}), caster: true };
+    }
+    const map = generator.getShadowMap()!;
+    // Most of what casts a shadow stands still, so the map is drawn again only when the shadowed box moves on
+    // (every 4 m) or something is moving through it.
+    map.refreshRate = 0;
+    map.renderList = null;
+    map.renderListPredicate = mesh => {
+      const source = (mesh as AbstractMesh & { sourceMesh?: Mesh }).sourceMesh;
+      return !!source?.metadata?.caster && mesh.isEnabled() && mesh.isVisible;
+    };
+    this.sun.autoUpdateExtends = false; this.sun.autoCalcShadowZBounds = false;
+    this.sun.orthoLeft = -27; this.sun.orthoRight = 27; this.sun.orthoBottom = -27; this.sun.orthoTop = 27;
+    this.sun.shadowMinZ = 1; this.sun.shadowMaxZ = 140;
+    this.shadows = generator;
+    this.setShadowReceivers(true);
+  }
+  private setShadowReceivers(on: boolean) {
+    for (const [name, template] of this.templates) {
+      if (!name.startsWith("lane-") && !name.startsWith("puddle")) continue;
+      for (const mesh of template.getChildMeshes(false)) mesh.receiveShadows = on;
+    }
+    this.groundPlane.receiveShadows = on;
+  }
+  private shadowCell = "";
+  private shadowSunny = true;
+  /** Set when the device could not keep up: shadows rest (the setting stays on) until a run goes smoothly again. */
+  private shadowsResting = false;
+  /** Keeps the shadowed box over the road round the dog, and the shadows off at night and underground. */
+  private placeShadows(world: RunnerWorld, player: Vector3, heading: number, sunny: boolean) {
+    if (!this.shadows) return;
+    sunny &&= !this.shadowsResting;
+    if (sunny !== this.shadowSunny) { this.shadowSunny = sunny; this.shadows.setDarkness(sunny ? .1 : 1); this.shadowCell = ""; }
+    if (!sunny) return;
+    const ahead = 10, cx = Math.round((player.x + Math.sin(heading) * ahead) / 8) * 8, cz = Math.round((player.z + Math.cos(heading) * ahead) / 8) * 8, cy = Math.round(player.y / 2) * 2;
+    const cell = `${cx},${cy},${cz}`;
+    const moving = world.items.some(item => (item.roll && Math.abs(item.z - world.distance) < 40) || (item.thrownAt !== undefined && world.elapsed - item.thrownAt < .7));
+    if (cell === this.shadowCell && !moving) return;
+    this.shadowCell = cell;
+    const dir = this.sun.direction;
+    this.sun.position.set(cx - dir.x * 70, cy - dir.y * 70, cz - dir.z * 70);
+    this.shadows.getShadowMap()?.resetRefreshCounter();
+  }
+
+  private applyGraphics() {
+    this.shaftsShown = "";
+    this.applyPostProcessing();
+    this.applyShadows();
+    for (const name of WET_ROADS) {
+      const material = this.mats[name];
+      if (!material) continue;
+      if (!this.wetBase.has(name)) this.wetBase.set(name, { diffuse: material.diffuseColor.clone(), specular: material.specularColor.clone(), power: material.specularPower });
+      material.reflectionTexture = this.graphics.wet ? this.skyReflection : null;
+      material.reflectionFresnelParameters = this.graphics.wet ? this.wetFresnel : null as unknown as FresnelParameters;
+    }
+    this.shownWet = -1;
+  }
+
+  /** 0 on the menu, rising to 1 as the camera finishes swinging round behind the dog at the start of a run. */
+  private introProgress(world: RunnerWorld) {
+    if (this.settings.reducedMotion || world.revives > 0) return 1;
+    return world.phase === "ready" ? 0 : Math.min(1, world.elapsed / INTRO_TIME);
+  }
+
+  /** Which of the frog's eight drawn directions the camera sees, for a frog running along `heading`. */
+  private facing(at: Vector3, heading: number) {
+    this.frogDirection = frogViewDirection({ x: at.x, z: at.z, angle: Math.PI / 2 - heading }, this.camera.position, this.frogDirection);
+    return this.frogDirection;
+  }
+
+  /** Off the edge: the camera stops where it was, rises a little and tips down to watch the dog go in. */
+  private followFall(world: RunnerWorld, player: Vector3, dt: number) {
+    if (this.settings.reducedMotion || dt <= 0) return;
+    const k = 1 - Math.exp(-dt * 3.4), rise = Math.min(1, world.captureTime / .4), dog = this.dog.root.position;
+    this.cameraPos.y += (player.y + 5.4 - this.cameraPos.y) * k * rise;
+    this.cameraTarget.x += (dog.x - this.cameraTarget.x) * k;
+    this.cameraTarget.z += (dog.z - this.cameraTarget.z) * k;
+    this.cameraTarget.y += (Math.max(dog.y, player.y - 2.6) - this.cameraTarget.y) * k;
+    this.camera.position.copyFrom(this.cameraPos);
+    this.camera.setTarget(this.cameraTarget);
+  }
+
+  /** `view` is the dog's drawn distance along the route; `turning` how fast the road is turning under it (rad/s). */
+  private updateCamera(world: RunnerWorld, player: Vector3, centre: RoutePoint, shot: ReturnType<typeof captureMotion> | undefined, dt: number, t: number, view: number, turning: number) {
     const portrait = this.engine.getRenderWidth() / Math.max(1, this.engine.getRenderHeight()) < .85;
     const k = (rate: number) => dt > 0 ? 1 - Math.exp(-rate * dt) : 1;
-    // The camera turns a little behind the road, so a corner swings the view round smoothly.
-    this.camYaw += angleTo(this.camYaw, centre.heading) * k(shot ? 2 : 4.5);
-    const fov = (portrait ? 1.08 : .9) + (world.boost > 0 && !shot ? .14 : 0);
+    // The camera aims a few metres up the road the dog is actually taking (straight on until a turn is
+    // pressed), so it starts round a bend with the dog rather than after it, and eases out of it.
+    const aim = shot ? centre.heading : this.dogCentre(world, view + 3.5).heading;
+    this.camYaw += angleTo(this.camYaw, aim) * k(shot ? 2 : 4.5);
+    // The view widens a little as the pace picks up, and a lot more on a dash.
+    const pace = shot || this.settings.reducedMotion ? 0 : Math.max(0, Math.min(1, (world.speed - 13) / 17)) * .07;
+    // The menu's front view (intro 0) swings round to the running view (1) as a run starts.
+    const intro = shot ? 1 : this.introProgress(world), swing = intro * intro * (3 - 2 * intro);
+    const fov = ((portrait ? 1.08 : .9) + pace + (world.boost > 0 && !shot ? .08 : 0)) * (.84 + .16 * swing);
     this.camera.fov += (fov - this.camera.fov) * k(4);
     const fx = Math.sin(this.camYaw), fz = Math.cos(this.camYaw);
     if (shot) {
@@ -3126,20 +4270,49 @@ export class RunnerRenderer3D {
     } else {
       this.captureCamera = undefined;
       // Follow most of the lane offset (smoothed) so the dog stays near the centre of the screen.
-      const lateral = (world.position - 1) * LANE_WIDTH * (portrait ? .8 : .6) * rideLateralScale(world.distance, world.ride);
+      const lateral = (world.position - 1) * LANE_WIDTH * (portrait ? .7 : .5) * rideLateralScale(world.distance, world.ride);
       this.camLateral += (lateral + (world.cycling && !this.settings.reducedMotion ? .68 : 0) - this.camLateral) * k(10);
       const rx = Math.cos(this.camYaw), rz = -Math.sin(this.camYaw);
       const bx = centre.x + rx * this.camLateral, bz = centre.z + rz * this.camLateral;
-      const back = portrait ? 8.4 : 7.4, height = (portrait ? 4.6 : 4.1) + world.jumpHeight * .25;
-      this.cameraPos.set(bx - fx * back, elevationAt(world.distance - back) + height, bz - fz * back);
-      this.cameraTarget.set(bx + fx * 7, elevationAt(world.distance + 7) + 1.1 + world.jumpHeight * .35, bz + fz * 7);
+      // The camera rises with a jump a little, and goes right up with the balloons.
+      this.camRise += ((world.flying ? 1 : 0) - this.camRise) * k(3);
+      const back = portrait ? 8.4 : 7.4, height = (portrait ? 4.6 : 4.1) + world.drawnJumpHeight * (.14 + .78 * this.camRise);
+      this.cameraPos.set(bx - fx * back, elevationAt(view - back) + height, bz - fz * back);
+      this.cameraTarget.set(bx + fx * 7, elevationAt(view + 7) + 1.1 + world.drawnJumpHeight * (.2 + .6 * this.camRise), bz + fz * 7);
+      if (intro < 1) {
+        // A low three-quarter view of the dog from in front, drifting a little while the menu is up.
+        const drift = world.phase === "ready" ? Math.sin(this.idleClock * .23) * .2 : 0;
+        // Only the default dog has a front view to show; a school look is seen from behind and to the side.
+        const front = this.dogLook === "original" && !this.schoolSheet;
+        const angle = ((front ? Math.PI - .55 : .62) + drift) * (1 - swing);
+        const ox = -fx * Math.cos(angle) + rx * Math.sin(angle), oz = -fz * Math.cos(angle) + rz * Math.sin(angle);
+        const reach = portrait ? 5.5 : 6, hx = player.x + ox * reach, hy = player.y + (portrait ? 1.3 : .95), hz = player.z + oz * reach;
+        const lookY = player.y + (portrait ? .28 : .5);
+        this.cameraPos.set(hx + (this.cameraPos.x - hx) * swing, hy + (this.cameraPos.y - hy) * swing, hz + (this.cameraPos.z - hz) * swing);
+        this.cameraTarget.set(player.x + (this.cameraTarget.x - player.x) * swing, lookY + (this.cameraTarget.y - lookY) * swing, player.z + (this.cameraTarget.z - player.z) * swing);
+      }
       const sinceHit = world.elapsed - world.hitAt;
-      if (!this.settings.reducedMotion && sinceHit < .35) {
+      if (!this.settings.reducedMotion && sinceHit < .28) {
         // Shake sideways to the view (not along world X, which is forward after a turn) and settle out.
-        const shake = Math.sin(t * 60) * .14 * (1 - sinceHit / .35);
+        const shake = Math.sin(t * 60) * .09 * (1 - sinceHit / .28);
         this.cameraPos.x += rx * shake; this.cameraPos.z += rz * shake;
       }
+      if (!this.settings.reducedMotion) {
+        // A small dip as the dog lands, and a rumble while a boulder or cart rolls close by.
+        const land = Math.max(0, 1 - (world.elapsed - world.landedAt) / .2);
+        this.cameraPos.y -= land * land * .05; this.cameraTarget.y -= land * land * .02;
+        if (this.rumble > 0) {
+          const r = this.rumble * this.rumble;
+          this.cameraPos.x += rx * Math.sin(t * 41) * .035 * r; this.cameraPos.z += rz * Math.sin(t * 41) * .035 * r;
+          this.cameraPos.y += Math.sin(t * 53) * .025 * r;
+        }
+      }
     }
+    // Bank a touch into lane changes and bends.
+    this.camBank += ((shot || this.settings.reducedMotion ? 0 : (world.position - world.lane) * .012 - Math.max(-.025, Math.min(.025, turning * .007))) - this.camBank) * k(6);
+    const bank = this.camBank;
+    const rx = Math.cos(this.camYaw), rz = -Math.sin(this.camYaw);
+    this.camera.upVector.set(rx * Math.sin(bank), Math.cos(bank), rz * Math.sin(bank));
     this.camera.position.copyFrom(this.cameraPos);
     this.camera.setTarget(this.cameraTarget);
   }

@@ -2,12 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
-import { RunnerWorld, BIKE_START, FRUIT_START, LONG_GAP_START, BRIDGE_FORK_BREAK, CHASE_START, CHASE_SECONDS, CHASE_START_GAP, CHASE_CATCH, FORK_BRIDGE_BREAK, FORK_CHANCE, SHAFT_EDGE, TURN_HINT_END, readRunRecord, isRunObstacle, isRunPower, obstacleHalfDepth, weatherAt, nightAt, sceneAt, sceneWeather } from '../src/runner/world.ts';
+import { RunnerWorld, POWER_UNLOCK, COIN_BAG_START, STAR_START, TIER_DISTANCE, TOP_TIER, tierAt, BIKE_START, FRUIT_START, LONG_GAP_START, BRIDGE_FORK_BREAK, CHASE_START, CHASE_SECONDS, CHASE_START_GAP, CHASE_CATCH, FORK_BRIDGE_BREAK, FORK_CHANCE, SHAFT_EDGE, TURN_HINT_END, NEAR_SCORE, ROLL_START, ROLL_TRAVEL, ROLL_SPEED, FLY_HEIGHT, REVIVE_COST, RUSH_SECONDS, CLOCK_SECONDS, DARK_START_GAP, LANTERN_GAP, dailySeed, isLongRun, readRunRecord, isRunObstacle, isRunPower, obstacleHalfDepth, weatherAt, nightAt, sceneAt, sceneWeather } from '../src/runner/world.ts';
 import { CAPTURE_GRAB_AT, CAPTURE_LAUGH_AT, captureMotion, dogFall, dogPose, chaserFrame } from '../src/runner/animation.ts';
-import { RunnerRoute3D } from '../src/runner/route3d.ts';
+import { BEND_LENGTH, BEND_SLACK, CORNER_RADIUS, RunnerRoute3D } from '../src/runner/route3d.ts';
 import { BRIDGE_TURNS, CART_LENGTH, BRIDGE_LENGTH, DOWNHILL_ROPE_LENGTH, elevationAt, riderHeightAt, ROPE_RELEASE_DISTANCE, sectionFeature, sectionIndexAt, sectionStart, sectionScene } from '../src/runner/course.ts';
 import { RunnerTilt } from '../src/runner/tilt.ts';
 import { readWardrobe, migrateLegacyWardrobe, canAfford, DOG_LOOKS } from '../src/runner/shop.ts';
+import { addRun, buyUpgrade, checkIn, durationAt, levelOf, readCareer, readGraphics, readLogin, readUpgrades, upgradedDurations } from '../src/runner/progression.ts';
 import { NullEngine } from '@babylonjs/core/Engines/nullEngine.js';
 import { Scene } from '@babylonjs/core/scene.js';
 import { createRunnerSprite } from '../src/runner/actors2d.ts';
@@ -411,7 +412,7 @@ function drive(w) {
   }
 }
 test('40 seeded courses are solvable for 3 km with bounded memory and keep corners clear', () => {
-  let sawJoinedLogs = false;
+  let sawJoinedLogs = false, rolling = 0, nearMisses = 0;
   for (let seed = 1; seed <= 40; seed++) {
     const w = new RunnerWorld(seed, 'endless'); w.start(); let full = 0, long = 0; const seen = new Set();
     const earlyPickups = new Set();
@@ -420,13 +421,18 @@ test('40 seeded courses are solvable for 3 km with bounded memory and keep corne
     for (let tick = 0; tick < 120 * 150 && w.phase === 'running' && w.distance < 3000; tick++) {
       maxItems = Math.max(maxItems, w.items.length);
       for (const i of w.items) {
-        if (i.z < 1500 && (i.kind === 'slow' || i.kind === 'double')) earlyPickups.add(i.kind);
+        // Power-ups come in one by one as the run goes on: none before its unlock distance.
+        if (POWER_UNLOCK[i.kind] !== undefined) assert.ok(i.z >= POWER_UNLOCK[i.kind], `seed ${seed}: ${i.kind} at ${Math.round(i.z)} before ${POWER_UNLOCK[i.kind]} m`);
+        if (i.z < 2000 && (i.kind === 'slow' || i.kind === 'double')) earlyPickups.add(i.kind);
         if (!isRunObstacle(i.kind)) continue;
-        for (const t of w.turns) assert.ok(i.z < t.z - 45 || i.z > t.z + 25, `seed ${seed}: obstacle ${i.z} near corner ${t.z}`);
+        // A rolling boulder or cart the dog got past keeps rolling away behind it.
+        if (!(i.roll && i.done)) for (const t of w.turns) assert.ok(i.z < t.z - 45 || i.z > t.z + 25, `seed ${seed}: ${i.kind}${i.roll ? ' (rolling)' : ''} ${i.span ?? 1}-lane at ${i.z} near corner ${t.z}`);
         if (i.span === 2 && i.kind === 'block') sawJoinedLogs = true;
         if (!seen.has(i.id)) {
           if (i.kind === 'long-gap') { assert.ok(i.z - obstacleHalfDepth(i.kind, i.z) >= LONG_GAP_START); assert.equal(i.span, 3); long++; }
-          if (i.span === undefined) assert.ok(i.kind === 'beam' || i.kind === 'boulder', `unexpected single-lane ${i.kind}`);
+          if (i.span === undefined) assert.ok(i.kind === 'beam' || i.kind === 'boulder' || i.kind === 'runaway-cart', `unexpected single-lane ${i.kind}`);
+          if (i.roll) { rolling++; assert.ok([1, 2, 4, 5].includes(sceneAt(i.z)) && i.z >= ROLL_START, `seed ${seed}: ${i.kind} rolls at ${Math.round(i.z)}`); }
+          if (i.kind === 'runaway-cart') assert.equal(sceneAt(i.z), 2);
           if (i.span === 3) full++;
           seen.add(i.id);
         }
@@ -434,11 +440,19 @@ test('40 seeded courses are solvable for 3 km with bounded memory and keep corne
       drive(w); w.advance(1 / 120);
     }
     assert.equal(w.phase, 'running', `seed ${seed}: ${w.reason} at ${Math.round(w.distance)}`);
-    assert.ok(w.distance >= 3000); assert.ok(full > 10); assert.ok(long >= 5); assert.ok(w.items.length < 80); assert.ok(w.turns.length <= 3); assert.ok(w.turnCount >= 7);
-    assert.ok(maxItems < 140, `seed ${seed}: at most ${maxItems} items at once`);
-    assert.equal(earlyPickups.size, 2, `seed ${seed}: both new pickups appear before 1500m`);
+    assert.ok(w.distance >= 3000); assert.ok(full > 10); assert.ok(long >= 5); assert.ok(w.items.length < 120, `seed ${seed}: ${w.items.length} items left`); // coin frenzies add lines in every lane assert.ok(w.turns.length <= 3); assert.ok(w.turnCount >= 7);
+    assert.ok(maxItems < 170, `seed ${seed}: at most ${maxItems} items at once`);
+    assert.equal(earlyPickups.size, 2, `seed ${seed}: double score and the hourglass both turn up before 2000 m`);
+    // The canal zipline, the log bridge and the mine cart all come before 3 km.
+    assert.ok(w.ridesDone >= 3, `seed ${seed}: finished ${w.ridesDone} rides`);
+    assert.ok(w.forksCleared >= 1, `seed ${seed}: took ${w.forksCleared} forks the right way`);
+    nearMisses += w.nearMisses;
   }
   assert.ok(sawJoinedLogs);
+  // The temple and the mine both come before 3 km: boulders roll and carts run away on most courses.
+  assert.ok(rolling >= 40, `${rolling} rolling hazards on 40 courses`);
+  // The bot reacts late on purpose (as late as a player might), so it scrapes past a good many.
+  assert.ok(nearMisses > 40, `${nearMisses} near misses`);
 });
 
 test('chase mode: a clean run catches the frog on the snowfield and in the canyon before time runs out', () => {
@@ -457,8 +471,9 @@ test('chase mode: a clean run catches the frog on the snowfield and in the canyo
       assert.ok([5, 4].includes(sceneAt(w.distance)), 'the chase stays on the snowfield and in the canyon');
     }
     throws += w.chase.throws;
-    // No long pits in the chase, and the dog never stood still.
+    // No long pits in the chase, and nothing rolls at the dog there: the frog's crates are enough.
     assert.ok(!w.items.some(i => i.kind === 'long-gap'));
+    assert.equal(w.rollsStarted, 0); assert.ok(!w.items.some(i => i.roll));
   }
   assert.ok(wins >= 10, `caught the frog in ${wins} of 12`);
   assert.ok(throws > 12, `the frog threw ${throws} crates`);
@@ -493,6 +508,174 @@ test('steering into the side of the road stumbles the dog and sets the frog on i
   onBridge.lane = onBridge.position = 2; onBridge.action('right'); assert.equal(onBridge.wallBumps, 0);
   const chase = new RunnerWorld(2, 'chase'); chase.start(); chase.lane = chase.position = 2; const gap = chase.chase.gap;
   chase.action('right'); assert.equal(chase.wallBumps, 1); assert.ok(chase.chase.gap > gap + 4); assert.equal(chase.danger, 0);
+});
+
+test('near misses: dodging in the last moment scores; an early dodge, a hit or invincibility does not', () => {
+  /** Runs until the obstacle's near face is `metres` ahead. */
+  const closeTo = (w, metres) => { while (w.items[0].z - w.distance - obstacleHalfDepth(w.items[0].kind, w.items[0].z) > metres) w.advance(1 / 120); };
+  const late = place('block', { span: 2, z: 20 }); closeTo(late, 2.5); late.action('left'); run(late, 1.5);
+  assert.equal(late.phase, 'running'); assert.equal(late.stumbles, 0);
+  assert.equal(late.nearMisses, 1); assert.equal(late.nearScore, NEAR_SCORE); assert.equal(late.nearKind, 'block');
+  assert.equal(late.score, Math.floor(late.runDistance) * 10 + late.coinScore + NEAR_SCORE, 'near misses add to the score');
+  const leap = place('block', { span: 3, z: 20 }); closeTo(leap, 2.5); leap.action('jump'); run(leap, 1.5);
+  assert.equal(leap.phase, 'running'); assert.equal(leap.nearMisses, 1, 'a late jump over a whole-road log counts');
+  const duck = place('beam', { span: 3, z: 20 }); closeTo(duck, 2); duck.action('slide'); run(duck, 1.5);
+  assert.equal(duck.phase, 'running'); assert.equal(duck.nearMisses, 1, 'so does a late slide under a gate');
+  const early = place('block', { span: 2, z: 20 }); early.action('left'); run(early, 1.5);
+  assert.equal(early.nearMisses, 0, 'an early dodge is just a dodge');
+  const hit = place('block', { span: 2, z: 20 }); run(hit, 1.5);
+  assert.equal(hit.stumbles, 1); assert.equal(hit.nearMisses, 0);
+  const golden = place('block', { span: 2, z: 20 }); golden.fruit = 10; run(golden, 1.5);
+  assert.equal(golden.nearMisses, 0, 'nothing is close while invincible');
+  // A near miss keeps the coin streak going and builds it up.
+  const streak = place('block', { span: 2, z: 20 }); streak.streak = 9; streak.streakTimer = 4; closeTo(streak, 2.5); streak.action('left'); run(streak, .5);
+  assert.equal(streak.multiplier, 2); assert.equal(streak.nearScore, NEAR_SCORE);
+});
+
+test('boulders and runaway carts set off toward the dog and are met about where a still one would be', () => {
+  const meet = (kind, lane = 1) => {
+    const w = place(kind, { z: 60 + ROLL_TRAVEL, roll: ROLL_SPEED[kind], lane }), rolling = w.items[0];
+    let started;
+    for (let i = 0; i < 120 * 8 && w.phase === 'running' && w.distance < 90; i++) {
+      w.advance(1 / 120);
+      if (started === undefined && rolling.rollFrom !== undefined) started = w.distance;
+    }
+    return { w, started, rolling };
+  };
+  const { w: boulder, started } = meet('boulder');
+  assert.ok(started > 35 && started < 45, `set off when the dog was at ${started}`);
+  assert.equal(boulder.phase, 'caught'); assert.equal(boulder.reason, '被滚来的巨石撞倒了'); assert.equal(boulder.rollsStarted, 1);
+  assert.ok(Math.abs(boulder.distance - 60) < 2.5, `met at ${boulder.distance}`);
+  const { w: cart } = meet('runaway-cart');
+  assert.equal(cart.reason, '被失控的矿车撞飞了'); assert.ok(Math.abs(cart.distance - 60) < 2.5);
+  // In another lane it rolls on past the dog and away behind it.
+  const { w: aside, rolling } = meet('boulder', 0);
+  assert.equal(aside.phase, 'running'); assert.ok(rolling.z < 58 && rolling.done, `rolled on behind the dog to ${rolling.z}`);
+  assert.ok(!aside.items.includes(rolling), 'and is dropped once well behind');
+  // The snowfield's boulders are giant snowballs.
+  const snow = skipTo(new RunnerWorld(5, 'endless'), CHASE_START + 20); snow.start();
+  snow.items = [{ id: 1, kind: 'boulder', lane: 1, z: snow.distance + 50, roll: ROLL_SPEED.boulder, done: false }];
+  run(snow, 4); assert.equal(snow.reason, '被滚下来的大雪球撞倒了');
+});
+
+test('run tallies count second jumps and slides', () => {
+  const w = new RunnerWorld(3); w.start(); w.items = []; w.turns = []; w.nextRow = w.nextTurn = Infinity;
+  w.action('jump'); w.action('jump'); w.action('jump'); assert.equal(w.doubleJumps, 1);
+  run(w, 1); w.action('slide'); w.action('slide'); assert.equal(w.slides, 1, 'pressing again mid-slide is one slide');
+  run(w, 1); w.action('slide'); assert.equal(w.slides, 2);
+});
+
+test('balloons lift the dog over everything, take corners, lay coins in the air and set it down gently', () => {
+  const w = new RunnerWorld(6); w.start(); w.nextRow = w.nextTurn = Infinity; w.turns = [];
+  w.items = [{ id: 1, kind: 'balloon', lane: 1, z: 3, done: false }];
+  run(w, .3);
+  assert.equal(w.flying, true); assert.equal(w.balloon > 6, true);
+  const air = w.items.filter(i => i.kind === 'coin' && i.y > FLY_HEIGHT);
+  assert.ok(air.length >= 15, `${air.length} coins in the air`);
+  run(w, 1.2); assert.ok(w.jumpHeight > FLY_HEIGHT - .3, `up at ${w.jumpHeight}`);
+  // Nothing on the road touches it: a gate, a log pile and a pit in its lane, and a corner it takes itself.
+  const at = w.distance;
+  w.items.push({ id: 2, kind: 'beam', lane: 1, z: at + 20, span: 3, done: false }, { id: 3, kind: 'block', lane: 1, z: at + 30, span: 2, done: false }, { id: 4, kind: 'gap', lane: 1, z: at + 40, span: 3, done: false });
+  w.turns = [{ z: at + 50, direction: 'left', taken: false, fork: true }];
+  w.action('jump'); w.action('slide'); assert.equal(w.jumpCount, 0, 'no jumping among the balloons');
+  const silver = w.silver; run(w, 3.5);
+  assert.equal(w.phase, 'running'); assert.equal(w.turns[0].taken, true); assert.equal(w.turns[0].wrong, undefined); assert.equal(w.stumbles, 0);
+  assert.ok(w.silver + w.gold > silver, 'collects the coins in the air');
+  run(w, 3); assert.equal(w.flying, false); assert.equal(w.jumpHeight, 0, 'back on the ground');
+  // No balloons in the chase; and the flight comes down early before a ride.
+  const chase = new RunnerWorld(2, 'chase'); for (let t = 0; t < 120 * 60 && chase.phase === 'running'; t++) { chase.start(); chase.advance(1 / 120); }
+  assert.ok(!chase.items.some(i => i.kind === 'balloon'));
+});
+
+test('spring shoes jump high enough to clear a boulder in one go; chests pay out once', () => {
+  const plain = place('coin'); plain.action('jump'); let top = 0; for (let i = 0; i < 120; i++) { plain.advance(1 / 120); top = Math.max(top, plain.jumpHeight); }
+  const sprung = place('coin'); sprung.spring = 10; sprung.action('jump'); let high = 0; for (let i = 0; i < 120; i++) { sprung.advance(1 / 120); high = Math.max(high, sprung.jumpHeight); }
+  assert.ok(top < 1.3 && high > 2, `jump ${top.toFixed(2)} m, with springs ${high.toFixed(2)} m`);
+  const w = place('boulder', { z: 12 }); w.spring = 10;
+  while (w.items[0].z - w.distance > 4.5) w.advance(1 / 120);
+  w.action('jump'); run(w, 1.2); assert.equal(w.phase, 'running', 'one sprung jump clears a boulder');
+  const chest = place('chest', { z: 4 }); run(chest, .6);
+  assert.equal(chest.chests, 1); assert.ok(chest.items[0].done);
+  const reward = chest.lastChest, paid = (reward.silver ?? 0) + (reward.gold ?? 0) + (reward.diamond ?? 0);
+  assert.ok(paid > 0 || reward.power, 'a chest holds something');
+  if (reward.silver) assert.equal(chest.silver, reward.silver); if (reward.gold) assert.equal(chest.gold, reward.gold);
+  if (reward.power) assert.ok(chest[reward.power] > 0);
+  // The same chest always holds the same thing.
+  const again = place('chest', { z: 4 }); run(again, .6); assert.deepEqual(again.lastChest, reward);
+});
+
+test('revive: back on its feet past the hazard, road ahead cleared, protected; costs double; not on a clock', () => {
+  const w = place('gap', { z: 6, span: 3 }); run(w, 3.5);
+  assert.equal(w.phase, 'lost'); assert.equal(w.canRevive, true); assert.equal(w.reviveCost, REVIVE_COST);
+  w.items.push({ id: 9, kind: 'block', lane: 1, z: w.distance + 12, span: 3, done: false });
+  assert.equal(w.revive(), true);
+  assert.equal(w.phase, 'running'); assert.equal(w.trapFall, false); assert.equal(w.revives, 1); assert.equal(w.reviveCost, REVIVE_COST * 2);
+  assert.ok(w.distance > 6 + obstacleHalfDepth('gap', 6), 'past the pit'); assert.ok(!w.items.some(i => i.kind === 'block'), 'the road ahead is clear');
+  run(w, 1); assert.equal(w.phase, 'running');
+  // A missed corner counts as taken; the run carries on along the real road.
+  const corner = new RunnerWorld(5); corner.start(); corner.items = []; corner.nextRow = Infinity; corner.turns = [{ z: corner.distance + 8, direction: 'left', taken: false }]; corner.nextTurn = Infinity;
+  run(corner, 4); assert.equal(corner.reason, '冲出了弯道');
+  corner.revive(); assert.equal(corner.turns[0].taken, true); run(corner, 2); assert.equal(corner.phase, 'running');
+  for (const mode of ['chase', 'rush']) { const timed = new RunnerWorld(3, mode); timed.start(); timed.phase = 'lost'; assert.equal(timed.canRevive, false); assert.equal(timed.revive(), false); }
+});
+
+test('coin rush: a minute on the clock, clocks add time, gold from the start, then it ends well', () => {
+  const w = new RunnerWorld(8, 'rush'); w.start();
+  assert.equal(w.rush.timeLeft, RUSH_SECONDS); assert.equal(w.night, false);
+  for (let t = 0; t < 120 * 20 && w.phase === 'running'; t++) { drive(w); w.advance(1 / 120); }
+  assert.ok(w.gold > 0, 'gold coins from the start'); assert.ok(w.items.some(i => i.kind === 'clock') || w.clocks > 0, 'clocks to pick up');
+  const left = w.rush.timeLeft; w.items.push({ id: 999, kind: 'clock', lane: w.lane, z: w.distance + 2, done: false }); run(w, .3);
+  assert.ok(w.rush.timeLeft > left + CLOCK_SECONDS - .5, 'a clock adds five seconds');
+  w.rush.timeLeft = .05; w.items = []; run(w, .2);
+  assert.equal(w.phase, 'won'); assert.equal(w.reason, '时间到');
+});
+
+test('dark run: the frog creeps up, lanterns drive it back, knocks bring it on, and it catches the dog at nothing', () => {
+  const w = new RunnerWorld(4, 'dark'); w.start(); w.items = []; w.turns = []; w.nextRow = w.nextTurn = Infinity;
+  assert.equal(w.night, true); assert.equal(w.turnHints, false); assert.equal(w.hunt.gap, DARK_START_GAP);
+  // Six seconds keep the dog short of the canal zipline at 140 m.
+  run(w, 6); assert.ok(w.hunt.gap < DARK_START_GAP - 1.5, `closed to ${w.hunt.gap}`);
+  const before = w.hunt.gap; w.items = [{ id: 1, kind: 'lantern', lane: w.lane, z: w.distance + 2, done: false }]; run(w, .3);
+  assert.ok(w.hunt.gap > before + LANTERN_GAP - .5); assert.equal(w.lanterns, 1);
+  const knock = w.hunt.gap; w.items = [{ id: 2, kind: 'block', lane: w.lane, z: w.distance + 3, done: false }]; run(w, .5);
+  assert.ok(w.hunt.gap < knock - 5, 'a knock lets the frog catch up'); assert.equal(w.phase, 'running');
+  w.hunt.gap = .2; run(w, 1); assert.equal(w.phase, 'caught'); assert.equal(w.reason, '在黑暗里被恐怖奶蛙抓住了');
+  // Lanterns are laid along the course in the dark run, and only there.
+  const course = new RunnerWorld(4, 'dark'); course.start(); for (let t = 0; t < 120 * 20 && course.phase === 'running'; t++) { drive(course); course.advance(1 / 120); }
+  assert.ok(course.lanterns > 0 || course.items.some(i => i.kind === 'lantern'));
+  const day = new RunnerWorld(4, 'endless'); day.start(); for (let t = 0; t < 120 * 20 && day.phase === 'running'; t++) { drive(day); day.advance(1 / 120); }
+  assert.ok(!day.items.some(i => i.kind === 'lantern' || i.kind === 'clock'));
+});
+
+test('the daily course is the same all day and changes the next', () => {
+  const a = dailySeed(new Date(2026, 10, 27, 8)), b = dailySeed(new Date(2026, 10, 27, 23)), c = dailySeed(new Date(2026, 10, 28, 8));
+  assert.equal(a, b); assert.notEqual(a, c);
+  const one = new RunnerWorld(a, 'daily'), two = new RunnerWorld(b, 'daily');
+  assert.deepEqual(one.items.map(i => [i.kind, i.z, i.lane]), two.items.map(i => [i.kind, i.z, i.lane]));
+  assert.equal(isLongRun('daily'), true); assert.equal(isLongRun('rush'), false);
+});
+
+test('upgrades lengthen power-ups for coins; the daily reward builds over a week of days in a row', () => {
+  const none = readUpgrades(null);
+  assert.equal(levelOf(none, 'magnet'), 0); assert.equal(durationAt('magnet', 0), 10); assert.equal(durationAt('magnet', 5), 20);
+  assert.deepEqual(readUpgrades('{"version":1,"levels":{"magnet":9,"shield":2,"fruit":3,"nope":1}}'), { version: 1, levels: { shield: 2 } });
+  const wallet = { silver: 100, gold: 0, diamond: 0 };
+  const bought = buyUpgrade(wallet, none, 'magnet');
+  assert.equal(bought.wallet.silver, 40); assert.equal(levelOf(bought.upgrades, 'magnet'), 1);
+  assert.equal(buyUpgrade(bought.wallet, bought.upgrades, 'magnet'), undefined, 'cannot afford the next level');
+  assert.equal(buyUpgrade({ silver: 999, gold: 999, diamond: 0 }, { version: 1, levels: { magnet: 5 } }, 'magnet'), undefined, 'nothing past the top level');
+  const w = new RunnerWorld(3, 'endless', { durations: upgradedDurations({ version: 1, levels: { magnet: 2 } }) });
+  assert.equal(w.durations.magnet, 14); assert.equal(w.durations.shield, 20);
+  const first = checkIn(undefined, new Date(2026, 10, 27));
+  assert.equal(first.day, 1); assert.deepEqual(first.reward, { silver: 30 });
+  assert.equal(checkIn(first.login, new Date(2026, 10, 27, 22)), undefined, 'once a day');
+  const second = checkIn(first.login, new Date(2026, 10, 28));
+  assert.equal(second.day, 2);
+  assert.equal(checkIn(second.login, new Date(2026, 10, 30)).day, 1, 'a missed day starts over');
+  let login = undefined, day;
+  for (let d = 1; d <= 8; d++) { const visit = checkIn(login, new Date(2026, 11, d)); login = visit.login; day = visit.day; if (d === 7) assert.deepEqual(visit.reward, { diamond: 1 }); }
+  assert.equal(day, 1, 'after a week the streak starts again');
+  assert.equal(readLogin('{"version":1,"last":"2026-11-27","streak":3}').streak, 3); assert.equal(readLogin('{"version":1,"last":"x","streak":3}'), undefined);
 });
 
 test('capture pauses independently and settles after the animation or a skip', () => {
@@ -564,9 +747,29 @@ test('the broken side of a fork mirrors the bend and runs straight out the other
   for (const at of [169, 175, 180, 186, 191]) { const a = route.branch(at - .001, 180, 'left'), b = route.branch(at + .001, 180, 'left'); assert.ok(Math.hypot(a.x - b.x, a.z - b.z) < .01); }
   const out = route.branch(200, 180, 'left');
   assert.ok(Math.abs(out.heading + Math.PI / 2) < 1e-9);
-  assert.ok(Math.abs(out.x - (corner.x - 20)) < 1e-9 && Math.abs(out.z - corner.z) < 1e-9);
+  assert.ok(Math.abs(out.x - (corner.x - 20 - BEND_SLACK)) < 1e-9 && Math.abs(out.z - corner.z) < 1e-9);
   const safe = route.sample(200);
-  assert.ok(Math.abs(safe.x - (corner.x + 20)) < 1e-9, 'the safe side goes the opposite way');
+  assert.ok(Math.abs(safe.x - (corner.x + 20 + BEND_SLACK)) < 1e-9, 'the safe side goes the opposite way');
+  // Straight on past the corner falls short of the corner point by the same slack.
+  const ahead = route.straight(190, 180);
+  assert.ok(Math.abs(ahead.z - (corner.z + 10 - BEND_SLACK)) < 1e-9 && Math.abs(ahead.x - corner.x) < 1e-9);
+});
+
+test('bends keep the pace and turn in and out smoothly', () => {
+  const route = new RunnerRoute3D(); route.sync([{ z: 180, direction: 'right' }, { z: 360, direction: 'left' }], 0);
+  // Every metre of distance is a metre of ground, through the bends as on the straights.
+  for (let d = 150; d < 390; d += .25) {
+    const a = route.sample(d), b = route.sample(d + .25);
+    assert.ok(Math.abs(Math.hypot(b.x - a.x, b.z - a.z) - .25) < .004, `pace at ${d}: ${Math.hypot(b.x - a.x, b.z - a.z)}`);
+  }
+  // The turn rate rises from nothing and falls back to nothing, peaking mid-bend.
+  const half = BEND_LENGTH / 2;
+  assert.equal(route.turnRate(180 - half - .01), 0); assert.ok(route.turnRate(180 - half + .05) < .01);
+  assert.ok(Math.abs(route.turnRate(180) - Math.PI / 2 * 1.5 / BEND_LENGTH) < 1e-9);
+  assert.ok(route.turnRate(360) < 0, 'left turns turn the other way');
+  // The bend still leaves each straight CORNER_RADIUS from the corner point.
+  const corner = route.corner(180), end = route.sample(180 + half);
+  assert.ok(Math.abs(end.x - (corner.x + CORNER_RADIUS)) < 1e-6 && Math.abs(end.z - corner.z) < 1e-6);
 });
 
 test('terrain rises and falls continuously and stays level across scene boundaries', () => {
@@ -783,4 +986,73 @@ test('generated scenery and props retain their native PNG bytes', () => {
     assert.equal(bytes.length, asset.bytes); assert.equal(bytes[25], asset.pngColorType);
     assert.equal(createHash('sha256').update(bytes).digest('hex'), asset.sha256);
   }
+});
+
+test('career: lifetime totals add up run by run; a revived run that ends again counts once', () => {
+  const empty = readCareer(null);
+  assert.equal(empty.runs, 0); assert.equal(empty.metres, 0);
+  assert.deepEqual(readCareer('{"version":1,"runs":3,"metres":-5,"gold":1.5,"silver":"9","longest":800}'), { ...empty, runs: 3, longest: 800 });
+  assert.deepEqual(readCareer('not json'), empty);
+  const run = { metres: 512.7, silver: 40, gold: 2, diamond: 0, nearMisses: 3, doubleJumps: 4, chests: 1, revives: 0, score: 9000, combo: 3 };
+  const one = addRun(empty, run);
+  assert.equal(one.runs, 1); assert.equal(one.metres, 512); assert.equal(one.silver, 40); assert.equal(one.longest, 512); assert.equal(one.bestScore, 9000); assert.equal(one.bestCombo, 3);
+  // Revived and ran on: only what came after counts, and it is still one run.
+  const longer = { ...run, metres: 900, silver: 70, revives: 1, score: 15000, combo: 4 };
+  const again = addRun(one, longer, run);
+  assert.equal(again.runs, 1); assert.equal(again.metres, 900); assert.equal(again.silver, 70); assert.equal(again.revives, 1); assert.equal(again.longest, 900); assert.equal(again.bestScore, 15000);
+  const two = addRun(again, { ...run, metres: 100, score: 500, combo: 1 });
+  assert.equal(two.runs, 2); assert.equal(two.metres, 1000); assert.equal(two.longest, 900); assert.equal(two.bestScore, 15000); assert.equal(two.bestCombo, 4);
+});
+
+test('picture effects are all on by default; a saved choice turns only that one off', () => {
+  assert.deepEqual(readGraphics(null), { post: true, shadows: true, volumetric: true, wet: true });
+  assert.deepEqual(readGraphics('{"shadows":false,"wet":"no","extra":1}'), { post: true, shadows: false, volumetric: true, wet: true });
+  assert.deepEqual(readGraphics('[broken'), { post: true, shadows: true, volumetric: true, wet: true });
+});
+
+test('difficulty: a new tier every 1000 m lifts the top speed and tightens the rows; the short modes stay at the first', () => {
+  assert.equal(tierAt(0), 1); assert.equal(tierAt(TIER_DISTANCE - 1), 1); assert.equal(tierAt(TIER_DISTANCE), 2); assert.equal(tierAt(2500), 3); assert.equal(tierAt(99999), TOP_TIER);
+  const w = new RunnerWorld(5); w.start();
+  const pace = d => w['paceAt'](w.origin + d);
+  assert.ok(Math.abs(pace(1950) - 30) < .01, 'the pace reaches 30 m/s by about 1900 m');
+  assert.ok(Math.abs(pace(2500) - 30.7) < .01 && Math.abs(pace(5500) - 32.8) < .01, 'each tier from the third adds .7 m/s to the top speed');
+  w.distance = w.origin + 3500; assert.equal(w.tier, 4);
+  for (const mode of ['chase', 'rush']) { const t = new RunnerWorld(5, mode); t.start(); t.distance += 5000; assert.equal(t.tier, 1); }
+});
+
+test('items arrive with distance: each power-up soon after its own distance, the coin bag after 2000 m, the lucky star after 3000 m', () => {
+  const w = new RunnerWorld(11); w.start(); w.turns = []; w.nextTurn = Infinity;
+  const firstAt = {};
+  for (let t = 0; t < 120 * 260 && w.phase === 'running' && w.runDistance < 3300; t++) {
+    for (const i of w.items) if (!(i.kind in firstAt) && (i.kind in POWER_UNLOCK || i.kind === 'coin-bag' || i.kind === 'star')) firstAt[i.kind] = i.z - w.origin;
+    drive(w); w.advance(1 / 120);
+  }
+  assert.equal(w.phase, 'running', `${w.reason} at ${Math.round(w.runDistance)}`);
+  for (const [kind, from] of [...Object.entries(POWER_UNLOCK), ['coin-bag', COIN_BAG_START], ['star', STAR_START]]) {
+    assert.ok(firstAt[kind] !== undefined, `${kind} turned up`);
+    // The first slots come after the warm-up rows, so the ones there from the start may take a little longer.
+    assert.ok(firstAt[kind] >= from && firstAt[kind] < Math.max(from, 200) + 250, `${kind} first at ${Math.round(firstAt[kind])} m (unlocks at ${from} m)`);
+  }
+  // A coin bag is gold at once (more on later tiers); a lucky star takes the combo up a step.
+  const b = new RunnerWorld(3); b.start(); skipTo(b, b.origin + 2400); b.nextRow = b.nextTurn = Infinity; b.turns = [];
+  b.items = [{ id: 1, kind: 'coin-bag', lane: b.lane, z: b.distance + 2, done: false }]; const gold = b.gold; run(b, .3);
+  assert.equal(b.gold - gold, 2 + 3); assert.equal(b.coinBags, 1);
+  b.items = [{ id: 2, kind: 'star', lane: b.lane, z: b.distance + 2, done: false }]; const before = b.multiplier; run(b, .3);
+  assert.equal(b.multiplier, Math.min(5, before + 1)); assert.equal(b.stars, 1);
+});
+
+test('late tiers bring new patterns and stay solvable: coin frenzies, slide-then-jump runs, twin rollers, coin snakes', () => {
+  let frenzies = 0, twins = 0, gold = 0;
+  for (const seed of [3, 8, 21, 34]) {
+    const w = new RunnerWorld(seed); w.start(); skipTo(w, w.origin + 3400); w.nextRow = w.distance + 40; w.turns = []; w.nextTurn = Infinity;
+    const rollers = new Map();
+    for (let t = 0; t < 120 * 150 && w.phase === 'running' && w.runDistance < 6600; t++) {
+      for (const i of w.items) if (i.roll && !rollers.has(i.id)) { rollers.set(i.id, i.z); if ([...rollers.values()].filter(z => Math.abs(z - i.z) < .01).length === 2) twins++; }
+      drive(w); w.advance(1 / 120);
+    }
+    assert.equal(w.phase, 'running', `seed ${seed}: ${w.reason} at ${Math.round(w.runDistance)}`);
+    assert.ok(w.runDistance >= 6600 && w.tier >= 7);
+    frenzies += w.frenzies; gold += w.gold;
+  }
+  assert.ok(frenzies >= 8, `${frenzies} coin frenzies`); assert.ok(twins >= 1, 'two rollers side by side'); assert.ok(gold > 200);
 });

@@ -4,11 +4,15 @@ import type { Settings } from "../settings.ts";
 import type { AudioManager } from "../audio.ts";
 import { RunnerTilt } from "./tilt.ts";
 import { CAPTURE_GRAB_AT, CAPTURE_LAUGH_AT, MINECART_SURPRISE_ART } from "./animation.ts";
+import { ropeReleaseProgress } from "./course.ts";
 import { canAfford, DOG_LOOKS, getDogLook, LEGACY_WARDROBE_KEY, migrateLegacyWardrobe, ORIGINAL_LOOK, readWardrobe, WARDROBE_KEY, type CurrencyPurse } from "./shop.ts";
 import type { RunnerRenderer3D } from "./renderer3d.ts";
 import { FROG_EXTRA_ART } from "../escape/extra-art.ts";
+import { addRun, CAREER_KEY, GRAPHICS_KEY, GRAPHICS_OPTIONS, readCareer, readGraphics, rewardText, type Career, type Graphics, type RunSummary } from "./progression.ts";
+import { buyUpgrade, checkIn, durationAt, levelOf, LOGIN_KEY, MAX_LEVEL, nextCost, readLogin, readUpgrades, UPGRADABLE, UPGRADES_KEY, upgradedDurations, dayKey } from "./progression.ts";
 import {
-  RunnerWorld, RUN_SCENES, RUN_POWERS, RUN_POWER_SECONDS, CHASE_RECORD_KEY, CHASE_SECONDS, CHASE_START_GAP, ENDLESS_RECORD_KEY, LONG_GAP_START, GOLD_START, DIAMOND_START, TURN_HINT_END, obstacleHalfDepth, readRunRecord,
+  RunnerWorld, RUN_SCENES, RUN_POWERS, CHASE_SECONDS, CHASE_START_GAP, LONG_GAP_START, GOLD_START, DIAMOND_START, NEAR_SCORE, ROLL_START, TURN_HINT_END, RECORD_KEYS, RUSH_SECONDS, CLOCK_SECONDS, DARK_MAX_GAP, LANTERN_GAP, BALLOON_START, REVIVE_GRACE,
+  dailySeed, isLongRun, obstacleHalfDepth, readRunRecord, sceneAt,
   type RunAction, type RunPhase, type RunMode, type RunPowerKind, type RunTurn,
 } from "./world.ts";
 
@@ -23,14 +27,60 @@ const POWER_INFO = {
   magnet: { name: "磁铁", text: "附近货币自动飞过来" },
   shield: { name: "护盾", text: "可以挡住一次撞击" },
   boost: { name: "飞鞋冲刺", text: "加速无敌，自动转弯" },
-  slow: { name: "沙漏", text: "5 秒内跑动和跳跃变慢" },
-  double: { name: "双倍得分", text: "8 秒内路程和收币得分翻倍" },
-  bike: { name: "自行车", text: "9 秒内可骑过倒木和乱石枯枝" },
+  slow: { name: "沙漏", text: "跑动和跳跃一起变慢" },
+  double: { name: "双倍得分", text: "路程和收币得分翻倍" },
+  spring: { name: "弹簧鞋", text: "跳得又高又远，一跳越过滚石" },
+  bike: { name: "自行车", text: "可骑过倒木和乱石枯枝" },
   fruit: { name: "附魔金苹果", text: "15 秒附魔金身：无敌、加速、吸币、双倍得分、自动过弯" },
+  balloon: { name: "气球", text: "飞上天空收金币，越过一切障碍" },
 } satisfies Record<RunPowerKind, { name: string; text: string }>;
+/** The modes on the start screen, in order. */
+const MODES: readonly { id: RunMode; name: string; tag: string; note: string; start: string }[] = [
+  { id: "endless", name: "无限奔跑", tag: "经典", note: "一直跑下去，被恐怖奶蛙追上就结束。", start: "开始奔跑" },
+  { id: "daily", name: "每日挑战", tag: "今日", note: "今天所有人跑同一条路线，看谁跑得最远。每天零点换新路线。", start: "挑战今日路线" },
+  { id: "rush", name: "金币冲刺", tag: "60 秒", note: `${RUSH_SECONDS} 秒内能收多少就收多少，金币更多更密；捡到闹钟加 ${CLOCK_SECONDS} 秒。撞上致命障碍会提前结束。`, start: "开始冲刺" },
+  { id: "dark", name: "暗夜逃亡", tag: "恐怖", note: `漆黑的夜里，恐怖奶蛙一直跟在身后并越追越近。捡灯笼能把它逼退 ${LANTERN_GAP} 米，撞到东西会被它拉近，没有转弯提示。`, start: "逃进黑夜" },
+  { id: "chase", name: "夺回金苹果", tag: "追击", note: `${CHASE_SECONDS} 秒内追上抢走附魔金苹果的恐怖奶蛙。穿过雪原和赤岩峡谷，收币和冲刺拉近距离，撞到东西会被甩开，小心它扔来的木箱。`, start: "开始追击" },
+];
+const modeInfo = (mode: RunMode) => MODES.find(item => item.id === mode)!;
+const UPGRADE_NOTE: Partial<Record<RunPowerKind, string>> = { balloon: "飞行时间" };
+/** One of these comes up while the course loads. */
+const TIPS = [
+  "倒木和裂缝要跳，低门要下滑；屏幕中间会提示。",
+  "在空中再按一次跳是二段跳，可以越过滚石和矿车。",
+  "在空中按下滑会急降，落地接着滑过去。",
+  "岔路口跟着银币走，另一边通向断桥。",
+  "撞到东西后奶蛙会追上来，8 秒内别再撞。",
+  "临门换道、贴着跳过或滑过算惊险闪避，会加分和连击。",
+  "道具升级能让磁铁、护盾、冲刺等持续更久。",
+  "暗夜逃亡里捡灯笼能把奶蛙逼退。",
+  "连续收币会提高倍数，最高 5 倍。",
+];
+/** Line icons for the lobby buttons (24 × 24, drawn in the button's text colour). */
+const ICONS = {
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  shop: '<path d="M5 8h14l-1.2 12H6.2z"/><path d="M9 8V7a3 3 0 0 1 6 0v1"/>',
+  upgrade: '<path d="M12 4l6 6h-3.5v9h-5v-9H6z"/>',
+  more: '<circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/>',
+} as const;
+const icon = (name: keyof typeof ICONS) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
+/** The look the lobby showed last time, so the next visit shows another. */
+const SHOWCASE_KEY = "nwaxz-runner-showcase-v1";
+/** How long the "one more go?" offer waits before the results come up, in milliseconds. */
+const OFFER_MS = 4500;
 const newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
 /** Seconds the scene name stays up after the run enters a new scene. */
 const SCENE_LABEL_SECONDS = 3.2;
+/** Cheers for each thousand metres of an endless run. */
+const MILESTONE_CHEERS = ["好样的！", "跑得漂亮！", "势不可挡！", "奶蛙望尘莫及！", "传说中的奶狗！"];
+/** New items, in the order a long run brings them in, with what they do. */
+const NEW_ITEMS: readonly [distance: number, name: string, text: string, kind: string][] = [
+  [400, "双倍得分", "捡到后一段时间得分翻倍", "double"], [700, "飞鞋冲刺", "冲得更快，撞上东西也不怕", "boost"],
+  [1000, "沙漏", "一切放慢一会儿，更好躲", "slow"], [1500, "弹簧鞋", "跳得更高，滚石也能一跳而过", "spring"],
+  [2000, "金币袋", "捡到立刻得金币，越往后越多", "coin-bag"], [3000, "幸运星", "连击倍数立刻升一级", "star"],
+];
+/** What is coming down the lane, by scene. */
+const ROLLING_NAME: Record<number, string> = { 1: "石球滚来了", 2: "矿车冲过来了", 4: "滚石来了", 5: "大雪球滚来了" };
 
 /** Corner prompt: forks and junctions first ask the player to look, then show the way once the turn is due. */
 function turnCue(turn: RunTurn, due: boolean) {
@@ -50,6 +100,25 @@ export class RunnerGame {
   private wardrobe = readWardrobe(null);
   private credited: CurrencyPurse = { silver: 0, gold: 0, diamond: 0 };
   private shopOpen = false;
+  private upgradesOpen = false;
+  private careerOpen = false;
+  private moreOpen = false;
+  private graphicsOpen = false;
+  /** Picture effects, all on unless the player turned some off on this device. */
+  private graphics: Graphics = (() => { try { return readGraphics(localStorage.getItem(GRAPHICS_KEY)); } catch { return readGraphics(null); } })();
+  /** Lifetime totals on this device; `counted` is what the current run has already added. */
+  private career: Career = (() => { try { return readCareer(localStorage.getItem(CAREER_KEY)); } catch { return readCareer(null); } })();
+  private counted?: { world: RunnerWorld; summary: RunSummary };
+  private upgrades = readUpgrades(null);
+  /** The day's check-in reward, shown once on the start screen. */
+  private loginGift = "";
+  /** Pickups and revives already reported, so each is announced once. */
+  private seenPickups = { chests: 0, clocks: 0, lanterns: 0, revives: 0, coinBags: 0, stars: 0 };
+  /** The next of NEW_ITEMS to announce this run. */
+  private nextItem = 0;
+  private inFrenzy = false;
+  /** Coins in the HUD last frame, to bounce the counter when more come in. */
+  private shownPurse = 0;
   private shopQuery = "";
   private shopError = "";
   private pendingSkin?: { id: string };
@@ -77,6 +146,12 @@ export class RunnerGame {
   private swipe?: { x: number; y: number; id: number; dir?: RunAction };
   private wakeLock?: { release(): Promise<void> };
   private seenApple = -1;
+  private seenLanded = 0;
+  private seenSplashes = 0;
+  private lastStride = 0;
+  private tip = TIPS[Math.floor(Math.random() * TIPS.length)];
+  /** When the next heartbeat is due while the frog is close (performance.now milliseconds). */
+  private nextBeat = 0;
   private seenThrows = 0;
   private seenBumps = 0;
   private warnedTurn = -1;
@@ -86,9 +161,21 @@ export class RunnerGame {
   private el: {
     main: HTMLElement; canvas: HTMLCanvasElement; panel: HTMLElement; distance: HTMLElement; score: HTMLElement; coins: HTMLElement;
     scene: HTMLElement; effects: HTMLElement; cue: HTMLElement; danger: HTMLElement; capture: HTMLElement; toast: HTMLElement; chase: HTMLElement;
+    pop: HTMLElement; banner: HTMLElement;
   };
   private seenEvents = { power: 0, shield: 0, stumble: 0 };
   private toastTimer = 0;
+
+  private seenNear = 0;
+  private seenNearScore = 0;
+  private nearChain = 0;
+  private lastNearAt = -10;
+  private seenRolls = 0;
+  private nextMilestone = 1000;
+  private passedRecord = false;
+  private banners: { html: string; kind: string }[] = [];
+  private bannerTimer = 0;
+  private popTimer = 0;
 
   constructor(private root: HTMLElement, private audio: AudioManager, private settings: Settings, private exit: () => void) {
     root.innerHTML = `
@@ -97,13 +184,15 @@ export class RunnerGame {
   <header class="runner-top">
     <button class="runner-icon" data-run="pause" aria-label="暂停跑酷">Ⅱ</button>
     <div class="runner-meter"><strong id="run-distance">0<small>米</small></strong><span>得分 <b id="run-score">0</b></span></div>
-    <div class="runner-coins"><i aria-hidden="true"></i><b id="run-coins">0</b></div>
+    <div class="runner-coins" aria-label="本局货币"><b id="run-coins">0</b></div>
   </header>
   <p class="runner-scene" id="runner-scene"></p>
   <div class="runner-chase" role="status" hidden></div>
   <div class="runner-effects" aria-label="道具效果"></div>
   <div class="runner-cue" role="status" hidden></div>
   <p class="runner-toast" role="status" hidden></p>
+  <p class="runner-banner" role="status" hidden></p>
+  <p class="runner-pop" aria-hidden="true" hidden></p>
   <p class="runner-danger" role="status" hidden>恐怖奶蛙追上来了！别再撞了</p>
   <section class="runner-capture" aria-live="polite" hidden><strong></strong><button data-run="skip-capture">跳过</button></section>
   <section class="runner-panel" aria-live="polite"></section>
@@ -119,6 +208,7 @@ export class RunnerGame {
       main: $("main"), canvas: $("canvas"), panel: $(".runner-panel"), distance: $("#run-distance"), score: $("#run-score"),
       coins: $("#run-coins"), scene: $("#runner-scene"), effects: $(".runner-effects"), cue: $(".runner-cue"),
       danger: $(".runner-danger"), capture: $(".runner-capture"), toast: $(".runner-toast"), chase: $(".runner-chase"),
+      pop: $(".runner-pop"), banner: $(".runner-banner"),
     };
     this.loadRecord();
     try {
@@ -126,6 +216,19 @@ export class RunnerGame {
       this.wardrobe = saved ? readWardrobe(saved) : migrateLegacyWardrobe(localStorage.getItem(LEGACY_WARDROBE_KEY));
       if (!saved) this.persistWardrobe();
     } catch { this.recordError = true; }
+    try {
+      this.upgrades = readUpgrades(localStorage.getItem(UPGRADES_KEY));
+      // The first visit of the day pays a reward that grows over a week of days in a row.
+      const visit = checkIn(readLogin(localStorage.getItem(LOGIN_KEY)), new Date());
+      if (visit) {
+        for (const key of ["silver", "gold", "diamond"] as const) this.wardrobe[key] = Math.min(1e9, this.wardrobe[key] + (visit.reward[key] ?? 0));
+        if (this.persistWardrobe()) {
+          localStorage.setItem(LOGIN_KEY, JSON.stringify(visit.login));
+          this.loginGift = `每日奖励 · 连续第 ${visit.day} 天：<b>+${rewardText(visit.reward)}</b>`;
+        }
+      }
+    } catch { this.recordError = true; }
+    this.newWorld();
     const signal = this.abort.signal;
     root.addEventListener("click", this.onClick, { signal });
     root.addEventListener("input", event => {
@@ -160,6 +263,8 @@ export class RunnerGame {
       this.art = { dog, frog, laugh, hauntedLaugh };
       this.renderer?.dispose();
       this.renderer = new module.RunnerRenderer3D(this.el.canvas, this.settings);
+      // Effects first, so the warm-up in load() compiles their shaders too (not mid-run).
+      this.renderer.setGraphics(this.graphics);
       await this.renderer.load();
       const look = getDogLook(this.wardrobe.equipped);
       if ("sprite" in look) {
@@ -171,6 +276,7 @@ export class RunnerGame {
       if (this.destroyed) { this.renderer.dispose(); return; }
       this.el.main.dataset.engine = "babylon";
       this.ready = true; this.shownPhase = "ready"; this.showPanel();
+      void this.pickShowcase();
     } catch {
       if (this.destroyed) return;
       this.renderer?.dispose(); this.renderer = undefined;
@@ -220,11 +326,22 @@ export class RunnerGame {
       case "help": this.showHelp(); return;
       case "shop": if (this.world.phase === "ready" || this.world.phase === "lost" || this.world.phase === "won") { this.shopOpen = true; this.shopQuery = ""; this.showPanel(); } return;
       case "shop-back": this.closeShop(); return;
+      case "upgrades": if (this.world.phase === "ready" || this.world.phase === "lost" || this.world.phase === "won") { this.upgradesOpen = true; this.showPanel(); } return;
+      case "upgrades-back": this.upgradesOpen = false; this.showPanel(); return;
+      case "career": this.careerOpen = true; this.showPanel(); return;
+      case "more": this.moreOpen = true; this.showPanel(); return;
+      case "more-back": this.moreOpen = false; this.showPanel(); return;
+      case "graphics": this.graphicsOpen = true; this.showPanel(); return;
+      case "graphics-back": this.graphicsOpen = false; this.showPanel(); return;
+      case "mode-prev": case "mode-next": this.switchMode(action === "mode-prev" ? -1 : 1); return;
+      case "career-back": this.careerOpen = false; this.showPanel(); return;
+      case "revive": this.revive(); return;
+      case "offer-skip": this.endOffer(); return;
       case "help-back": this.showPanel(); return;
       case "retry-art": void this.load(); return;
       case "skip-capture": this.world.finishCapture(); return;
-      case "mode-endless": case "mode-chase":
-        this.mode = action === "mode-endless" ? "endless" : "chase"; this.newWorld(); this.loadRecord(); this.showPanel(); return;
+      case "mode-endless": case "mode-chase": case "mode-daily": case "mode-rush": case "mode-dark":
+        this.mode = action.slice(5) as RunMode; this.newWorld(); this.loadRecord(); this.showPanel(); return;
       case "start": if (this.ready) this.begin(); return;
       case "restart": this.newWorld(); this.begin(); return;
       case "play-endless": this.mode = "endless"; this.loadRecord(); this.newWorld(); this.begin(); return;
@@ -237,8 +354,40 @@ export class RunnerGame {
         return;
       }
     }
+    if (action.startsWith("fx-")) { this.toggleEffect(action.slice(3) as keyof Graphics); return; }
+    if (action.startsWith("level-")) { this.buyLevel(action.slice(6) as RunPowerKind); return; }
     if (action.startsWith("buy-") || action.startsWith("equip-")) void this.chooseLook(action);
   };
+
+  /** Buys the next level of a power-up from the upgrades page. */
+  private buyLevel(kind: RunPowerKind) {
+    if (!this.upgradesOpen) return;
+    const bought = buyUpgrade(this.wardrobe, this.upgrades, kind);
+    if (!bought) return;
+    try {
+      localStorage.setItem(UPGRADES_KEY, JSON.stringify(bought.upgrades));
+      if (!this.persistWardrobe(bought.wallet)) { localStorage.setItem(UPGRADES_KEY, JSON.stringify(this.upgrades)); return; }
+    } catch { this.recordError = true; return; }
+    this.wardrobe = bought.wallet; this.upgrades = bought.upgrades;
+    this.audio.effect("coin");
+    this.newWorld();
+    this.showPanel();
+  }
+
+  /** Spends gold to get the dog back up and carry on the run. */
+  private revive() {
+    const w = this.world, cost = w.reviveCost;
+    if (!w.canRevive || this.wardrobe.gold < cost) return;
+    const wallet = { ...this.wardrobe, gold: this.wardrobe.gold - cost };
+    if (!this.persistWardrobe(wallet)) return;
+    this.wardrobe = wallet;
+    w.revive();
+    this.captureAudio = "waiting"; this.shownPhase = "running"; this.last = 0; this.offerUntil = 0;
+    this.audio.setPlaying(true); this.holdScreenOn(true);
+    this.toast(`<b>续命成功</b>${REVIVE_GRACE} 秒内无敌，继续跑！`, "shield", 2);
+    this.flash("apple");
+    this.showPanel();
+  }
 
   private onKey = (event: KeyboardEvent) => {
     if (event.altKey || event.ctrlKey || event.metaKey) return;
@@ -251,6 +400,11 @@ export class RunnerGame {
     }
     if (event.target instanceof HTMLInputElement) return;
     const phase = this.world.phase;
+    if (this.offering && !event.repeat && (event.key === "Enter" || event.key === "Escape")) {
+      event.preventDefault();
+      if (event.key === "Enter") this.revive(); else this.endOffer();
+      return;
+    }
     if (event.key === "Escape" || event.key === "p" || event.key === "P") {
       event.preventDefault(); if (event.repeat) return;
       if (phase === "paused") this.resume(); else this.pause();
@@ -260,14 +414,25 @@ export class RunnerGame {
       event.preventDefault(); if (phase === "ready") this.begin(); else { this.newWorld(); this.begin(); }
       return;
     }
+    if (phase === "ready" && this.ready && this.el.panel.classList.contains("lobby") && (event.key === "ArrowLeft" || event.key === "ArrowRight") && !event.repeat) {
+      event.preventDefault(); this.switchMode(event.key === "ArrowLeft" ? -1 : 1);
+      return;
+    }
     const action = KEYS[event.key];
     if (action && phase === "running") { event.preventDefault(); if (!event.repeat) this.act(action); }
   };
 
   private act(action: RunAction) {
-    if (this.world.phase !== "running") return;
-    this.world.action(action);
-    if (action === "jump" || action === "slide") this.audio.effect("tap");
+    const w = this.world;
+    if (w.phase !== "running") return;
+    const jumps = w.jumpCount, slides = w.slides, lane = w.lane, turns = w.turnCount;
+    w.action(action);
+    // Each move has its own sound, and only when it actually happened.
+    // Heard from the side of the road the dog is on.
+    const pan = (w.lane - 1) * .35;
+    if (w.jumpCount > jumps) this.audio.effect(w.jumpCount === 2 ? "jump2" : "jump", pan);
+    else if (w.slides > slides) this.audio.effect("slide", pan);
+    else if (w.lane !== lane || w.turnCount !== turns) this.audio.effect("swish", pan);
   }
 
   // ---------- tilt ----------
@@ -313,20 +478,140 @@ export class RunnerGame {
   private vibrate(pattern: number | number[]) { if (this.settings.vibration) navigator.vibrate?.(pattern); }
 
   private newWorld() {
-    this.world = new RunnerWorld(newSeed(), this.mode);
+    // The daily run uses the day's seed, so everyone gets the same course; every run gets the upgrades bought.
+    this.world = new RunnerWorld(this.mode === "daily" ? dailySeed(new Date()) : newSeed(), this.mode, { durations: upgradedDurations(this.upgrades) });
+    this.seenPickups = { chests: 0, clocks: 0, lanterns: 0, revives: 0, coinBags: 0, stars: 0 }; this.shownPurse = 0; this.nextItem = 0;
     this.shownScene = -1;
-    this.captureAudio = "waiting";
+    this.captureAudio = "waiting"; this.offerUntil = 0; this.rollPending = false; this.scoreRoll = undefined;
     this.shopOpen = false; this.credited = { silver: 0, gold: 0, diamond: 0 };
     this.seenEvents = { power: 0, shield: 0, stumble: 0 };
     this.seenApple = -1; this.seenThrows = 0; this.seenBumps = 0;
     this.el.toast.hidden = true;
+    this.banners = []; clearTimeout(this.bannerTimer); this.el.banner.hidden = true;
+    clearTimeout(this.popTimer); this.el.pop.hidden = true;
     this.warnedTurn = this.urgentTurn = -1;
   }
+
+  /** A line under the score for milestones and records; several in a row wait their turn. */
+  private banner(html: string, kind: string) {
+    this.banners.push({ html, kind });
+    if (this.el.banner.hidden) this.nextBanner();
+  }
+  private nextBanner() {
+    const next = this.banners.shift(), el = this.el.banner;
+    if (!next) { el.hidden = true; return; }
+    el.innerHTML = next.html; el.dataset.kind = next.kind; el.hidden = false;
+    el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+    this.bannerTimer = window.setTimeout(() => this.nextBanner(), 2400);
+  }
+  /** The near-miss call-out, by the dog. */
+  private pop(html: string) {
+    const el = this.el.pop;
+    el.innerHTML = html; el.hidden = false;
+    el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+    clearTimeout(this.popTimer);
+    this.popTimer = window.setTimeout(() => { el.hidden = true; }, 900);
+  }
+
+  /** Near misses, rolling hazards setting off, every thousand metres and passing the longest run. */
+  private syncMoments() {
+    const w = this.world;
+    if (w.nearMisses > this.seenNear) {
+      const gained = w.nearScore - this.seenNearScore;
+      this.nearChain = w.elapsed - this.lastNearAt < 2.6 ? this.nearChain + 1 : 1;
+      this.seenNear = w.nearMisses; this.seenNearScore = w.nearScore; this.lastNearAt = w.elapsed;
+      this.pop(`<b>${this.nearChain > 1 ? `惊险 ×${this.nearChain}` : "惊险！"}</b><span>+${gained}</span>`);
+      this.audio.effect("whoosh"); this.vibrate(12);
+    }
+    if (w.rollsStarted > this.seenRolls) { this.seenRolls = w.rollsStarted; if (w.phase === "running") this.audio.effect("door"); }
+    if (w.phase !== "running" || w.chase) return;
+    // A coin frenzy: every coin gold for a stretch, extra lines in every lane.
+    if (w.frenzy && !this.inFrenzy) { this.banner("<b>金币狂欢！</b><span>这一段金币全是金的，三条道都有</span>", "record"); this.audio.effect("chest"); }
+    this.inFrenzy = w.frenzy;
+    const fresh = NEW_ITEMS[this.nextItem];
+    if (fresh && isLongRun(this.mode) && w.runDistance >= fresh[0]) {
+      this.nextItem++;
+      this.toast(`<b>新道具：${fresh[1]}</b>${fresh[2]}`, fresh[3], 2.4);
+    }
+    if (w.runDistance >= this.nextMilestone) {
+      const k = this.nextMilestone / 1000;
+      // Every 1000 m is a new difficulty tier: faster, with less time between rows.
+      const cheer = MILESTONE_CHEERS[Math.min(MILESTONE_CHEERS.length - 1, k - 1)];
+      this.banner(`<b>${this.nextMilestone} 米${w.tier > 1 ? ` · 难度 ${w.tier}` : ""}</b><span>${w.tier > 1 ? `更快、更密 · ${cheer}` : cheer}</span>`, "milestone");
+      this.audio.effect("coin");
+      this.nextMilestone += 1000;
+    }
+    if (!this.passedRecord && w.runDistance > this.record.distance) {
+      this.passedRecord = true;
+      this.banner(`<b>新的最远纪录！</b><span>超过了 ${this.record.distance} 米</span>`, "record");
+      this.audio.effect("win"); this.flash("record");
+    }
+  }
+  /** Turns one picture effect on or off, for this device, and applies it straight away. */
+  private toggleEffect(key: keyof Graphics) {
+    if (!(GRAPHICS_OPTIONS as readonly string[]).includes(key)) return;
+    this.graphics = { ...this.graphics, [key]: !this.graphics[key] };
+    try { localStorage.setItem(GRAPHICS_KEY, JSON.stringify(this.graphics)); } catch { this.recordError = true; }
+    this.renderer?.setGraphics(this.graphics);
+    this.showPanel();
+  }
+
+  /**
+   * Each time 奶狗快跑 opens, the lobby shows a different look: the default dog or any school look,
+   * owned or not. It is only for show: the run always uses the look the player has on.
+   */
+  private showcase?: { id: string; owned: boolean };
+  private async pickShowcase() {
+    const pool = [ORIGINAL_LOOK.id, ...DOG_LOOKS.map(look => look.id)];
+    let last = "";
+    try { last = localStorage.getItem(SHOWCASE_KEY) ?? ""; } catch { /* No memory of the last one: any will do. */ }
+    let id = pool[Math.floor(Math.random() * pool.length)];
+    if (id === last) id = pool[(pool.indexOf(id) + 1 + Math.floor(Math.random() * (pool.length - 1))) % pool.length];
+    try { localStorage.setItem(SHOWCASE_KEY, id); } catch { /* Fine: it may repeat next time. */ }
+    if (id === this.wardrobe.equipped) return;
+    const look = getDogLook(id);
+    let image: HTMLImageElement | undefined;
+    if ("sprite" in look) {
+      try { image = await loadImage(look.sprite, 15000); } catch { return; }
+    }
+    // Only while the lobby is still up and nothing else has been put on meanwhile.
+    if (this.destroyed || this.world.phase !== "ready" || this.shopOpen || this.pendingSkin) return;
+    this.showcase = { id, owned: this.wardrobe.owned.includes(id) };
+    this.renderer?.setDogLook(id, image);
+    this.showPanel();
+  }
+  private showcaseTag(btn: (action: string, text: string, kind?: string, extra?: string) => string) {
+    if (!this.showcase) return "";
+    const look = getDogLook(this.showcase.id), name = look.id === ORIGINAL_LOOK.id ? "默认奶狗" : look.name;
+    return `<div class="runner-lobby-skin" style="--skin:${look.color}">${btn("shop", `<span class="runner-look-name">${name}</span><small>${this.showcase.owned ? "已拥有 · 去换上" : "皮肤商城解锁"}</small>`, "runner-showcase-tag")}</div>`;
+  }
+
+  /** Back to the look the player has on (before a run, or once they change it). */
+  private endShowcase() {
+    if (!this.showcase) return;
+    this.showcase = undefined;
+    const equipped = this.wardrobe.equipped;
+    this.renderer?.setDogLook(equipped, equipped === ORIGINAL_LOOK.id ? undefined : this.skinPortrait);
+  }
+
+  /** The lobby's mode switcher: the previous or next mode, round in a loop. */
+  private switchMode(step: number) {
+    const at = MODES.findIndex(m => m.id === this.mode);
+    this.mode = MODES[(at + step + MODES.length) % MODES.length].id;
+    this.newWorld(); this.loadRecord(); this.showPanel();
+  }
+
   private begin() {
+    this.moreOpen = this.careerOpen = this.graphicsOpen = false;
+    this.endShowcase();
     this.tilt.calibrate(); this.world.start(); this.last = 0;
     this.audio.setMode("normal"); this.audio.setPlaying(true);
     this.holdScreenOn(true);
+    this.seenNear = this.seenNearScore = this.nearChain = this.seenRolls = 0; this.lastNearAt = -10;
+    this.nextMilestone = 1000; this.passedRecord = this.record.distance < 300 || !isLongRun(this.mode);
+    this.loginGift = "";
     if (this.world.chase) this.toast(`<b>夺回金苹果</b>恐怖奶蛙抢走了附魔金苹果，${CHASE_SECONDS} 秒内追上它！`, "fruit", 2.6);
+    else this.pop(`<b>出发！</b><span>${this.world.rush ? "60 秒收金币" : this.world.hunt ? "奶蛙就在身后" : "别让奶蛙追上"}</span>`);
   }
   private resume() {
     if (this.world.phase !== "paused") return;
@@ -352,49 +637,122 @@ export class RunnerGame {
       const coins = this.world.coins;
       if (!document.hidden) this.world.advance(this.last ? (time - this.last) / 1000 : 0);
       this.last = time;
-      if (this.world.coins > coins) this.audio.effect("coin");
+      if (this.world.coins > coins) this.audio.chime((Math.max(1, this.world.streak) - 1) % 11, (this.world.position - 1) * .35);
       this.sync();
       if (this.ready) this.renderer?.draw(this.world);
       this.drawPortraits(time / 1000);
+      this.rollScore(time);
+      this.tickOffer(time);
     } catch (error) {
       if (!this.frameFailed) { this.frameFailed = true; console.error("奶狗快跑：这一帧出错，已跳过", error); }
     }
   };
 
+  /**
+   * Power-up timers: a pill is added when a power starts and removed when it ends, so the others never
+   * redraw; each frame only moves the rings and the seconds, and a timer about to run out blinks.
+   */
+  private syncEffects() {
+    const w = this.world, el = this.el.effects;
+    for (const node of Array.from(el.children) as HTMLElement[]) {
+      const power = node.dataset.power as RunPowerKind | undefined;
+      if (power && !(w[power] > 0)) node.remove();
+    }
+    let combo = el.querySelector<HTMLElement>(".runner-combo");
+    for (const power of RUN_POWERS) {
+      if (!(w[power] > 0)) continue;
+      let node = el.querySelector<HTMLElement>(`[data-power="${power}"]`);
+      if (!node) {
+        node = document.createElement("span");
+        node.className = `runner-effect runner-effect-${power}`; node.dataset.power = power;
+        node.innerHTML = `<span class="runner-effect-ring"><i aria-hidden="true"></i></span><em>${POWER_INFO[power].name}</em><b></b>`;
+        el.insertBefore(node, combo);
+      }
+      const left = String(Math.max(0, Math.min(100, Math.round(w[power] / w.durations[power] * 100))));
+      if (node.dataset.left !== left) { node.dataset.left = left; node.style.setProperty("--left", `${left}%`); }
+      const seconds = String(Math.ceil(w[power])), label = node.lastElementChild as HTMLElement;
+      if (label.textContent !== seconds) label.textContent = seconds;
+      node.classList.toggle("ending", w[power] <= 2);
+    }
+    if (w.multiplier > 1) {
+      if (!combo) { combo = document.createElement("span"); combo.className = "runner-combo"; el.append(combo); }
+      const text = `×${w.multiplier}`;
+      if (combo.textContent !== text) { combo.textContent = text; combo.classList.remove("pop"); void combo.offsetWidth; combo.classList.add("pop"); }
+    } else combo?.remove();
+  }
+
+  /** When the "one more go?" offer runs out (0: none showing). */
+  private offerUntil = 0;
+  private get offering() { return this.offerUntil > 0 && this.world.phase === "lost"; }
+  private endOffer() { if (!this.offerUntil) return; this.offerUntil = 0; this.showPanel(); }
+  /** The offer's ring empties and its seconds count down; when it runs out the results come up. */
+  private tickOffer(time: number) {
+    if (!this.offerUntil) return;
+    if (this.world.phase !== "lost") { this.offerUntil = 0; return; }
+    const left = this.offerUntil - time;
+    if (left <= 0) { this.endOffer(); return; }
+    const ring = this.el.panel.querySelector<HTMLElement>(".runner-offer-ring");
+    if (ring) {
+      ring.style.setProperty("--left", `${(left / OFFER_MS * 100).toFixed(1)}%`);
+      const seconds = String(Math.ceil(left / 1000)), label = ring.querySelector("b");
+      if (label && label.textContent !== seconds) label.textContent = seconds;
+    }
+  }
+  private rollPending = false;
+  private scoreRoll?: { to: number; start: number };
+  /** Counts the result screen's score up over about a second, easing out as it lands. */
+  private rollScore(time: number) {
+    const roll = this.scoreRoll;
+    if (!roll) return;
+    const node = this.el.panel.hidden ? null : this.el.panel.querySelector<HTMLElement>(".runner-over-score strong");
+    const k = Math.max(0, Math.min(1, (time - roll.start) / 1100));
+    if (node) node.textContent = String(Math.round(roll.to * (1 - (1 - k) ** 3)));
+    if (k >= 1 || !node) { if (node) node.textContent = String(roll.to); this.scoreRoll = undefined; }
+  }
+
+  /** Last markup written to each HUD node: a frame compares strings instead of reading the DOM back. */
+  private written = new WeakMap<HTMLElement, string>();
+  private write(node: HTMLElement, html: string) {
+    if (this.written.get(node) === html) return;
+    this.written.set(node, html); node.innerHTML = html;
+  }
+
   /** Pushes world state into the DOM; writes only when something changed. */
   private sync() {
     const w = this.world, el = this.el;
     this.creditCollectedCoins();
-    const set = (node: HTMLElement, html: string) => { if (node.innerHTML !== html) node.innerHTML = html; };
+    const set = (node: HTMLElement, html: string) => this.write(node, html);
     el.main.dataset.phase = this.ready ? w.phase : "loading";
     el.main.classList.toggle("runner-hit", w.elapsed - w.hitAt < .35);
     el.main.classList.toggle("runner-chased", w.phase === "running" && w.danger > 0);
     el.main.classList.toggle("runner-boost", w.phase === "running" && w.boost > 0);
     el.main.classList.toggle("runner-golden", w.phase === "running" && w.fruit > 0);
-    set(el.distance, `${Math.floor(w.runDistance)}<small>米</small>`);
+    set(el.distance, `${Math.floor(w.runDistance)}<small>米</small>${w.tier > 1 ? `<em class="runner-tier">难度 ${w.tier}</em>` : ""}`);
     this.syncChase();
     set(el.score, String(w.score));
-    set(el.coins, `${w.silver}银 · ${w.gold}金 · ${w.diamond}钻`);
+    // Each currency with its own coin; the pill gives a little bounce whenever something comes in.
+    set(el.coins, `<span class="silver" title="银币"><i></i>${w.silver}</span><span class="gold" title="金币"><i></i>${w.gold}</span>${w.diamond ? `<span class="diamond" title="钻石"><i></i>${w.diamond}</span>` : ""}`);
+    const purse = w.silver + w.gold + w.diamond;
+    if (purse > this.shownPurse) { const pill = el.coins.parentElement!; pill.classList.remove("bump"); void pill.offsetWidth; pill.classList.add("bump"); }
+    this.shownPurse = purse;
     // The scene name only comes up for a moment when the run enters a new scene (and at the start).
     if (w.sceneIndex !== this.shownScene) { this.shownScene = w.sceneIndex; this.sceneLabelUntil = w.elapsed + SCENE_LABEL_SECONDS; }
     const labelOn = w.phase === "running" && w.elapsed < this.sceneLabelUntil;
     if (labelOn) set(el.scene, [RUN_SCENES[w.sceneIndex].name, w.night ? "夜" : "", w.sceneIndex === 2 ? "" : WEATHER_NAME[w.weather]].filter(Boolean).join(" · "));
     el.scene.classList.toggle("show", labelOn);
 
-    const effects = RUN_POWERS.filter(key => w[key] > 0)
-      .map(key => `<span class="runner-effect runner-effect-${key}"><i aria-hidden="true"></i><em>${POWER_INFO[key].name}</em>${Math.ceil(w[key])}<u style="--left:${Math.round(w[key] / RUN_POWER_SECONDS[key] * 100)}%"></u></span>`).join("")
-      + (w.multiplier > 1 ? `<span class="runner-combo">×${w.multiplier}</span>` : "");
-    set(el.effects, effects);
+    this.syncEffects();
     el.effects.hidden = w.phase !== "running";
     el.danger.hidden = w.phase !== "running" || w.danger === 0;
 
     this.syncCue();
+    this.syncMoments();
     if (w.powerPicked !== this.seenEvents.power) {
       this.seenEvents.power = w.powerPicked;
       const info = POWER_INFO[w.lastPower];
       const apple = w.lastPower === "fruit";
       this.toast(`<b>${apple ? "✦ " : ""}${info.name}${apple ? " ✦" : ""}</b>${info.text}`, w.lastPower, apple ? 2.8 : 1.8);
-      this.audio.effect(apple ? "win" : "coin");
+      this.audio.effect(apple ? "win" : "power");
       if (apple) { this.vibrate([30, 40, 60]); this.flash("apple"); }
     }
     // The golden apple announces itself as it drops from its tree.
@@ -404,21 +762,58 @@ export class RunnerGame {
       this.toast("<b>✦ 附魔金苹果 ✦</b>从树上掉下来了，快接住！", "fruit", 2.2);
       this.audio.effect("coin");
     }
-    if (w.wallBumps > this.seenBumps) { this.seenBumps = w.wallBumps; this.vibrate(70); this.audio.effect("tap"); }
+    if (w.wallBumps > this.seenBumps) { this.seenBumps = w.wallBumps; this.vibrate(70); this.audio.effect("bump"); }
     if (w.chase && w.chase.throws > this.seenThrows) { this.seenThrows = w.chase.throws; this.audio.effect("tap"); }
     if (w.shieldSaves !== this.seenEvents.shield) { this.seenEvents.shield = w.shieldSaves; this.toast("<b>护盾</b>挡住了撞击！", "shield"); }
+    if (w.chests > this.seenPickups.chests) {
+      this.seenPickups.chests = w.chests;
+      const prize = w.lastChest.power ? `${POWER_INFO[w.lastChest.power].name}：${POWER_INFO[w.lastChest.power].text}` : `+${rewardText(w.lastChest)}`;
+      this.toast(`<b>神秘宝箱</b>${prize}`, "chest", 2.2);
+      this.audio.effect("chest"); this.vibrate([20, 30, 40]);
+    }
+    if (w.clocks > this.seenPickups.clocks) { this.seenPickups.clocks = w.clocks; this.pop(`<b>+${CLOCK_SECONDS} 秒</b>`); this.audio.effect("power"); }
+    if (w.coinBags > this.seenPickups.coinBags) { this.seenPickups.coinBags = w.coinBags; this.pop(`<b>金币袋</b><span>+${w.lastBag} 金币</span>`); this.audio.effect("chest"); }
+    if (w.stars > this.seenPickups.stars) { this.seenPickups.stars = w.stars; this.pop(`<b>幸运星</b><span>连击 ×${w.multiplier}</span>`); this.audio.effect("power"); }
+    if (w.lanterns > this.seenPickups.lanterns) { this.seenPickups.lanterns = w.lanterns; this.pop(`<b>灯笼</b><span>奶蛙退后 ${LANTERN_GAP} 米</span>`); this.audio.effect("power"); }
     if (w.stumbles > this.seenEvents.stumble) {
       this.seenEvents.stumble = w.stumbles;
+      this.audio.effect("bump");
       this.audio.haunt({ allowNormalMode: true });
     }
+    // A heartbeat while the frog is right behind: after a stumble, or creeping up in the dark (faster the closer it gets).
+    const near = w.phase === "running" ? (w.hunt ? (w.hunt.gap < 9 ? w.hunt.gap / 9 : -1) : w.danger > 0 ? .5 : -1) : -1;
+    const now = performance.now();
+    if (near >= 0 && now >= this.nextBeat) { this.audio.effect("heartbeat"); this.nextBeat = now + 420 + near * 520; }
+    // The pulley whirs along a zipline (higher on the steep downhill ones); wind hums under the balloons.
+    const ride = w.ride, rope = w.phase === "running" && ride?.kind === "rope" && ropeReleaseProgress(w.distance, ride) < .25;
+    this.audio.hum(rope ? 1 : w.phase === "running" && w.flying ? .55 : 0, rope ? .8 + w.speed / 40 : .5);
+    // Rain on the road while it rains above ground; wind rushing past on a dash or at top speed.
+    const running = w.phase === "running";
+    this.audio.loop("rain", running && w.weather === "rain" && w.sceneIndex !== 2 ? 1 : 0);
+    this.audio.loop("wind", running && !rope ? (w.boost > 0 ? 1 : Math.max(0, Math.min(1, (w.speed - 23) / 7))) : 0, .8 + w.speed / 60);
+    // Paws on the ground, two to a stride: a click on stone, a knock on the log bridge, a crunch in snow, a scuff on gravel.
+    const stride = Math.floor(w.gait * 2);
+    if (stride !== this.lastStride) {
+      this.lastStride = stride;
+      const onFoot = running && !w.airborne && !w.ride && !w.cycling && !w.flying && w.slide === 0;
+      if (onFoot) this.audio.effect(w.bridge ? "step-wood" : w.sceneIndex === 5 ? "step-snow" : w.sceneIndex === 2 || w.sceneIndex === 4 ? "step-gravel" : "step-stone", (w.position - 1) * .3);
+    }
+    if (w.landedAt !== this.seenLanded) { this.seenLanded = w.landedAt; if (w.phase === "running" && w.elapsed - w.landedAt < .1) this.audio.effect("land"); }
+    const splashes = this.renderer?.splashes ?? 0;
+    if (splashes !== this.seenSplashes) { this.seenSplashes = splashes; if (w.phase === "caught") this.audio.effect("splash"); }
     el.capture.hidden = w.phase !== "caught" || (w.trapFall && w.captureTime < .48);
     if (w.phase === "caught") set(el.capture.querySelector("strong")!, w.reason);
 
     if (this.ready && this.shownPhase !== w.phase) {
+      // The result screen counts the score up from nothing.
+      if ((w.phase === "lost" || w.phase === "won") && !this.settings.reducedMotion && w.score > 0) this.rollPending = true;
+      // Like an arcade "continue?": a few seconds to buy another go before the results.
+      if (w.phase === "lost" && w.canRevive && this.wardrobe.gold >= w.reviveCost) this.offerUntil = performance.now() + OFFER_MS;
       if (w.phase === "caught" || w.phase === "lost" || w.phase === "won") { this.save(); this.audio.setPlaying(false); this.holdScreenOn(false); }
+      if (w.phase === "lost" || w.phase === "won") this.countCareer();
       if (w.phase === "won") { this.audio.effect("win"); this.flash("apple"); this.vibrate([40, 60, 40, 60, 120]); }
       if (w.chase?.escaped && w.phase === "lost") this.audio.haunt({ allowNormalMode: true });
-      if (w.phase === "caught" && this.shownPhase === "running") this.vibrate(180);
+      if (w.phase === "caught" && this.shownPhase === "running") { this.vibrate(180); if (!w.trapFall) { this.audio.effect("crash"); if (!this.settings.reducedMotion) this.flash("crash"); } }
       this.shownPhase = w.phase; this.showPanel();
     }
     // In the chase there is no grab from behind, so no whimper and laugh to go with it.
@@ -434,16 +829,30 @@ export class RunnerGame {
     }
   }
 
-  /** Chase HUD: how far ahead the frog is, as a track from the dog to the frog, and the time left. */
+  /**
+   * The mode's own line under the score: in the chase how far ahead the frog is and the time left; in
+   * the coin rush the clock and the coins so far; in the dark how close the frog behind has crept.
+   */
   private syncChase() {
     const w = this.world, chase = w.chase, el = this.el.chase;
-    el.hidden = !chase || !(w.phase === "running" || w.phase === "paused" || w.phase === "caught");
-    if (!chase || el.hidden) return;
-    const gap = Math.max(0, chase.gap), close = Math.max(0, Math.min(1, 1 - gap / (CHASE_START_GAP * 1.6)));
-    const seconds = Math.ceil(chase.timeLeft), urgent = seconds <= 10;
-    const html = `<span class="runner-chase-track"><i class="runner-chase-dog" style="left:${Math.round(close * 82)}%"></i><i class="runner-chase-frog"></i></span>`
-      + `<b>相距 ${Math.round(gap)} 米</b><em class="${urgent ? "urgent" : ""}">${seconds} 秒</em>`;
-    if (el.innerHTML !== html) el.innerHTML = html;
+    el.hidden = !(chase || w.rush || w.hunt) || !(w.phase === "running" || w.phase === "paused" || w.phase === "caught");
+    if (el.hidden) return;
+    let html = "";
+    if (chase) {
+      const gap = Math.max(0, chase.gap), close = Math.max(0, Math.min(1, 1 - gap / (CHASE_START_GAP * 1.6)));
+      const seconds = Math.ceil(chase.timeLeft), urgent = seconds <= 10;
+      html = `<span class="runner-chase-track"><i class="runner-chase-dog" style="left:${Math.round(close * 82)}%"></i><i class="runner-chase-frog"></i></span>`
+        + `<b>相距 ${Math.round(gap)} 米</b><em class="${urgent ? "urgent" : ""}">${seconds} 秒</em>`;
+    } else if (w.rush) {
+      const seconds = Math.ceil(w.rush.timeLeft), urgent = seconds <= 10;
+      html = `<span class="runner-rush-clock" aria-hidden="true"></span><em class="${urgent ? "urgent" : ""}">${seconds} 秒</em><b>${w.silver + w.gold * 5 + w.diamond * 50} 币值</b>`;
+    } else if (w.hunt) {
+      // The frog's distance as a track: the closer it gets, the further its marker slides toward the dog.
+      const gap = Math.max(0, w.hunt.gap), near = 1 - Math.min(1, gap / DARK_MAX_GAP), urgent = gap < 6;
+      html = `<span class="runner-chase-track runner-hunt-track"><i class="runner-chase-frog runner-hunt-frog" style="left:${Math.round(near * 82)}%"></i><i class="runner-chase-dog runner-hunt-dog"></i></span>`
+        + `<b class="${urgent ? "urgent" : ""}">奶蛙在身后 ${Math.round(gap)} 米</b>`;
+    }
+    this.write(el, html);
   }
 
   /** A brief full-screen flash for big moments. */
@@ -464,6 +873,8 @@ export class RunnerGame {
       const requiredMove = next?.span === 3 && next.z - w.distance < w.speed * 1.6 && !(w.cycling && (next.kind === "block" || next.kind === "spikes")) ? next : undefined;
       const longGap = next?.kind === "long-gap" ? next : undefined;
       const toLip = longGap ? longGap.z - obstacleHalfDepth("long-gap", longGap.z) - w.distance : Infinity;
+      // A boulder or cart already rolling down the dog's own lane.
+      const rolling = w.items.find(item => item.roll && item.rollFrom !== undefined && !item.done && item.lane === w.lane && item.z > w.distance && item.z - w.distance < (w.speed + item.roll) * 1.6);
       if (w.ride?.kind === "rope") {
         aboveRoad = true;
         html = "<b>↔</b><span>左右摆动收币</span>";
@@ -511,6 +922,9 @@ export class RunnerGame {
         // Only when the crate is in the dog's lane; the arrow points to a free side.
         urgent = next.z - w.distance < w.speed * .6;
         html = `<b>${w.lane === 0 ? "▶" : w.lane === 2 ? "◀" : "◀▶"}</b><span>奶蛙扔来木箱</span><small>换道或跳</small>`;
+      } else if (rolling?.roll) {
+        urgent = rolling.z - w.distance < (w.speed + rolling.roll) * .6;
+        html = `<b>${w.lane === 0 ? "▶" : w.lane === 2 ? "◀" : "◀▶"}</b><span>${ROLLING_NAME[sceneAt(rolling.z)] ?? "滚石来了"}</span><small>换道或二段跳</small>`;
       } else if (requiredMove) {
         const slide = requiredMove.kind === "beam";
         urgent = requiredMove.z - w.distance < w.speed * .55;
@@ -518,7 +932,7 @@ export class RunnerGame {
       }
     }
     cue.hidden = !html;
-    if (html && cue.innerHTML !== html) cue.innerHTML = html;
+    if (html) this.write(cue, html);
     cue.classList.toggle("now", urgent);
     cue.classList.toggle("above-road", aboveRoad);
   }
@@ -570,6 +984,7 @@ export class RunnerGame {
       if (this.destroyed || this.pendingSkin !== pending) return;
       if (!this.persistWardrobe(next)) { this.shopError = "皮肤未能保存，请重试。"; return; }
       this.wardrobe = next;
+      this.showcase = undefined;
       this.applyDogLook(id, image);
     } catch {
       if (this.pendingSkin === pending) this.shopError = "皮肤加载失败，请重试。";
@@ -601,10 +1016,19 @@ export class RunnerGame {
     this.skinPortrait = image;
   }
 
-  private recordKey() { return this.mode === "endless" ? ENDLESS_RECORD_KEY : CHASE_RECORD_KEY; }
+  /** Each mode keeps its own best; the daily challenge's best only counts for the day it was set. */
+  private storedRecord() {
+    const raw = localStorage.getItem(RECORD_KEYS[this.mode]);
+    if (this.mode === "daily") {
+      let day: unknown;
+      try { day = JSON.parse(raw ?? "null")?.date; } catch { day = undefined; }
+      if (day !== dayKey(new Date())) return readRunRecord(null);
+    }
+    return readRunRecord(raw);
+  }
   private loadRecord() {
     this.record = readRunRecord(null);
-    try { this.record = readRunRecord(localStorage.getItem(this.recordKey())); } catch { this.recordError = true; }
+    try { this.record = this.storedRecord(); } catch { this.recordError = true; }
   }
   private save() {
     this.creditCollectedCoins();
@@ -612,9 +1036,9 @@ export class RunnerGame {
     const merge = (a: typeof this.record) => ({ version: 1 as const, distance: Math.max(a.distance, Math.floor(w.runDistance)), coins: Math.max(a.coins, w.coins), score: Math.max(a.score, w.score) });
     this.record = merge(this.record);
     try {
-      const stored = readRunRecord(localStorage.getItem(this.recordKey()));
+      const stored = this.storedRecord();
       this.record = merge({ ...this.record, distance: Math.max(this.record.distance, stored.distance), coins: Math.max(this.record.coins, stored.coins), score: Math.max(this.record.score, stored.score) });
-      localStorage.setItem(this.recordKey(), JSON.stringify(this.record));
+      localStorage.setItem(RECORD_KEYS[this.mode], JSON.stringify(this.mode === "daily" ? { ...this.record, date: dayKey(new Date()) } : this.record));
     } catch { this.recordError = true; }
   }
 
@@ -628,9 +1052,9 @@ export class RunnerGame {
     const note = this.recordError ? `<p class="runner-note" role="status">纪录未能保存。</p>` : "";
     const gyroRow = `${btn("gyro", this.gyro === "off" ? "倾斜控制：关" : "倾斜控制：开", "ghost")}${this.gyro === "on" ? btn("calibrate", "重新校准", "ghost") : ""}`;
     const gyroNote = this.gyroMessage ? `<p class="runner-note" role="status">${this.gyroMessage}</p>` : "";
-    let html: string;
+    let html: string, lobby = false;
     if (!this.ready) {
-      html = `<h2>${this.error ? "加载失败" : "正在准备跑道…"}</h2>${this.error ? `<p>${this.error}</p>${btn("retry-art", "重试")}` : `<div class="runner-spinner" aria-hidden="true"></div>`}${btn("exit", "返回", "ghost")}`;
+      html = `<h2>${this.error ? "加载失败" : "正在准备跑道…"}</h2>${this.error ? `<p>${this.error}</p>${btn("retry-art", "重试")}` : `<div class="runner-spinner" aria-hidden="true"></div><p class="runner-tip"><b>小贴士</b>${this.tip}</p>`}${btn("exit", "返回", "ghost")}`;
     } else if (this.shopOpen) {
       const pending = this.pendingSkin?.id;
       const status = pending ? "正在加载皮肤…" : this.shopError;
@@ -645,35 +1069,62 @@ export class RunnerGame {
           const label = active ? "使用中" : owned ? "装备" : "解锁";
           return `<div class="runner-shop-item" data-skin-id="${look.id}"><span class="runner-shop-preview" style="--skin:${look.color}" data-sprite="${look.sprite}"><img src="${look.logo}" alt="" loading="lazy"></span><div><strong>${look.name}</strong><small>QS #${look.rank} · ${cost}</small></div><button data-run="${owned ? `equip-${look.id}` : `buy-${look.id}`}" ${disabled ? "disabled" : ""}>${label}</button></div>`;
         }).join("")}</div>${status ? `<p class="runner-note" role="status">${status}</p>` : ""}${btn("shop-back", "返回", "ghost")}${note}`;
+    } else if (this.careerOpen) {
+      html = this.careerHtml(btn);
+    } else if (this.moreOpen) {
+      html = `<h2>更多</h2>${btn("graphics", "画面特效", "ghost")}${btn("career", "生涯数据", "ghost")}${btn("help", "玩法说明", "ghost")}<div class="runner-row">${gyroRow}</div>${gyroNote}${btn("more-back", "返回", "ghost")}`;
+    } else if (this.upgradesOpen) {
+      html = this.upgradesHtml(btn, note);
     } else if (w.phase === "ready") {
-      const toggle = (action: string, label: string, on: boolean) => `<button data-run="${action}" aria-pressed="${on}">${label}</button>`;
       const look = getDogLook(this.wardrobe.equipped), switcher = this.wardrobe.owned.length > 1;
       const lookName = look.id === ORIGINAL_LOOK.id ? "奶狗" : look.name;
-      const chase = this.mode === "chase";
+      const chase = this.mode === "chase", info = modeInfo(this.mode);
+      lobby = true;
+      const current = MODES.find(m => m.id === this.mode) ?? MODES[0];
+      const today = new Date();
+      const recordLine = this.mode === "rush" || chase ? `最高分 <b>${this.record.score}</b>` : `${this.mode === "daily" ? `${today.getMonth() + 1}月${today.getDate()}日 · 今日` : ""}最高分 <b>${this.record.score}</b> · 最远 <b>${this.record.distance}</b> 米`;
+      const tool = (action: string, label: string, name: keyof typeof ICONS) => `<button data-run="${action}" class="runner-lobby-tool">${icon(name)}<span>${label}</span></button>`;
+      // Kept to the essentials: the dog takes the middle of the screen, everything else sits round it.
       html = `
-        <h2 class="runner-title">${TITLE}</h2>
-        <div class="runner-roster">
-          <figure class="runner-hero" style="--skin:${look.color}">
-            ${switcher ? btn("skin-prev", "‹", "runner-skin-arrow", `aria-label="上一款皮肤"`) : ""}
-            <canvas width="160" height="140" data-portrait="dog" aria-label="玩家：${lookName}"></canvas>
-            ${switcher ? btn("skin-next", "›", "runner-skin-arrow next", `aria-label="下一款皮肤"`) : ""}
-            <figcaption><span class="runner-look-name">${lookName}</span><small>${switcher ? "你 · 左右切换皮肤" : "你"}</small></figcaption>
-          </figure>
-          <span aria-hidden="true">VS</span>
-          <figure><canvas width="160" height="140" data-portrait="frog" aria-label="恐怖奶蛙"></canvas><figcaption>恐怖奶蛙<small>${chase ? "抢走了金苹果" : "追赶者"}</small></figcaption></figure>
-        </div>
-        <div class="runner-seg" aria-label="玩法">${toggle("mode-endless", "无限模式", !chase)}${toggle("mode-chase", "夺回金苹果", chase)}</div>
-        <p class="runner-mode-note">${chase ? `特别模式：${CHASE_SECONDS} 秒内追上抢走附魔金苹果的恐怖奶蛙。穿过雪原和赤岩峡谷，收币和冲刺拉近距离，撞到东西会被甩开，小心它扔来的木箱。` : "一直跑下去，被恐怖奶蛙追上就结束。"}</p>
-        <p class="runner-record">最高分 <b>${this.record.score}</b>${chase ? "" : ` · 最远 <b>${this.record.distance}</b> 米`}</p>
-        ${btn("start", chase ? "开始追击" : "开始奔跑")}
-        ${btn("shop", "皮肤商城", "ghost")}
-        <div class="runner-row">${btn("help", "玩法说明", "ghost")}${gyroRow}${btn("exit", "返回", "ghost")}</div>
-        ${gyroNote}${note}`;
+        <header class="runner-lobby-top">
+          <button data-run="exit" class="runner-lobby-back" aria-label="返回">${icon("back")}</button>
+          <div class="runner-lobby-brand"><h2 class="runner-title">${TITLE}</h2><p class="runner-record">${recordLine}</p></div>
+          ${this.walletHtml()}
+        </header>
+        ${this.loginGift ? `<p class="runner-gift" role="status">${this.loginGift}</p>` : ""}
+        <footer class="runner-lobby-dock">
+          ${this.showcaseTag(btn)}${!this.showcase && switcher ? `<div class="runner-lobby-skin" style="--skin:${look.color}">${btn("skin-prev", "‹", "runner-skin-arrow", `aria-label="上一款皮肤"`)}<span class="runner-look-name">${lookName}</span>${btn("skin-next", "›", "runner-skin-arrow", `aria-label="下一款皮肤"`)}</div>` : ""}
+          <div class="runner-mode-picker" role="group" aria-label="选择模式">
+            ${btn("mode-prev", "‹", "runner-mode-arrow", `aria-label="上一个模式"`)}
+            <div class="runner-mode-current"><small>${current.tag}</small><strong>${current.name}</strong><span class="runner-mode-dots" aria-hidden="true">${MODES.map(m => `<i class="${m.id === this.mode ? "on" : ""}"></i>`).join("")}</span></div>
+            ${btn("mode-next", "›", "runner-mode-arrow", `aria-label="下一个模式"`)}
+          </div>
+          <p class="runner-mode-note">${info.note}</p>
+          ${btn("start", info.start, "primary runner-play")}
+          <nav class="runner-lobby-tools">${tool("shop", "商城", "shop")}${tool("upgrades", "升级", "upgrade")}${tool("more", "更多", "more")}</nav>
+          ${gyroNote}${note}
+        </footer>`;
+    } else if (this.offering) {
+      const cost = w.reviveCost;
+      html = `<p class="runner-over-kicker">${w.reason}</p><h2 class="runner-offer-title">再来一次机会？</h2>
+        <div class="runner-offer-ring" style="--left:100%"><b>${Math.ceil(OFFER_MS / 1000)}</b></div>
+        <p class="runner-offer-note">回到跑道上继续跑，${REVIVE_GRACE} 秒无敌，前方障碍清空</p>
+        ${btn("revive", `续命 · <b>${cost}</b> 金币`, "primary runner-revive-button")}
+        <p class="runner-offer-wallet">现有 ${this.wardrobe.gold} 金币</p>
+        ${btn("offer-skip", "不用了，看结算", "ghost")}`;
     } else if (w.phase === "paused") {
-      html = `<h2>暂停</h2>${btn("resume", "继续")}${btn("restart", "重新开始", "ghost")}<div class="runner-row">${gyroRow}${btn("exit", "主菜单", "ghost")}</div>${gyroNote}`;
-    } else html = this.resultHtml(btn, note);
+      // Paused: how the run is going.
+      html = `<h2>暂停</h2><div class="runner-stats runner-stats-4"><span><b>${Math.floor(w.runDistance)}</b>米</span><span><b>${w.score}</b>得分</span><span><b>${w.silver}</b>银币</span><span><b>${w.gold + w.diamond}</b>金币·钻石</span></div>${btn("resume", "继续")}${btn("restart", "重新开始", "ghost")}<div class="runner-row">${gyroRow}${btn("exit", "主菜单", "ghost")}</div>${gyroNote}`;
+    } else {
+      // The score counts up the first time the results come up.
+      if (this.rollPending) { this.rollPending = false; this.scoreRoll = { to: w.score, start: performance.now() + 250 }; }
+      html = this.resultHtml(btn, note);
+    }
     this.shopObserver?.disconnect(); this.shopObserver = undefined;
-    panel.innerHTML = `<div class="runner-card">${html}</div>`;
+    // The start screen is a lobby round the 3D dog; everything else is a card in the middle.
+    panel.classList.toggle("lobby", lobby);
+    const result = this.ready && !lobby && !this.shopOpen && !this.upgradesOpen && !this.offering && (w.phase === "lost" || w.phase === "won");
+    panel.innerHTML = lobby ? `<div class="runner-lobby">${html}</div>` : `<div class="runner-card${result ? " runner-result" : ""}${this.ready && this.offering ? " runner-offer" : ""}">${html}</div>`;
     if (this.shopOpen) {
       const search = panel.querySelector<HTMLInputElement>(".runner-shop-search"); if (search) search.value = this.shopQuery; this.filterShop();
       const list = panel.querySelector(".runner-shop-list");
@@ -692,34 +1143,88 @@ export class RunnerGame {
 
   /** The end of a run: what happened (with the frog laughing), the score, how it compares, and what next. */
   private resultHtml(btn: (action: string, text: string, kind?: string, extra?: string) => string, note: string) {
-    const w = this.world, won = w.phase === "won", chase = w.chase;
+    const w = this.world, won = w.phase === "won", chase = w.chase, rush = w.rush, info = modeInfo(this.mode);
     const seconds = Math.round(won && chase ? CHASE_SECONDS - chase.timeLeft : w.elapsed);
     const time = seconds >= 60 ? `${Math.floor(seconds / 60)}分${String(seconds % 60).padStart(2, "0")}` : `${seconds}秒`;
     const newBest = w.score > 0 && w.score >= this.record.score;
     const metres = Math.floor(w.runDistance), place = RUN_SCENES[w.sceneIndex].name;
-    const kicker = won ? "特别模式 · 成功" : chase ? (chase.escaped ? "特别模式 · 时间到" : "特别模式 · 追击中断") : "游戏结束";
-    const head = won
-      ? `<div class="runner-celebrate"><canvas width="160" height="140" data-portrait="dog-win" aria-label="奶狗庆祝"></canvas><canvas class="runner-laugh" width="160" height="160" data-portrait="laugh" aria-label="奶蛙捧腹大笑"></canvas></div>
-         <h2 class="runner-over-title">夺回金苹果！</h2><p class="runner-over-tip">还剩 <b>${Math.ceil(chase?.timeLeft ?? 0)}</b> 秒，时间奖励已计入得分。</p>`
-      : `<div class="runner-over-head"><canvas class="runner-over-frog" width="120" height="120" data-portrait="haunt-laugh" aria-label="恐怖奶蛙捧腹大笑"></canvas>
+    const kicker = chase ? (won ? "特别模式 · 成功" : chase.escaped ? "特别模式 · 时间到" : "特别模式 · 追击中断")
+      : rush ? (won ? "金币冲刺 · 时间到" : "金币冲刺 · 提前结束") : `${info.name} · 游戏结束`;
+    const celebrate = `<div class="runner-celebrate"><canvas width="160" height="140" data-portrait="dog-win" aria-label="奶狗庆祝"></canvas><canvas class="runner-laugh" width="160" height="160" data-portrait="laugh" aria-label="奶蛙捧腹大笑"></canvas></div>`;
+    const head = won && rush
+      ? `${celebrate}<h2 class="runner-over-title">冲刺结束！</h2><p class="runner-over-tip">一分钟收了 <b>${w.silver}</b> 银币、<b>${w.gold}</b> 金币${w.diamond ? `、<b>${w.diamond}</b> 钻石` : ""}，捡到 <b>${w.clocks}</b> 个闹钟。</p>`
+      : won
+        ? `${celebrate}<h2 class="runner-over-title">夺回金苹果！</h2><p class="runner-over-tip">还剩 <b>${Math.ceil(chase?.timeLeft ?? 0)}</b> 秒，时间奖励已计入得分。</p>`
+        : `<div class="runner-over-head"><canvas class="runner-over-frog" width="120" height="120" data-portrait="haunt-laugh" aria-label="恐怖奶蛙捧腹大笑"></canvas>
            <div><h2 class="runner-over-reason">${w.reason}</h2><p class="runner-over-where">${place} · 第 ${metres} 米</p></div></div>
          <p class="runner-over-tip"><b>提示</b>${w.deathHint}</p>`;
-    // Endless runs show how far this one got against the longest; the chase shows how close the dog came.
+    // Get back up and carry on, for gold (doubling each time this run).
+    const cost = w.reviveCost, canPay = this.wardrobe.gold >= cost;
+    const revive = w.canRevive ? `<div class="runner-revive"><button data-run="revive" class="primary runner-revive-button" ${canPay ? "" : "disabled"}>续命继续跑 · <b>${cost}</b> 金币</button><small>${canPay ? `现有 ${this.wardrobe.gold} 金币，续命后 ${REVIVE_GRACE} 秒无敌，清空前方障碍` : `金币不足（现有 ${this.wardrobe.gold}）`}</small></div>` : "";
+    // Long runs show how far this one got against the longest; the chase shows how close the dog came.
     const progress = chase
       ? won ? "" : `<div class="runner-progress"><i style="width:${Math.round(Math.max(0, Math.min(1, 1 - chase.gap / CHASE_START_GAP)) * 100)}%"></i><span>离奶蛙还差 ${Math.max(0, Math.round(chase.gap))} 米</span></div>`
-      : `<div class="runner-progress"><i style="width:${this.record.distance ? Math.min(100, Math.round(metres / this.record.distance * 100)) : 100}%"></i><span>${metres >= this.record.distance ? "跑出了最远纪录" : `离最远 ${this.record.distance} 米还差 ${this.record.distance - metres} 米`}</span></div>`;
+      : rush ? ""
+        : `<div class="runner-progress"><i style="width:${this.record.distance ? Math.min(100, Math.round(metres / this.record.distance * 100)) : 100}%"></i><span>${metres >= this.record.distance ? "跑出了最远纪录" : `离最远 ${this.record.distance} 米还差 ${this.record.distance - metres} 米`}</span></div>`;
+    const again = chase ? "再追一次" : rush ? "再冲一次" : "再跑一次";
+    const extra = [`惊险闪避 <b>${w.nearMisses}</b> 次`, `最高连击 <b>×${w.bestMultiplier}</b>`, w.chests ? `宝箱 <b>${w.chests}</b> 个` : "", w.ridesDone ? `特殊路段 <b>${w.ridesDone}</b> 段` : "", w.lanterns ? `灯笼 <b>${w.lanterns}</b> 个` : "", w.revives ? `续命 <b>${w.revives}</b> 次` : ""].filter(Boolean).join(" · ");
     return `
       <p class="runner-over-kicker">${kicker}</p>
       ${head}
-      <div class="runner-over-score"><small>${won ? "本次得分" : "本局得分"}</small><strong>${w.score}</strong>${newBest ? `<em>新纪录</em>` : ""}</div>
+      ${revive}
+      <div class="runner-over-score"><small>${won ? "本次得分" : "本局得分"}</small><strong>${this.scoreRoll ? 0 : w.score}</strong>${newBest ? `<em>新纪录</em>` : ""}</div>
       <div class="runner-stats runner-stats-4"><span><b>${metres}</b>米</span><span><b>${time}</b>用时</span><span><b>${w.silver}</b>银币</span><span><b>${w.gold + w.diamond}</b>金币·钻石</span></div>
+      <p class="runner-over-extra">${extra}</p>
       ${progress}
-      ${btn("restart", chase ? "再追一次" : "再跑一次")}
-      <div class="runner-row">${chase ? btn("play-endless", "无限模式", "ghost") : ""}${btn("shop", "皮肤商城", "ghost")}${btn("exit", "主菜单", "ghost")}</div>
-      <p class="runner-keyhint">按回车${chase ? "再追一次" : "再跑一次"}</p>${note}`;
+      ${btn("restart", again, revive ? "ghost" : "primary")}
+      <div class="runner-row">${this.mode !== "endless" ? btn("play-endless", "无限奔跑", "ghost") : ""}${btn("upgrades", "道具升级", "ghost")}${btn("shop", "皮肤商城", "ghost")}${btn("exit", "主菜单", "ghost")}</div>
+      <p class="runner-keyhint">按回车${again}</p>${note}`;
   }
 
+  /** Adds the finished run to the lifetime totals (only what is new, if it was revived and ended again). */
+  private countCareer() {
+    const w = this.world;
+    const summary: RunSummary = { metres: w.runDistance, silver: w.silver, gold: w.gold, diamond: w.diamond, nearMisses: w.nearMisses, doubleJumps: w.doubleJumps, chests: w.chests, revives: w.revives, score: w.score, combo: w.bestMultiplier };
+    this.career = addRun(this.career, summary, this.counted?.world === w ? this.counted.summary : undefined);
+    this.counted = { world: w, summary };
+    try { localStorage.setItem(CAREER_KEY, JSON.stringify(this.career)); } catch { this.recordError = true; }
+  }
+
+  private careerHtml(btn: (action: string, text: string, kind?: string, extra?: string) => string) {
+    const c = this.career, km = c.metres >= 10000 ? `${(c.metres / 1000).toFixed(1)} 公里` : `${c.metres} 米`;
+    const tile = (value: string | number, label: string) => `<span><b>${value}</b>${label}</span>`;
+    return `<h2>生涯数据</h2><p>所有模式累计，只记在这台设备的这个浏览器里。</p>
+      <div class="runner-career">${[
+        tile(c.runs, "局数"), tile(km, "总路程"), tile(`${c.longest} 米`, "最远一局"), tile(c.bestScore, "最高分"),
+        tile(c.silver, "累计银币"), tile(c.gold, "累计金币"), tile(c.diamond, "累计钻石"), tile(`×${c.bestCombo}`, "最高连击"),
+        tile(c.nearMisses, "惊险闪避"), tile(c.doubleJumps, "二段跳"), tile(c.chests, "打开宝箱"), tile(c.revives, "续命"),
+      ].join("")}</div>${btn("career-back", "返回", "ghost")}`;
+  }
+
+  /** The wallet, on the start screen and the upgrades page. */
+  private walletHtml() {
+    const { silver, gold, diamond } = this.wardrobe;
+    return `<p class="runner-wallet"><span class="silver"><i aria-hidden="true"></i>${silver}</span><span class="gold"><i aria-hidden="true"></i>${gold}</span><span class="diamond"><i aria-hidden="true"></i>${diamond}</span></p>`;
+  }
+
+  /** Upgrades: each power-up's level, how long it lasts now and next, and what the next level costs. */
+  private upgradesHtml(btn: (action: string, text: string, kind?: string, extra?: string) => string, note: string) {
+    const rows = UPGRADABLE.map(kind => {
+      const level = levelOf(this.upgrades, kind), cost = nextCost(this.upgrades, kind);
+      const pips = Array.from({ length: MAX_LEVEL }, (_, i) => `<i class="${i < level ? "on" : ""}"></i>`).join("");
+      const now = durationAt(kind, level), next = cost ? durationAt(kind, level + 1) : now;
+      const price = cost ? rewardText(cost) : "";
+      const affordable = cost ? canAfford(this.wardrobe, cost) : false;
+      return `<div class="runner-upgrade runner-effect-${kind}"><i class="runner-upgrade-icon" aria-hidden="true"></i><div><strong>${POWER_INFO[kind].name}</strong><small>${UPGRADE_NOTE[kind] ?? "持续时间"} ${now} 秒${cost ? ` → ${next} 秒` : " · 已满级"}</small><span class="runner-pips" aria-label="${level} 级">${pips}</span></div>`
+        + `${cost ? `<button data-run="level-${kind}" ${affordable ? "" : "disabled"}>${price}</button>` : `<button disabled>满级</button>`}</div>`;
+    }).join("");
+    return `<h2>道具升级</h2>${this.walletHtml()}<p>用跑酷收集的货币延长道具效果，每次升级都会用在之后的每一局。气球在 ${BALLOON_START} 米后才会出现。</p>
+      <div class="runner-upgrades">${rows}</div>${btn("upgrades-back", "返回", "ghost")}${note}`;
+  }
+
+
   private showHelp() {
+    this.el.panel.classList.remove("lobby");
     this.el.panel.innerHTML = `<div class="runner-card runner-help">
       <h2>玩法说明</h2>
       <div class="runner-keys"><span><kbd>←</kbd><kbd>→</kbd>换道 / 转弯</span><span><kbd>↑</kbd>跳（空中可再跳）</span><span><kbd>↓</kbd>下滑（空中按会急降）</span></div>
@@ -734,6 +1239,13 @@ export class RunnerGame {
         <li>先收银币，${GOLD_START}米起出现金币，${DIAMOND_START}米起才有稀有钻石。磁铁吸取附近货币，护盾挡一次撞击，飞鞋冲刺无敌5秒。连续收取分数翻倍，最高×5。</li>
         <li><b>沙漏</b>让跑动和跳跃一起放慢5秒；<b>双倍得分</b>让8秒内的路程和收币得分翻倍。</li>
         <li>双道活动木板下是深坑，可提前跳过或换到空道。收集货币可在皮肤商城解锁 102 套 QS 2027 高校主题奶狗。</li>
+        <li>${ROLL_START}米后，遗迹的<b>石球</b>、赤岩峡谷的<b>滚石</b>、雪原的<b>大雪球</b>会沿一条道朝你滚来，矿洞里还有冲过来的<b>失控矿车</b>。听到轰隆声就看清是哪条道，提前换道，或者二段跳越过去。</li>
+        <li>眼看要撞上时才躲开（换道、起跳或下滑）算<b>惊险闪避</b>：加 ${NEAR_SCORE} 分（受连击倍率加成），并推高连击。</li>
+        <li><b>任务</b>同时有三个，都要在一局之内完成，完成后马上得到银币、金币或钻石；换上的新任务从下一局开始算。</li>
+        <li><b>弹簧鞋</b>让奶狗跳得又高又远，一跳就能越过滚石和矿车。${BALLOON_START}米后偶尔出现<b>气球</b>：抓住后飞上天空，越过一切障碍、自动转弯，顺着空中的金币带左右移动收币，结束时缓缓落地。</li>
+        <li><b>神秘宝箱</b>会开出银币、金币、道具，偶尔是钻石。被抓或摔下去后，可以在结算界面花金币<b>续命</b>，从前方空旷处接着跑，每局每续一次价格翻倍。</li>
+        <li><b>道具升级</b>：用货币延长磁铁、护盾、冲刺、沙漏、双倍、弹簧鞋、自行车和气球的持续时间，每种最多 5 级。每天第一次进入会领到<b>每日奖励</b>，连续 7 天越领越多。</li>
+        <li><b>每日挑战</b>：当天所有人同一条路线。<b>金币冲刺</b>：${RUSH_SECONDS} 秒狂收金币，金币更多更密，捡到闹钟加时。<b>暗夜逃亡</b>：全程黑夜，视野很近，奶蛙一直跟在身后越追越近，捡灯笼把它逼退，没有转弯提示。</li>
         <li>无限模式的场景按路程依次切换：峡谷水渠、遗迹长廊、矿洞轨道、竹林小径、赤岩峡谷，偶尔经过雪原；1000米后进入较长的黑夜。</li>
         <li>特别模式<b>夺回金苹果</b>：恐怖奶蛙抢走了附魔金苹果在前面逃，${CHASE_SECONDS} 秒内追上它就赢。奶蛙比你稍慢，收银币、用冲刺能拉近距离，撞到东西或撞到路边会被甩开；它还会往后扔<b>木箱</b>，换道躲开或跳过去。</li>
       </ul>
@@ -765,10 +1277,12 @@ export class RunnerGame {
     };
     const motion = this.settings.reducedMotion ? 0 : 1, dog = this.skinPortrait ?? this.art.dog;
     paint("dog", dog, this.drawingBounds(dog, 4, 4, 2), Math.sin(time * 5) * 2 * motion, true);
-    paint("frog", this.art.frog, cell(this.art.frog, 0, 4, 4), Math.sin(time * 4 + 1) * 2 * motion, false);
+    const laugh = FROG_EXTRA_ART.directionLaugh.frames[0];
+    // On the start card the frog breaks into its laugh every few seconds, shaking with it.
+    if (motion && time % 5.5 > 4.2 && this.art.hauntedLaugh) paint("frog", this.art.hauntedLaugh, [laugh.x, laugh.y, laugh.width, laugh.height], -Math.abs(Math.sin(time * 11)) * 4, true);
+    else paint("frog", this.art.frog, cell(this.art.frog, 0, 4, 4), Math.sin(time * 4 + 1) * 2 * motion, false);
     paint("dog-win", dog, this.drawingBounds(dog, 4, 4, 2), -Math.abs(Math.sin(time * 6)) * 8 * motion, true);
     paint("laugh", this.art.laugh, cell(this.art.laugh, 6, 4, 2), Math.sin(time * 14) * 2 * motion, false);
-    const laugh = FROG_EXTRA_ART.directionLaugh.frames[0];
     paint("haunt-laugh", this.art.hauntedLaugh, [laugh.x, laugh.y, laugh.width, laugh.height], Math.abs(Math.sin(time * 9)) * -3 * motion, true);
   }
 
@@ -803,6 +1317,6 @@ export class RunnerGame {
     this.destroyed = true;
     this.shopObserver?.disconnect();
     cancelAnimationFrame(this.frame); this.abort.abort(); this.resize.disconnect();
-    this.audio.setPlaying(false); clearTimeout(this.gyroTimer); clearTimeout(this.toastTimer); this.renderer?.dispose();
+    this.audio.setPlaying(false); this.audio.hum(0); this.audio.loop("rain", 0); this.audio.loop("wind", 0); clearTimeout(this.gyroTimer); clearTimeout(this.toastTimer); clearTimeout(this.bannerTimer); clearTimeout(this.popTimer); this.renderer?.dispose();
   }
 }
